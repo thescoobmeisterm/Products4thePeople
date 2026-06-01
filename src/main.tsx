@@ -844,6 +844,7 @@ function Storefront({
   onPlaceOrder: (order: Omit<Order, "id" | "createdAt" | "status">) => string;
 }) {
   const [activeNiche, setActiveNiche] = React.useState<StorefrontMode>("general");
+  const [activeSubcategory, setActiveSubcategory] = React.useState("All");
   const [cart, setCart] = React.useState<Record<string, number>>({});
   const [email, setEmail] = React.useState("");
   const [customerName, setCustomerName] = React.useState("");
@@ -852,7 +853,11 @@ function Storefront({
   const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
   const config = storefrontNiches[activeNiche];
 
-  const visibleProducts = products.filter((product) => activeNiche === "general" || product.subdomain === activeNiche);
+  const storefrontProducts = products.filter((product) => activeNiche === "general" || product.subdomain === activeNiche);
+  const subcategories = getSubcategories(storefrontProducts);
+  const visibleProducts = storefrontProducts.filter(
+    (product) => activeSubcategory === "All" || getProductSubcategory(product) === activeSubcategory,
+  );
   const cartItems = Object.entries(cart)
     .map(([productId, quantity]) => {
       const product = products.find((item) => item.id === productId);
@@ -910,7 +915,14 @@ function Storefront({
       }
     >
       <header className="storefront-header">
-        <button className="storefront-brand" type="button" onClick={() => setActiveNiche("general")}>
+        <button
+          className="storefront-brand"
+          type="button"
+          onClick={() => {
+            setActiveNiche("general");
+            setActiveSubcategory("All");
+          }}
+        >
           <Store size={24} />
           <span>{config.host}</span>
         </button>
@@ -920,11 +932,24 @@ function Storefront({
           <details className="more-shops">
             <summary>More Shops</summary>
             <div>
-              <button type="button" onClick={() => setActiveNiche("general")}>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveNiche("general");
+                  setActiveSubcategory("All");
+                }}
+              >
                 General Store
               </button>
               {(["beauty", "pets", "home", "fitness"] as const).map((niche) => (
-                <button key={niche} type="button" onClick={() => setActiveNiche(niche)}>
+                <button
+                  key={niche}
+                  type="button"
+                  onClick={() => {
+                    setActiveNiche(niche);
+                    setActiveSubcategory("All");
+                  }}
+                >
                   {storefrontNiches[niche].label}
                 </button>
               ))}
@@ -953,6 +978,24 @@ function Storefront({
               <p>{config.host}</p>
               <h2>{config.label} products</h2>
             </div>
+          </div>
+
+          <div className="subcategory-filter" aria-label="Product subcategory filters">
+            {subcategories.map((subcategory) => (
+              <button
+                className={activeSubcategory === subcategory ? "active" : ""}
+                key={subcategory}
+                type="button"
+                onClick={() => setActiveSubcategory(subcategory)}
+              >
+                {subcategory}
+                <span>
+                  {subcategory === "All"
+                    ? storefrontProducts.length
+                    : storefrontProducts.filter((product) => getProductSubcategory(product) === subcategory).length}
+                </span>
+              </button>
+            ))}
           </div>
 
           <div className="shop-grid">
@@ -1061,9 +1104,6 @@ function ProductQuickView({
   onClose: () => void;
   onAddToCart: () => void;
 }) {
-  const landedMax = product.costMax + product.shippingMax;
-  const profit = product.retailMin - landedMax;
-
   return (
     <div className="modal-backdrop" role="presentation">
       <div className="store-product-modal" role="dialog" aria-modal="true" aria-labelledby="quick-view-title">
@@ -1090,27 +1130,22 @@ function ProductQuickView({
               Price <strong>{money(product.retailMin)}</strong>
             </span>
             <span>
-              Stock <strong>{product.inventory}</strong>
+              Availability <strong>{product.inventory > 0 ? "In stock" : "Limited"}</strong>
             </span>
             <span>
-              Margin <strong>{product.marginEst}</strong>
+              Shipping <strong>Free over $75</strong>
             </span>
             <span>
-              Min profit <strong>{money(profit)}</strong>
+              Category <strong>{product.niche}</strong>
             </span>
           </div>
 
           <div className="quick-view-notes">
-            <span>Subdomain: {product.subdomain}.products4thepeople.com</span>
-            <span>Launch priority: {product.priority}</span>
+            <span>Designed for everyday routines and easy gifting.</span>
+            <span>Ships with order confirmation and fulfillment updates.</span>
           </div>
 
           <div className="quick-view-actions">
-            {product.aliexpressSearchUrl && (
-              <a href={product.aliexpressSearchUrl} target="_blank" rel="noreferrer">
-                Source product
-              </a>
-            )}
             <button className="primary" type="button" onClick={onAddToCart}>
               <ShoppingCart size={17} />
               Add to cart
@@ -1244,6 +1279,40 @@ function toForm(product: Product): ProductForm {
 
 function countByNiche(products: Product[], niche: Niche) {
   return products.filter((product) => product.subdomain === niche).length;
+}
+
+function getSubcategories(products: Product[]) {
+  const categories = Array.from(new Set(products.map(getProductSubcategory)));
+  return ["All", ...categories.sort((first, second) => first.localeCompare(second))];
+}
+
+function getProductSubcategory(product: Product) {
+  const haystack = `${product.name} ${product.contentAngle} ${product.niche}`.toLowerCase();
+
+  if (product.subdomain === "beauty") {
+    if (matchesAny(haystack, ["hair", "curl", "scalp", "satin", "wrap"])) return "Hair Care";
+    if (matchesAny(haystack, ["led", "mask", "anti-aging", "neck"])) return "LED Therapy";
+    if (matchesAny(haystack, ["clean", "pore", "blackhead", "brush", "vacuum"])) return "Cleansing Tools";
+    if (matchesAny(haystack, ["ice", "eye", "depuff", "glow"])) return "Skin Refresh";
+    return "Beauty Tools";
+  }
+
+  if (product.subdomain === "pets") {
+    if (matchesAny(haystack, ["water", "seat", "paw", "travel", "car"])) return "Travel & Cleanup";
+    if (matchesAny(haystack, ["bed", "calm", "lick", "anxious", "enrichment"])) return "Comfort & Enrichment";
+    if (matchesAny(haystack, ["feeder", "feed", "bottle"])) return "Feeding";
+    if (matchesAny(haystack, ["collar", "led", "safety", "night"])) return "Safety";
+    if (matchesAny(haystack, ["cat", "laser", "toy"])) return "Toys";
+    return "Pet Essentials";
+  }
+
+  if (product.subdomain === "home") return "Home Essentials";
+  if (product.subdomain === "fitness") return "Fitness Gear";
+  return "Featured";
+}
+
+function matchesAny(text: string, terms: string[]) {
+  return terms.some((term) => text.includes(term));
 }
 
 function money(value: number) {

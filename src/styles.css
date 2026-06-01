@@ -841,6 +841,39 @@ tr:last-child td {
   font-size: clamp(1.8rem, 4vw, 3rem);
 }
 
+.subcategory-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 20px;
+}
+
+.subcategory-filter button {
+  background: #fff;
+  border: 1px solid #e0d9ce;
+  border-radius: 999px;
+  color: #263438;
+  gap: 8px;
+  min-height: 38px;
+}
+
+.subcategory-filter button.active {
+  background: var(--store-soft);
+  border-color: var(--store-accent);
+  color: var(--store-accent);
+}
+
+.subcategory-filter span {
+  background: rgba(17, 25, 29, 0.08);
+  border-radius: 999px;
+  color: inherit;
+  font-size: 0.75rem;
+  font-weight: 950;
+  min-width: 22px;
+  padding: 3px 6px;
+  text-align: center;
+}
+
 .shop-grid {
   display: grid;
   gap: 18px;
