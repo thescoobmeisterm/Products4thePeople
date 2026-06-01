@@ -347,6 +347,12 @@ function App() {
   const [isAiOpen, setIsAiOpen] = React.useState(false);
   const [aiAction, setAiAction] = React.useState<"creative_hooks" | "email_flows" | "offer_tests" | null>(null);
 
+  // System credentials settings state
+  const [settingsStripeKey, setSettingsStripeKey] = React.useState("");
+  const [settingsMedusaUrl, setSettingsMedusaUrl] = React.useState("http://localhost:9000");
+  const [settingsMedusaKey, setSettingsMedusaKey] = React.useState("");
+  const [isSavingConfig, setIsSavingConfig] = React.useState(false);
+
   const handleImportAliexpress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!aliexpressUrl.trim()) return;
@@ -363,6 +369,49 @@ function App() {
       setNotice(error instanceof Error ? `Import failed: ${error.message}` : "Import failed.");
     } finally {
       setIsImportingAliexpress(false);
+    }
+  };
+
+  const handleSaveConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingConfig(true);
+    setNotice("Saving system configurations in .env...");
+    try {
+      const adminHeaders = {
+        "x-admin-email": "admin@products4thepeople.com",
+        "x-admin-password": "change-this-password",
+        "Content-Type": "application/json",
+      };
+      
+      const response = await fetch("/api/settings/config", {
+        method: "POST",
+        headers: adminHeaders,
+        body: JSON.stringify({
+          stripeSecretKey: settingsStripeKey,
+          medusaBackendUrl: settingsMedusaUrl,
+          medusaAdminApiKey: settingsMedusaKey,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save credentials.");
+      }
+
+      const data = await response.json();
+      setNotice(data.message || "Configurations updated successfully!");
+      
+      // Refresh current config view
+      const configRes = await fetch("/api/settings/config", { headers: adminHeaders });
+      if (configRes.ok) {
+        const config = await configRes.json();
+        setSettingsStripeKey(config.stripeSecretKey || "");
+        setSettingsMedusaUrl(config.medusaBackendUrl || "http://localhost:9000");
+        setSettingsMedusaKey(config.medusaAdminApiKey || "");
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? `Config error: ${error.message}` : "Failed to save configuration.");
+    } finally {
+      setIsSavingConfig(false);
     }
   };
   const [medusaConnection, setMedusaConnection] = React.useState<MedusaConnection>(() => loadMedusaConnection());
@@ -391,6 +440,23 @@ function App() {
 
         setOrders(orderResponse.orders.map(normalizeStoredOrder));
         setDbContacts(contactResponse.contacts);
+
+        // Fetch current system environmental configurations
+        try {
+          const adminHeaders = {
+            "x-admin-email": "admin@products4thepeople.com",
+            "x-admin-password": "change-this-password",
+          };
+          const configRes = await fetch("/api/settings/config", { headers: adminHeaders });
+          if (configRes.ok && isMounted) {
+            const config = await configRes.json();
+            setSettingsStripeKey(config.stripeSecretKey || "");
+            setSettingsMedusaUrl(config.medusaBackendUrl || "http://localhost:9000");
+            setSettingsMedusaKey(config.medusaAdminApiKey || "");
+          }
+        } catch (e) {
+          console.warn("Failed to load environment credentials from settings endpoint:", e);
+        }
       } catch (error) {
         if (!isMounted) return;
         setNotice(
@@ -1293,21 +1359,82 @@ function App() {
         )}
 
         {adminTab === "settings" && (
-          <article className="panel" id="settings">
-            <div className="panel-header">
-              <div>
-                <p>Platform readiness</p>
-                <h2>Core systems</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
+            <article className="panel" id="settings-readiness">
+              <div className="panel-header">
+                <div>
+                  <p>Platform readiness</p>
+                  <h2>Core systems</h2>
+                </div>
+                <Settings size={22} />
               </div>
-              <Settings size={22} />
-            </div>
-            <div className="readiness-grid">
-              <span><Database size={16} /> Medusa SDK installed</span>
-              <span><Truck size={16} /> Inventory fields</span>
-              <span><CreditCard size={16} /> Stripe Checkout wired</span>
-              <span><Mail size={16} /> Marketing basics</span>
-            </div>
-          </article>
+              <div className="readiness-grid" style={{ display: 'grid', gap: '12px', marginTop: '16px' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14.5px', color: '#68777d' }}><Database size={16} style={{ color: '#176c61' }} /> Medusa SDK active</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14.5px', color: '#68777d' }}><Truck size={16} style={{ color: '#176c61' }} /> Inventory tracking enabled</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14.5px', color: '#68777d' }}><CreditCard size={16} style={{ color: settingsStripeKey ? '#10b981' : '#f59e0b' }} /> {settingsStripeKey ? 'Stripe live checkout wired' : 'Stripe simulator mode active (no secret key)'}</span>
+                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14.5px', color: '#68777d' }}><Mail size={16} style={{ color: '#176c61' }} /> exit-intent funnels active</span>
+              </div>
+            </article>
+
+            <article className="panel" id="settings-setup">
+              <div className="panel-header">
+                <div>
+                  <p>Integration Manager</p>
+                  <h2>Stripe & Medusa setup</h2>
+                </div>
+                <Globe2 size={22} />
+              </div>
+              <form onSubmit={handleSaveConfig} style={{ display: 'grid', gap: '16px', marginTop: '16px' }}>
+                <div style={{ background: '#f7f9fa', border: '1px solid #e1e7eb', borderRadius: '10px', padding: '16px', display: 'grid', gap: '12px' }}>
+                  <h3 style={{ margin: '0', fontSize: '15px', fontWeight: 600, color: '#176c61', display: 'flex', alignItems: 'center', gap: '6px' }}><CreditCard size={16} /> Stripe configuration</h3>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Stripe Secret Key (sk_...)</span>
+                    <input
+                      type="password"
+                      value={settingsStripeKey}
+                      onChange={(e) => setSettingsStripeKey(e.target.value)}
+                      placeholder="sk_test_..."
+                      style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }}
+                    />
+                    <span style={{ fontSize: '11px', color: '#68777d' }}>Keep blank to automatically use the Stripe Simulator during checkout testing.</span>
+                  </label>
+                </div>
+
+                <div style={{ background: '#f7f9fa', border: '1px solid #e1e7eb', borderRadius: '10px', padding: '16px', display: 'grid', gap: '12px' }}>
+                  <h3 style={{ margin: '0', fontSize: '15px', fontWeight: 600, color: '#176c61', display: 'flex', alignItems: 'center', gap: '6px' }}><Database size={16} /> Medusa configuration</h3>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Medusa Backend URL</span>
+                    <input
+                      type="text"
+                      value={settingsMedusaUrl}
+                      onChange={(e) => setSettingsMedusaUrl(e.target.value)}
+                      placeholder="http://localhost:9000"
+                      style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Admin API Key</span>
+                    <input
+                      type="password"
+                      value={settingsMedusaKey}
+                      onChange={(e) => setSettingsMedusaKey(e.target.value)}
+                      placeholder="api_key_..."
+                      style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }}
+                    />
+                  </label>
+                </div>
+
+                <button 
+                  type="submit" 
+                  disabled={isSavingConfig}
+                  className="primary full"
+                  style={{ background: '#176c61', color: 'white', border: 'none', borderRadius: '8px', padding: '12px', fontSize: '15px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }}
+                >
+                  {isSavingConfig ? "Saving credentials..." : "Save & Apply Configurations"}
+                </button>
+              </form>
+            </article>
+          </div>
         )}
       </section>
 

@@ -17,7 +17,7 @@ const adminPassword = process.env.VITE_ADMIN_PASSWORD || process.env.ADMIN_PASSW
 
 // Stripe Configuration
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-const stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
+let stripe = stripeSecretKey ? new Stripe(stripeSecretKey) : null;
 const taxRate = Number(process.env.BASIC_TAX_RATE || 0.06);
 const freeShippingThreshold = Number(process.env.FREE_SHIPPING_THRESHOLD || 75);
 const flatShipping = Number(process.env.FLAT_SHIPPING || 7);
@@ -1342,6 +1342,104 @@ Discover the viral ${name}: ${angle}. Order today for fast shipping, 30-day mone
     response.json({ copy: result });
   } catch (error) {
     response.status(500).json({ error: error instanceof Error ? error.message : "AI generation failed" });
+  }
+});
+
+// GET /api/settings/config loads current environment credentials
+app.get("/api/settings/config", requireAdmin, (_request, response) => {
+  const stripeKey = process.env.STRIPE_SECRET_KEY || "";
+  
+  // Mask the secret key for safety
+  const maskedStripeKey = stripeKey 
+    ? stripeKey.startsWith("sk_") 
+      ? `sk_...${stripeKey.substring(stripeKey.length - 4)}` 
+      : "••••••••••••••••"
+    : "";
+
+  response.json({
+    stripeSecretKey: maskedStripeKey,
+    hasStripeKey: Boolean(stripeKey),
+    medusaBackendUrl: process.env.MEDUSA_BACKEND_URL || "http://localhost:9000",
+    medusaAdminApiKey: process.env.MEDUSA_ADMIN_API_KEY || "",
+  });
+});
+
+// POST /api/settings/config writes configurations back to .env
+app.post("/api/settings/config", requireAdmin, async (request, response) => {
+  try {
+    const { stripeSecretKey, medusaBackendUrl, medusaAdminApiKey } = z.object({
+      stripeSecretKey: z.string().optional(),
+      medusaBackendUrl: z.string().url().optional().or(z.string().length(0)),
+      medusaAdminApiKey: z.string().optional(),
+    }).parse(request.body);
+
+    const envFile = path.join(process.cwd(), ".env");
+    let envContent = "";
+
+    if (fs.existsSync(envFile)) {
+      envContent = fs.readFileSync(envFile, "utf-8");
+    } else {
+      const exampleFile = path.join(process.cwd(), ".env.example");
+      if (fs.existsSync(exampleFile)) {
+        envContent = fs.readFileSync(exampleFile, "utf-8");
+      }
+    }
+
+    const lines = envContent.split(/\r?\n/);
+    const updatedKeys = new Set<string>();
+
+    const updateOrAdd = (key: string, value: string) => {
+      let found = false;
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].trim().startsWith(`${key}=`)) {
+          lines[i] = `${key}=${value}`;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        lines.push(`${key}=${value}`);
+      }
+      updatedKeys.add(key);
+    };
+
+    // Update Stripe configuration if provided
+    if (stripeSecretKey && !stripeSecretKey.startsWith("sk_...") && !stripeSecretKey.startsWith("•••")) {
+      updateOrAdd("STRIPE_SECRET_KEY", stripeSecretKey);
+      process.env.STRIPE_SECRET_KEY = stripeSecretKey;
+      stripe = new Stripe(stripeSecretKey);
+      console.log("[CONFIG] Stripe Secret Key updated and reinitialized.");
+    } else if (stripeSecretKey === "") {
+      updateOrAdd("STRIPE_SECRET_KEY", "");
+      process.env.STRIPE_SECRET_KEY = "";
+      stripe = null;
+      console.log("[CONFIG] Stripe Secret Key cleared.");
+    }
+
+    // Update Medusa configuration if provided
+    const cleanMedusaUrl = String(medusaBackendUrl || "").trim().replace(/\/$/, "");
+    updateOrAdd("MEDUSA_BACKEND_URL", cleanMedusaUrl);
+    updateOrAdd("VITE_MEDUSA_BACKEND_URL", cleanMedusaUrl);
+    process.env.MEDUSA_BACKEND_URL = cleanMedusaUrl;
+    process.env.VITE_MEDUSA_BACKEND_URL = cleanMedusaUrl;
+
+    const cleanMedusaKey = String(medusaAdminApiKey || "").trim();
+    updateOrAdd("MEDUSA_ADMIN_API_KEY", cleanMedusaKey);
+    updateOrAdd("VITE_MEDUSA_ADMIN_API_KEY", cleanMedusaKey);
+    process.env.MEDUSA_ADMIN_API_KEY = cleanMedusaKey;
+    process.env.VITE_MEDUSA_ADMIN_API_KEY = cleanMedusaKey;
+
+    console.log("[CONFIG] Medusa configurations updated successfully.");
+
+    // Write updated lines back to .env
+    fs.writeFileSync(envFile, lines.join("\n"), "utf-8");
+
+    response.json({
+      ok: true,
+      message: "Configurations updated in .env and reloaded successfully!",
+    });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to update configurations" });
   }
 });
 
