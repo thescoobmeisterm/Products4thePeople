@@ -123,6 +123,10 @@ export async function importAliexpress(url: string) {
   });
 }
 
+export async function getContacts() {
+  return apiFetch<{ contacts: any[] }>("/contacts");
+}
+
 export async function testApi() {
   const healthUrl = apiBaseUrl === "/api" ? "/health" : `${apiBaseUrl.replace(/\/api$/, "")}/health`;
   const response = await fetch(healthUrl);

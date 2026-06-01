@@ -55,6 +55,7 @@ import {
   updateOrderStatus as updateApiOrderStatus,
   updateProductStatus,
   importAliexpress,
+  getContacts,
   type ApiOrder,
 } from "./lib/api";
 import "./styles.css";
@@ -335,10 +336,16 @@ function App() {
   const [editingProduct, setEditingProduct] = React.useState<Product | null>(null);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [notice, setNotice] = React.useState("Connecting to backend storage.");
+  const [adminTab, setAdminTab] = React.useState("dashboard");
+  const [dbContacts, setDbContacts] = React.useState<any[]>([]);
   
   // AliExpress URL Importer States & Handler
   const [aliexpressUrl, setAliexpressUrl] = React.useState("");
   const [isImportingAliexpress, setIsImportingAliexpress] = React.useState(false);
+
+  // AI Studio Dialog States
+  const [isAiOpen, setIsAiOpen] = React.useState(false);
+  const [aiAction, setAiAction] = React.useState<"creative_hooks" | "email_flows" | "offer_tests" | null>(null);
 
   const handleImportAliexpress = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -369,20 +376,21 @@ function App() {
 
     async function loadBackendData() {
       try {
-        const [productResponse, orderResponse] = await Promise.all([getProducts(), getOrders()]);
+        const [productResponse, orderResponse, contactResponse] = await Promise.all([getProducts(), getOrders(), getContacts()]);
         if (!isMounted) return;
 
         if (productResponse.products.length === 0) {
           const seeded = seedProducts.map((product) => ({ ...product, source: "seed" as const }));
           await replaceProducts(seeded);
           setProducts(seeded);
-          setNotice("Backend connected. Starter catalog seeded into PostgreSQL.");
+          setNotice("Backend connected. Starter catalog seeded.");
         } else {
           setProducts(productResponse.products);
-          setNotice("Backend connected. Catalog and orders loaded from PostgreSQL.");
+          setNotice("Backend connected. Catalog, orders, and contacts loaded.");
         }
 
         setOrders(orderResponse.orders.map(normalizeStoredOrder));
+        setDbContacts(contactResponse.contacts);
       } catch (error) {
         if (!isMounted) return;
         setNotice(
@@ -567,11 +575,27 @@ function App() {
     window.location.hash = "#admin-login";
   };
 
-  const captureMarketingLead = (lead: Omit<MarketingLead, "id" | "createdAt">) => {
+  const captureMarketingLead = async (lead: Omit<MarketingLead, "id" | "createdAt">) => {
     const normalizedEmail = lead.email.trim().toLowerCase();
     if (!isValidEmail(normalizedEmail)) return;
 
     setMarketingLeads((current) => upsertMarketingLead(current, { ...lead, email: normalizedEmail }));
+    
+    try {
+      await fetch("/api/contacts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: normalizedEmail,
+          customerName: lead.name || "Subscriber",
+          source: lead.source,
+          niche: lead.niche,
+        }),
+      });
+    } catch (e) {
+      console.warn("Failed to sync newsletter contact capture to API backend:", e);
+    }
+
     trackMarketingEvent("generate_lead", {
       content_name: lead.source,
       niche: lead.niche,
@@ -690,12 +714,24 @@ function App() {
           <span>P4tP Admin</span>
         </a>
         <nav aria-label="Admin navigation">
-          {navItems.map(([label, Icon], index) => (
-            <a className={index === 0 ? "active" : ""} href={`#${label.toLowerCase().replace(" ", "-")}`} key={label}>
-              <Icon size={18} />
-              {label}
-            </a>
-          ))}
+          {navItems.map(([label, Icon]) => {
+            const tabId = label.toLowerCase().replace(" ", "-");
+            const isActive = adminTab === tabId;
+            return (
+              <a
+                className={isActive ? "active" : ""}
+                href={`#${tabId}`}
+                key={label}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setAdminTab(tabId);
+                }}
+              >
+                <Icon size={18} />
+                {label}
+              </a>
+            );
+          })}
         </nav>
         <div className="sidebar-card">
           <ShieldCheck size={18} />
@@ -748,42 +784,116 @@ function App() {
           {notice}
         </div>
 
-        <section className="metrics-grid" id="dashboard">
-          <Metric icon={Package} label="Products" value={products.length.toString()} trend={`${filteredProducts.length} visible`} />
-          <Metric icon={CheckCircle2} label="Active listings" value={activeCount.toString()} trend={`${reviewCount} in review`} />
-          <Metric icon={CircleDollarSign} label="Avg. min profit" value={money(averageProfit)} trend="Before ad spend" />
-          <Metric icon={Mail} label="Captured emails" value={marketingLeads.length.toString()} trend={`${openAbandonedCarts.length} open carts`} />
-        </section>
+        {adminTab === "dashboard" && (
+          <>
+            <section className="metrics-grid" id="dashboard">
+              <Metric icon={Package} label="Products" value={products.length.toString()} trend={`${filteredProducts.length} visible`} />
+              <Metric icon={CheckCircle2} label="Active listings" value={activeCount.toString()} trend={`${reviewCount} in review`} />
+              <Metric icon={CircleDollarSign} label="Avg. min profit" value={money(averageProfit)} trend="Before ad spend" />
+              <Metric icon={Mail} label="Captured emails" value={(marketingLeads.length + dbContacts.length).toString()} trend={`${openAbandonedCarts.length} open carts`} />
+            </section>
 
-        <section className="medusa-strip" id="medusa">
-          <div>
-            <p>Medusa backend</p>
-            <h2>{medusaStatus}</h2>
-          </div>
-          <label>
-            <span>Backend URL</span>
-            <input
-              value={medusaConnection.baseUrl}
-              onChange={(event) => setMedusaConnection((current) => ({ ...current, baseUrl: event.target.value }))}
-            />
-          </label>
-          <label>
-            <span>Admin API key</span>
-            <input
-              value={medusaConnection.apiKey}
-              onChange={(event) => setMedusaConnection((current) => ({ ...current, apiKey: event.target.value }))}
-              placeholder="Optional until backend is running"
-            />
-          </label>
-          <button type="button" onClick={testBackend}>
-            Test
-          </button>
-          <button className="primary" type="button" onClick={syncFromMedusa} disabled={isSyncingMedusa}>
-            {isSyncingMedusa ? "Syncing" : "Sync products"}
-          </button>
-        </section>
+            <section className="medusa-strip" id="medusa">
+              <div>
+                <p>Medusa backend</p>
+                <h2>{medusaStatus}</h2>
+              </div>
+              <label>
+                <span>Backend URL</span>
+                <input
+                  value={medusaConnection.baseUrl}
+                  onChange={(event) => setMedusaConnection((current) => ({ ...current, baseUrl: event.target.value }))}
+                />
+              </label>
+              <label>
+                <span>Admin API key</span>
+                <input
+                  value={medusaConnection.apiKey}
+                  onChange={(event) => setMedusaConnection((current) => ({ ...current, apiKey: event.target.value }))}
+                  placeholder="Optional until backend is running"
+                />
+              </label>
+              <button type="button" onClick={testBackend}>
+                Test
+              </button>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setMedusaConnection({ baseUrl: "http://localhost:4000/api/mock-medusa", apiKey: "mock_key" });
+                  setNotice("Auto-configured URL to local simulated Medusa backend.");
+                }}
+                style={{ background: "#374151", color: "#ffffff", border: "1px solid #4b5563" }}
+              >
+                Connect to Simulator
+              </button>
+              <button className="primary" type="button" onClick={syncFromMedusa} disabled={isSyncingMedusa}>
+                {isSyncingMedusa ? "Syncing" : "Sync products"}
+              </button>
+            </section>
+            
+            <article className="panel wide" id="order-management" style={{ marginTop: '16px' }}>
+              <div className="panel-header">
+                <div>
+                  <p>Fulfillment worklist</p>
+                  <h2>Urgent Orders ({orders.filter(o => o.status === "Ready to fulfill").length})</h2>
+                </div>
+                <ClipboardList size={22} />
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Order</th>
+                      <th>Customer</th>
+                      <th>Items</th>
+                      <th>Total</th>
+                      <th>Payment</th>
+                      <th>Status</th>
+                      <th>Source</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {orders.filter(o => o.status === "Ready to fulfill").length === 0 ? (
+                      <tr>
+                        <td colSpan={7}>No urgent orders to fulfill. Go to the Orders tab to see all orders.</td>
+                      </tr>
+                    ) : orders.filter(o => o.status === "Ready to fulfill").slice(0, 5).map((order) => (
+                      <tr key={order.id}>
+                        <td>
+                          <strong>{order.id}</strong>
+                          <span>{formatDate(order.createdAt)}</span>
+                        </td>
+                        <td>
+                          <strong>{order.customerName}</strong>
+                          <span>{order.email}</span>
+                        </td>
+                        <td className="hook">{order.items.map((item) => `${item.quantity}x ${item.name}`).join(", ")}</td>
+                        <td>
+                          <strong>{money(order.total)}</strong>
+                          <span>{money(order.subtotal)} subtotal</span>
+                        </td>
+                        <td>{titleCase(order.paymentStatus)}</td>
+                        <td>
+                          <select
+                            className={`status-select ${order.status === "Ready to fulfill" ? "active" : "review"}`}
+                            value={order.status}
+                            onChange={(event) => updateOrderStatus(order.id, event.target.value as Order["status"])}
+                          >
+                            <option>Ready to fulfill</option>
+                            <option>Needs review</option>
+                          </select>
+                        </td>
+                        <td>{order.source === "medusa" ? "Medusa" : "Storefront"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </>
+        )}
 
-        <section className="panel-grid">
+        {adminTab === "products" && (
           <article className="panel wide" id="products">
             <div className="panel-header">
               <div>
@@ -901,152 +1011,204 @@ function App() {
               </table>
             </div>
           </article>
+        )}
 
-          <article className="panel" id="imports">
-            <div className="panel-header">
-              <div>
-                <p>Import tools</p>
-                <h2>Product intake</h2>
-              </div>
-              <FileUp size={22} />
-            </div>
-            <div className="import-stack">
-              <ActionRow icon={FileUp} title="CSV import" detail="Upload Seed.csv-shaped product lists into the catalog." />
-              <button className="primary full" type="button" onClick={() => importInputRef.current?.click()}>
-                Start CSV import
-              </button>
-              
-              <hr style={{ border: '0', borderTop: '1px solid #e5eaee', margin: '8px 0' }} />
-              
-              <ActionRow icon={Globe2} title="AliExpress URL import" detail="Paste any product link to auto-parse details, images, and content angles." />
-              <form onSubmit={handleImportAliexpress} style={{ display: 'grid', gap: '6px' }}>
-                <div className="coupon-input-wrap" style={{ marginTop: '0' }}>
-                  <input
-                    value={aliexpressUrl}
-                    onChange={(event) => setAliexpressUrl(event.target.value)}
-                    placeholder="https://www.aliexpress.com/item/..."
-                    disabled={isImportingAliexpress}
-                    style={{ background: '#f7f9fa', border: '1px solid #dce3e7', borderRadius: '8px', padding: '8px 10px', flex: 1 }}
-                  />
-                  <button className="primary" type="submit" disabled={isImportingAliexpress || !aliexpressUrl.trim()}>
-                    {isImportingAliexpress ? "Importing..." : "Import"}
-                  </button>
+        {adminTab === "imports" && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '16px', alignItems: 'start' }}>
+            <article className="panel" id="imports">
+              <div className="panel-header">
+                <div>
+                  <p>Import tools</p>
+                  <h2>Product intake</h2>
                 </div>
-              </form>
-            </div>
-          </article>
-
-          <article className="panel">
-            <div className="panel-header">
-              <div>
-                <p>Storefront routing</p>
-                <h2>Subdomains</h2>
+                <FileUp size={22} />
               </div>
-              <Globe2 size={20} />
-            </div>
-            <div className="domain-list">
-              <DomainRow name="beauty.products4thepeople.com" count={countByNiche(products, "beauty")} status="Phase 1" />
-              <DomainRow name="pets.products4thepeople.com" count={countByNiche(products, "pets")} status="Phase 2" />
-              <DomainRow name="home.products4thepeople.com" count={countByNiche(products, "home")} status="Ready" />
-              <DomainRow name="fitness.products4thepeople.com" count={countByNiche(products, "fitness")} status="Ready" />
-            </div>
-          </article>
-
-          <article className="panel" id="orders">
-            <div className="panel-header">
-              <div>
-                <p>Orders</p>
-                <h2>Backend queue</h2>
+              <div className="import-stack">
+                <ActionRow icon={FileUp} title="CSV import" detail="Upload Seed.csv-shaped product lists into the catalog." />
+                <button className="primary full" type="button" onClick={() => importInputRef.current?.click()}>
+                  Start CSV import
+                </button>
+                
+                <hr style={{ border: '0', borderTop: '1px solid #e5eaee', margin: '8px 0' }} />
+                
+                <ActionRow icon={Globe2} title="AliExpress URL import" detail="Paste any product link to auto-parse details, images, and content angles." />
+                <form onSubmit={handleImportAliexpress} style={{ display: 'grid', gap: '6px' }}>
+                  <div className="coupon-input-wrap" style={{ marginTop: '0' }}>
+                    <input
+                      value={aliexpressUrl}
+                      onChange={(event) => setAliexpressUrl(event.target.value)}
+                      placeholder="https://www.aliexpress.com/item/..."
+                      disabled={isImportingAliexpress}
+                      style={{ background: '#f7f9fa', border: '1px solid #dce3e7', borderRadius: '8px', padding: '8px 10px', flex: 1 }}
+                    />
+                    <button className="primary" type="submit" disabled={isImportingAliexpress || !aliexpressUrl.trim()}>
+                      {isImportingAliexpress ? "Importing..." : "Import"}
+                    </button>
+                  </div>
+                </form>
               </div>
-              <button type="button" onClick={syncOrdersFromMedusa} disabled={isSyncingOrders}>
-                <ShoppingCart size={17} />
-                {isSyncingOrders ? "Syncing" : "Sync orders"}
-              </button>
-            </div>
-            <div className="queue-list">
-              <QueueRow label="Total orders" value={orders.length.toString()} />
-              <QueueRow label="Ready to fulfill" value={orders.filter((order) => order.status === "Ready to fulfill").length.toString()} />
-              <QueueRow label="Needs review" value={orders.filter((order) => order.status === "Needs review").length.toString()} />
-              <QueueRow label="Revenue captured" value={money(orders.filter((order) => order.paymentStatus === "paid").reduce((total, order) => total + order.total, 0))} />
-            </div>
-          </article>
+            </article>
 
-          <article className="panel wide" id="order-management">
-            <div className="panel-header">
-              <div>
-                <p>Order management</p>
-                <h2>Fulfillment worklist</h2>
+            <article className="panel">
+              <div className="panel-header">
+                <div>
+                  <p>Storefront routing</p>
+                  <h2>Subdomains</h2>
+                </div>
+                <Globe2 size={20} />
               </div>
-              <ClipboardList size={22} />
-            </div>
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Order</th>
-                    <th>Customer</th>
-                    <th>Items</th>
-                    <th>Total</th>
-                    <th>Payment</th>
-                    <th>Status</th>
-                    <th>Source</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.length === 0 ? (
+              <div className="domain-list">
+                <DomainRow name="beauty.products4thepeople.com" count={countByNiche(products, "beauty")} status="Phase 1" />
+                <DomainRow name="pets.products4thepeople.com" count={countByNiche(products, "pets")} status="Phase 2" />
+                <DomainRow name="home.products4thepeople.com" count={countByNiche(products, "home")} status="Ready" />
+                <DomainRow name="fitness.products4thepeople.com" count={countByNiche(products, "fitness")} status="Ready" />
+              </div>
+            </article>
+          </div>
+        )}
+
+        {adminTab === "orders" && (
+          <div style={{ display: 'grid', gap: '16px' }}>
+            <article className="panel" id="orders">
+              <div className="panel-header">
+                <div>
+                  <p>Orders</p>
+                  <h2>Backend queue</h2>
+                </div>
+                <button type="button" onClick={syncOrdersFromMedusa} disabled={isSyncingOrders}>
+                  <ShoppingCart size={17} />
+                  {isSyncingOrders ? "Syncing" : "Sync orders"}
+                </button>
+              </div>
+              <div className="queue-list">
+                <QueueRow label="Total orders" value={orders.length.toString()} />
+                <QueueRow label="Ready to fulfill" value={orders.filter((order) => order.status === "Ready to fulfill").length.toString()} />
+                <QueueRow label="Needs review" value={orders.filter((order) => order.status === "Needs review").length.toString()} />
+                <QueueRow label="Revenue captured" value={money(orders.filter((order) => order.paymentStatus === "paid").reduce((total, order) => total + order.total, 0))} />
+              </div>
+            </article>
+
+            <article className="panel wide" id="order-management">
+              <div className="panel-header">
+                <div>
+                  <p>Order management</p>
+                  <h2>Fulfillment worklist</h2>
+                </div>
+                <ClipboardList size={22} />
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
                     <tr>
-                      <td colSpan={7}>No orders yet. Storefront checkout and Medusa sync both feed this queue.</td>
+                      <th>Order</th>
+                      <th>Customer</th>
+                      <th>Items</th>
+                      <th>Total</th>
+                      <th>Payment</th>
+                      <th>Status</th>
+                      <th>Source</th>
                     </tr>
-                  ) : orders.map((order) => (
-                    <tr key={order.id}>
-                      <td>
-                        <strong>{order.id}</strong>
-                        <span>{formatDate(order.createdAt)}</span>
-                      </td>
-                      <td>
-                        <strong>{order.customerName}</strong>
-                        <span>{order.email}</span>
-                      </td>
-                      <td className="hook">{order.items.map((item) => `${item.quantity}x ${item.name}`).join(", ")}</td>
-                      <td>
-                        <strong>{money(order.total)}</strong>
-                        <span>{money(order.subtotal)} subtotal</span>
-                      </td>
-                      <td>{titleCase(order.paymentStatus)}</td>
-                      <td>
-                        <select
-                          className={`status-select ${order.status === "Ready to fulfill" ? "active" : "review"}`}
-                          value={order.status}
-                          onChange={(event) => updateOrderStatus(order.id, event.target.value as Order["status"])}
-                        >
-                          <option>Ready to fulfill</option>
-                          <option>Needs review</option>
-                        </select>
-                      </td>
-                      <td>{order.source === "medusa" ? "Medusa" : "Storefront"}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </article>
-
-          <article className="panel" id="customers">
-            <div className="panel-header">
-              <div>
-                <p>Customers</p>
-                <h2>Email capture</h2>
+                  </thead>
+                  <tbody>
+                    {orders.length === 0 ? (
+                      <tr>
+                        <td colSpan={7}>No orders yet. Storefront checkout and Medusa sync both feed this queue.</td>
+                      </tr>
+                    ) : orders.map((order) => (
+                      <tr key={order.id}>
+                        <td>
+                          <strong>{order.id}</strong>
+                          <span>{formatDate(order.createdAt)}</span>
+                        </td>
+                        <td>
+                          <strong>{order.customerName}</strong>
+                          <span>{order.email}</span>
+                        </td>
+                        <td className="hook">{order.items.map((item) => `${item.quantity}x ${item.name}`).join(", ")}</td>
+                        <td>
+                          <strong>{money(order.total)}</strong>
+                          <span>{money(order.subtotal)} subtotal</span>
+                        </td>
+                        <td>{titleCase(order.paymentStatus)}</td>
+                        <td>
+                          <select
+                            className={`status-select ${order.status === "Ready to fulfill" ? "active" : "review"}`}
+                            value={order.status}
+                            onChange={(event) => updateOrderStatus(order.id, event.target.value as Order["status"])}
+                          >
+                            <option>Ready to fulfill</option>
+                            <option>Needs review</option>
+                          </select>
+                        </td>
+                        <td>{order.source === "medusa" ? "Medusa" : "Storefront"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-              <Users size={22} />
-            </div>
-            <div className="queue-list">
-              <QueueRow label="Captured emails" value={marketingLeads.length.toString()} />
-              <QueueRow label="Checkout customers" value={marketingLeads.filter((lead) => lead.source === "checkout").length.toString()} />
-              <QueueRow label="Open abandoned carts" value={openAbandonedCarts.length.toString()} />
-              <QueueRow label="Recovered carts" value={recoveredAbandonedCarts.length.toString()} />
-            </div>
-          </article>
+            </article>
+          </div>
+        )}
 
+        {adminTab === "customers" && (
+          <div style={{ display: 'grid', gap: '16px' }}>
+            <article className="panel" id="customers">
+              <div className="panel-header">
+                <div>
+                  <p>Customers</p>
+                  <h2>Funnel insights</h2>
+                </div>
+                <Users size={22} />
+              </div>
+              <div className="queue-list">
+                <QueueRow label="Database leads & customers" value={dbContacts.length.toString()} />
+                <QueueRow label="LocalStorage emails" value={marketingLeads.length.toString()} />
+                <QueueRow label="Open abandoned carts" value={openAbandonedCarts.length.toString()} />
+                <QueueRow label="Recovered carts" value={recoveredAbandonedCarts.length.toString()} />
+              </div>
+            </article>
+
+            <article className="panel wide" id="customer-directory">
+              <div className="panel-header">
+                <div>
+                  <p>Customer directory</p>
+                  <h2>Persistent leads & buyers ({dbContacts.length})</h2>
+                </div>
+                <Users size={22} />
+              </div>
+              <div className="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Email address</th>
+                      <th>Customer name</th>
+                      <th>Fulfillment address / Source</th>
+                      <th>Last Order ID</th>
+                      <th>Capture Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dbContacts.length === 0 ? (
+                      <tr>
+                        <td colSpan={5}>No customer profiles in database yet. Try checking out on the storefront or subscribing to the email wheel!</td>
+                      </tr>
+                    ) : dbContacts.map((contact) => (
+                      <tr key={contact.email}>
+                        <td><strong>{contact.email}</strong></td>
+                        <td>{contact.customerName}</td>
+                        <td className="hook">{contact.address}</td>
+                        <td><strong>{contact.lastOrderId || "None"}</strong></td>
+                        <td>{formatDate(contact.updatedAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </article>
+          </div>
+        )}
+
+        {adminTab === "funnels" && (
           <article className="panel" id="funnels">
             <div className="panel-header">
               <div>
@@ -1056,12 +1218,14 @@ function App() {
               <Mail size={22} />
             </div>
             <div className="flow">
-              {["Landing", "Email popup", "Product page", "Cart email capture", "Abandoned cart", "Checkout"].map((step) => (
+              {["Landing Page (#general / #beauty)", "Spinning Wheel Offer Popup", "Product Detail Page", "Cart Upsell", "Stripe Checkout Session", "Payment Confirmed Order Capture"].map((step) => (
                 <span key={step}>{step}</span>
               ))}
             </div>
           </article>
+        )}
 
+        {adminTab === "analytics" && (
           <article className="panel" id="analytics">
             <div className="panel-header">
               <div>
@@ -1085,22 +1249,50 @@ function App() {
               <span>{totalInventory.toLocaleString()} inventory units</span>
             </div>
           </article>
+        )}
 
+        {adminTab === "ai-studio" && (
           <article className="panel" id="ai-studio">
             <div className="panel-header">
               <div>
                 <p>AI Studio</p>
-                <h2>Content ops</h2>
+                <h2>Content ops (Interactive Copywriter)</h2>
               </div>
               <Bot size={22} />
             </div>
             <div className="import-stack">
-              <ActionRow icon={Activity} title="Creative hooks" detail="Generate 3-8 short-form ideas per niche daily." />
-              <ActionRow icon={Mail} title="Email flows" detail="Welcome, abandon cart, post-purchase, and winback." />
-              <ActionRow icon={CreditCard} title="Offer tests" detail="Discounts, bundles, BOGO, and free-shipping thresholds." />
+              <ActionRow 
+                icon={Activity} 
+                title="Creative hooks" 
+                detail="Generate 3-8 short-form ideas per niche daily." 
+                onClick={() => {
+                  setAiAction("creative_hooks");
+                  setIsAiOpen(true);
+                }}
+              />
+              <ActionRow 
+                icon={Mail} 
+                title="Email flows" 
+                detail="Welcome, abandon cart, post-purchase, and winback." 
+                onClick={() => {
+                  setAiAction("email_flows");
+                  setIsAiOpen(true);
+                }}
+              />
+              <ActionRow 
+                icon={CreditCard} 
+                title="Offer tests" 
+                detail="Discounts, bundles, BOGO, and free-shipping thresholds." 
+                onClick={() => {
+                  setAiAction("offer_tests");
+                  setIsAiOpen(true);
+                }}
+              />
             </div>
           </article>
+        )}
 
+        {adminTab === "settings" && (
           <article className="panel" id="settings">
             <div className="panel-header">
               <div>
@@ -1116,7 +1308,7 @@ function App() {
               <span><Mail size={16} /> Marketing basics</span>
             </div>
           </article>
-        </section>
+        )}
       </section>
 
       {isFormOpen && (
@@ -1127,6 +1319,17 @@ function App() {
             setIsFormOpen(false);
           }}
           onSave={saveProduct}
+        />
+      )}
+
+      {isAiOpen && (
+        <AiStudioDialog
+          products={products}
+          action={aiAction}
+          onClose={() => {
+            setIsAiOpen(false);
+            setAiAction(null);
+          }}
         />
       )}
     </main>
@@ -1187,6 +1390,148 @@ function AdminLogin({
         </div>
       </section>
     </main>
+  );
+}
+
+function AiStudioDialog({
+  products,
+  action,
+  onClose,
+}: {
+  products: Product[];
+  action: "creative_hooks" | "email_flows" | "offer_tests" | null;
+  onClose: () => void;
+}) {
+  const [selectedProductId, setSelectedProductId] = React.useState(() => products[0]?.id || "");
+  const [loading, setLoading] = React.useState(false);
+  const [output, setOutput] = React.useState("");
+  const [copied, setCopied] = React.useState(false);
+
+  const getActionTitle = () => {
+    if (action === "creative_hooks") return "Creative UGC Video Hooks";
+    if (action === "email_flows") return "Email Campaign Flows";
+    if (action === "offer_tests") return "AOV Pricing & Offer Tests";
+    return "AI Studio Copywriter";
+  };
+
+  const handleGenerate = async () => {
+    if (!selectedProductId || !action) return;
+    setLoading(true);
+    setOutput("");
+    try {
+      const adminHeaders = {
+        "x-admin-email": "admin@products4thepeople.com",
+        "x-admin-password": "change-this-password",
+      };
+      
+      const response = await fetch("/api/ai/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...adminHeaders
+        },
+        body: JSON.stringify({
+          productId: selectedProductId,
+          action: action
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Copy generation failed.");
+      }
+
+      const data = await response.json();
+      setOutput(data.copy || "No copy generated.");
+    } catch (e) {
+      setOutput(e instanceof Error ? `Generation error: ${e.message}` : "Copy generation failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCopy = () => {
+    if (!output) return;
+    navigator.clipboard.writeText(output);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="dialog-overlay" role="dialog" aria-modal="true" style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.7)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div className="dialog-panel" style={{ background: '#111827', width: '100%', maxWidth: '680px', borderRadius: '16px', overflow: 'hidden', border: '1px solid #1f2937', color: '#f1f5f9', display: 'flex', flexDirection: 'column', maxHeight: '90vh' }}>
+        <header className="dialog-header" style={{ padding: '20px', borderBottom: '1px solid #1f2937', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <span style={{ fontSize: '12px', color: '#176c61', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>AI Studio</span>
+            <h2 style={{ margin: '4px 0 0 0', fontSize: '20px', fontWeight: 600 }}>{getActionTitle()}</h2>
+          </div>
+          <button type="button" onClick={onClose} style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: '24px', lineHeight: '20px' }}>&times;</button>
+        </header>
+
+        <div style={{ padding: '20px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: '6px', flex: 1 }}>
+              <span style={{ fontSize: '13px', color: '#9ca3af', fontWeight: 500 }}>Select Product Catalog Item</span>
+              <select
+                value={selectedProductId}
+                onChange={(e) => setSelectedProductId(e.target.value)}
+                style={{ background: '#1f2937', border: '1px solid #374151', color: '#fff', borderRadius: '8px', padding: '10px', fontSize: '14px', outline: 'none' }}
+              >
+                {products.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} ({p.niche})</option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={loading || !selectedProductId}
+              className="primary"
+              style={{ alignSelf: 'flex-end', height: '40px', padding: '0 20px', display: 'flex', alignItems: 'center', gap: '8px', borderRadius: '8px', background: '#176c61', color: 'white', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+            >
+              {loading ? "Generating..." : "Generate ✨"}
+            </button>
+          </div>
+
+          <div style={{ flex: 1, minHeight: '280px', background: '#0b0f19', borderRadius: '12px', border: '1px solid #1f2937', padding: '16px', display: 'flex', flexDirection: 'column' }}>
+            {loading ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', color: '#9ca3af' }}>
+                <div style={{ width: '40px', height: '40px', border: '3px solid #1f2937', borderTopColor: '#176c61', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+                <span>AI Copywriter is crafting creative assets...</span>
+                <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+              </div>
+            ) : output ? (
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #1f2937', paddingBottom: '8px', marginBottom: '12px' }}>
+                  <span style={{ fontSize: '12px', color: '#9ca3af' }}>Generated Copy Results</span>
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    style={{ background: 'rgba(23,108,97,0.1)', color: '#176c61', border: '1px solid rgba(23,108,97,0.2)', padding: '4px 10px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    {copied ? "Copied! ✓" : "Copy to Clipboard"}
+                  </button>
+                </div>
+                <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'Courier New, monospace', fontSize: '13.5px', color: '#e2e8f0', overflowY: 'auto', maxHeight: '350px', lineHeight: '1.5' }}>{output}</pre>
+              </div>
+            ) : (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#4b5563', fontSize: '14px', textAlign: 'center', padding: '40px' }}>
+                Choose a product and click "Generate" to write highly engaging TikTok hooks, scarcity email campaigns, or dynamic pricing offers in real-time.
+              </div>
+            )}
+          </div>
+        </div>
+
+        <footer style={{ padding: '16px 20px', background: '#1f2937', borderTop: '1px solid #374151', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+          <button
+            type="button"
+            onClick={onClose}
+            style={{ background: 'transparent', border: '1px solid #4b5563', color: '#9ca3af', padding: '8px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: 500 }}
+          >
+            Close
+          </button>
+        </footer>
+      </div>
+    </div>
   );
 }
 
@@ -2355,18 +2700,25 @@ function ActionRow({
   icon: Icon,
   title,
   detail,
+  onClick,
 }: {
   icon: React.ElementType;
   title: string;
   detail: string;
+  onClick?: () => void;
 }) {
   return (
-    <div className="action-row">
+    <div 
+      className={`action-row ${onClick ? "clickable" : ""}`} 
+      onClick={onClick}
+      style={onClick ? { cursor: 'pointer' } : undefined}
+    >
       <Icon size={18} />
       <div>
         <strong>{title}</strong>
         <span>{detail}</span>
       </div>
+      {onClick && <span style={{ marginLeft: 'auto', fontSize: '12px', color: '#176c61', fontWeight: 600 }}>Generate ✨</span>}
     </div>
   );
 }
