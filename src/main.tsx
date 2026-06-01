@@ -16,12 +16,15 @@ import {
   Import,
   LayoutDashboard,
   LineChart,
+  LogIn,
+  LogOut,
   Mail,
   Package,
   Plus,
   RotateCcw,
   Search,
   Settings,
+  ShieldCheck,
   ShoppingBag,
   ShoppingCart,
   Sparkles,
@@ -29,8 +32,31 @@ import {
   Trash2,
   Truck,
   Users,
+  X,
 } from "lucide-react";
-import { listMedusaProducts, testMedusaConnection, type MedusaConnection, type MedusaProduct } from "./lib/medusa";
+import {
+  listMedusaOrders,
+  listMedusaProducts,
+  testMedusaConnection,
+  type MedusaConnection,
+  type MedusaOrder,
+  type MedusaProduct,
+} from "./lib/medusa";
+import {
+  createOrder,
+  getOrders,
+  getProducts,
+  removeProduct,
+  replaceProducts,
+  saveProduct as saveApiProduct,
+  saveProducts,
+  saveOrders,
+  testApi,
+  updateOrderStatus as updateApiOrderStatus,
+  updateProductStatus,
+  importAliexpress,
+  type ApiOrder,
+} from "./lib/api";
 import "./styles.css";
 
 type Niche = "beauty" | "pets" | "home" | "fitness";
@@ -54,6 +80,9 @@ type Product = {
   contentAngle: string;
   status: ProductStatus;
   inventory: number;
+  images?: string[];
+  seoTitle?: string;
+  seoDescription?: string;
   source?: "seed" | "local" | "medusa";
 };
 
@@ -71,11 +100,44 @@ type Order = {
     price: number;
   }>;
   subtotal: number;
+  shipping: number;
+  tax: number;
+  total: number;
+  paymentStatus: "paid" | "unpaid" | "pending" | "failed";
+  stripeSessionId?: string;
   status: "Ready to fulfill" | "Needs review";
+  createdAt: string;
+  source?: "local" | "medusa";
+};
+
+type OrderDraft = Omit<Order, "id" | "createdAt" | "status">;
+
+type StorefrontMode = "general" | Niche;
+
+type MarketingLead = {
+  id: string;
+  email: string;
+  name: string;
+  source: "popup" | "inline" | "checkout";
+  niche: StorefrontMode;
   createdAt: string;
 };
 
-type StorefrontMode = "general" | Niche;
+type AbandonedCart = {
+  id: string;
+  email: string;
+  name: string;
+  niche: StorefrontMode;
+  items: Array<{
+    productId: string;
+    name: string;
+    quantity: number;
+    price: number;
+  }>;
+  subtotal: number;
+  status: "Open" | "Recovered";
+  updatedAt: string;
+};
 
 type StorefrontNicheConfig = {
   label: string;
@@ -83,22 +145,50 @@ type StorefrontNicheConfig = {
   eyebrow: string;
   headline: string;
   offer: string;
+  proof: string;
   accent: string;
   soft: string;
   heroImage: string;
 };
 
-const storageKey = "p4tp-admin-products";
 const medusaConfigKey = "p4tp-medusa-connection";
-const orderStorageKey = "p4tp-orders";
+const adminSessionKey = "p4tp-admin-session";
+const pendingCheckoutKey = "p4tp-pending-checkout";
+const leadStorageKey = "p4tp-marketing-leads";
+const abandonedCartStorageKey = "p4tp-abandoned-carts";
+const emailPopupDismissedKey = "p4tp-email-popup-dismissed";
+const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || "admin@products4thepeople.com";
+const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD || "change-this-password";
+
+const marketingConfig = {
+  ga4MeasurementId: import.meta.env.VITE_GA4_MEASUREMENT_ID || "",
+  metaPixelId: import.meta.env.VITE_META_PIXEL_ID || "",
+  tikTokPixelId: import.meta.env.VITE_TIKTOK_PIXEL_ID || "",
+};
+
+declare global {
+  interface Window {
+    dataLayer?: unknown[];
+    gtag?: (...args: unknown[]) => void;
+    fbq?: (...args: unknown[]) => void;
+    _fbq?: unknown;
+    ttq?: {
+      load?: (pixelId: string) => void;
+      page?: () => void;
+      track?: (eventName: string, params?: Record<string, unknown>) => void;
+      [key: string]: unknown;
+    };
+  }
+}
 
 const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
   general: {
     label: "General Store",
     host: "products4thepeople.com",
     eyebrow: "Products for everyday people",
-    headline: "Useful finds across beauty, pets, home, fitness, and whatever wins next.",
+    headline: "Practical products people actually use, tested niche by niche.",
     offer: "Free shipping over $75 across the whole store",
+    proof: "Beauty and pet best-sellers are ready now. Home and fitness collections are queued for launch testing.",
     accent: "#176c61",
     soft: "#eef7f5",
     heroImage:
@@ -108,8 +198,9 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     label: "Beauty",
     host: "beauty.products4thepeople.com",
     eyebrow: "At-home glow-up tools",
-    headline: "Beauty products built for fast routines and visible wins.",
+    headline: "Beauty tools for quick routines, calmer mornings, and camera-ready skin.",
     offer: "Free shipping over $75 on beauty bundles",
+    proof: "Focused on low-lift tools customers can understand in seconds and use the same day they arrive.",
     accent: "#c84d7d",
     soft: "#fff1f5",
     heroImage:
@@ -119,8 +210,9 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     label: "Pets",
     host: "pets.products4thepeople.com",
     eyebrow: "Everyday pet problem solvers",
-    headline: "Smart pet products for cleaner homes and happier routines.",
+    headline: "Pet gear that keeps walks, rides, meals, and cleanups easier.",
     offer: "Free shipping over $75 on pet essentials",
+    proof: "Built around daily pet-owner pain points: fur, mud, anxiety, feeding, safety, and car mess.",
     accent: "#247b73",
     soft: "#eefaf7",
     heroImage:
@@ -130,8 +222,9 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     label: "Home",
     host: "home.products4thepeople.com",
     eyebrow: "Home upgrades",
-    headline: "Useful home products will live here as the catalog expands.",
+    headline: "Small home upgrades with everyday utility and easy gift appeal.",
     offer: "Home storefront ready for product testing",
+    proof: "This niche is staged for the next product wave once active home listings are approved.",
     accent: "#8067b7",
     soft: "#f4efff",
     heroImage:
@@ -141,14 +234,17 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     label: "Fitness",
     host: "fitness.products4thepeople.com",
     eyebrow: "Fitness helpers",
-    headline: "Fitness products will live here as the catalog expands.",
+    headline: "Fitness helpers for stretching, recovery, hydration, and home workouts.",
     offer: "Fitness storefront ready for product testing",
+    proof: "This niche is staged for the next product wave once active fitness listings are approved.",
     accent: "#d06b2f",
     soft: "#fff3eb",
     heroImage:
       "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1600&q=80",
   },
 };
+
+const storefrontHashes: StorefrontMode[] = ["general", "beauty", "pets", "home", "fitness"];
 
 const seedProducts: Product[] = [
   makeProduct("LED Face Mask", "Beauty", "beauty", 18, 35, 6, 12, 79, 149, "60-75%", 1, "https://www.aliexpress.us/w/wholesale-led-face-mask.html", "Luxury spa results at home", "Active", 126),
@@ -169,6 +265,13 @@ const seedProducts: Product[] = [
   makeProduct("Lick Mat", "Pets", "pets", 2, 6, 3, 5, 19, 34, "70-85%", 7, "https://www.aliexpress.us/w/wholesale-dog-lick-mat.html", "Calm dogs with enrichment", "Active", 274),
   makeProduct("Cat Laser Toy", "Pets", "pets", 2, 7, 3, 5, 19, 39, "70-85%", 8, "https://www.aliexpress.us/w/wholesale-cat-laser-toy.html", "Keep cats entertained", "Review", 219),
   makeProduct("Dog Paw Cleaner", "Pets", "pets", 3, 8, 3, 6, 19, 39, "70-85%", 9, "https://www.aliexpress.us/w/wholesale-dog-paw-cleaner.html", "Stop muddy paw prints", "Active", 333),
+  makeProduct("Posture Corrector", "Fitness", "fitness", 5, 10, 2, 5, 34, 39, "70-80%", 1, "https://www.aliexpress.us/w/wholesale-posture-corrector.html", "Desk posture reset in 5 minutes a day", "Active", 188),
+  makeProduct("Resistance Bands", "Fitness", "fitness", 2, 5, 2, 4, 24, 29, "80-85%", 2, "https://www.aliexpress.us/w/wholesale-resistance-bands.html", "Cardio and strength anywhere", "Active", 250),
+  makeProduct("Smart Jump Rope", "Fitness", "fitness", 6, 12, 3, 6, 34, 39, "65-75%", 3, "https://www.aliexpress.us/w/wholesale-smart-jump-rope.html", "Cardio with automatic app jump tracking", "Active", 112),
+  makeProduct("Pet Dental Kit", "Pets", "pets", 3, 6, 2, 4, 29, 34, "75-80%", 10, "https://www.aliexpress.us/w/wholesale-pet-dental-kit.html", "Fresh pet breath and healthy gums", "Active", 145),
+  makeProduct("Sunset Lamp", "Home", "home", 3, 5, 2, 4, 19, 24, "70-80%", 1, "https://www.aliexpress.us/w/wholesale-sunset-lamp.html", "Bring atmospheric sunset colors into your bedroom", "Active", 220),
+  makeProduct("Flame Diffuser", "Home", "home", 6, 12, 3, 6, 34, 39, "65-75%", 2, "https://www.aliexpress.us/w/wholesale-flame-diffuser.html", "Ultrasonic cool mist with realistic flame lighting", "Active", 130),
+  makeProduct("Self-Wringing Mop", "Home", "home", 5, 10, 3, 6, 29, 34, "65-75%", 3, "https://www.aliexpress.us/w/wholesale-flat-mop-hands-free.html", "Hands-free self-wringing floor mop", "Active", 95),
 ];
 
 const navItems = [
@@ -221,30 +324,97 @@ function makeProduct(
 }
 
 function App() {
-  const [products, setProducts] = React.useState<Product[]>(() => loadProducts());
-  const [orders, setOrders] = React.useState<Order[]>(() => loadOrders());
-  const [view, setView] = React.useState(() => (window.location.hash === "#storefront" ? "storefront" : "admin"));
+  const [products, setProducts] = React.useState<Product[]>(seedProducts);
+  const [orders, setOrders] = React.useState<Order[]>([]);
+  const [marketingLeads, setMarketingLeads] = React.useState<MarketingLead[]>(() => loadMarketingLeads());
+  const [abandonedCarts, setAbandonedCarts] = React.useState<AbandonedCart[]>(() => loadAbandonedCarts());
+  const [view, setView] = React.useState(() => (isStorefrontHash(window.location.hash) ? "storefront" : "admin"));
+  const [isAdminAuthed, setIsAdminAuthed] = React.useState(() => loadAdminSession());
   const [activeNiche, setActiveNiche] = React.useState<"all" | Niche>("all");
   const [query, setQuery] = React.useState("");
   const [editingProduct, setEditingProduct] = React.useState<Product | null>(null);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
-  const [notice, setNotice] = React.useState("Catalog loaded from local admin storage.");
+  const [notice, setNotice] = React.useState("Connecting to backend storage.");
+  
+  // AliExpress URL Importer States & Handler
+  const [aliexpressUrl, setAliexpressUrl] = React.useState("");
+  const [isImportingAliexpress, setIsImportingAliexpress] = React.useState(false);
+
+  const handleImportAliexpress = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aliexpressUrl.trim()) return;
+    setIsImportingAliexpress(true);
+    setNotice("Importing product from AliExpress...");
+    try {
+      const response = await importAliexpress(aliexpressUrl.trim());
+      // Open the product editing modal pre-filled with imported details!
+      setEditingProduct(response.product as Product);
+      setIsFormOpen(true);
+      setNotice(`Product details imported successfully! Verify and save.`);
+      setAliexpressUrl("");
+    } catch (error) {
+      setNotice(error instanceof Error ? `Import failed: ${error.message}` : "Import failed.");
+    } finally {
+      setIsImportingAliexpress(false);
+    }
+  };
   const [medusaConnection, setMedusaConnection] = React.useState<MedusaConnection>(() => loadMedusaConnection());
   const [medusaStatus, setMedusaStatus] = React.useState<"Not connected" | "Connected" | "Unavailable">("Not connected");
   const [isSyncingMedusa, setIsSyncingMedusa] = React.useState(false);
+  const [isSyncingOrders, setIsSyncingOrders] = React.useState(false);
   const importInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify(products));
-  }, [products]);
+    let isMounted = true;
+
+    async function loadBackendData() {
+      try {
+        const [productResponse, orderResponse] = await Promise.all([getProducts(), getOrders()]);
+        if (!isMounted) return;
+
+        if (productResponse.products.length === 0) {
+          const seeded = seedProducts.map((product) => ({ ...product, source: "seed" as const }));
+          await replaceProducts(seeded);
+          setProducts(seeded);
+          setNotice("Backend connected. Starter catalog seeded into PostgreSQL.");
+        } else {
+          setProducts(productResponse.products);
+          setNotice("Backend connected. Catalog and orders loaded from PostgreSQL.");
+        }
+
+        setOrders(orderResponse.orders.map(normalizeStoredOrder));
+      } catch (error) {
+        if (!isMounted) return;
+        setNotice(
+          error instanceof Error
+            ? `Backend unavailable: ${error.message}. Showing starter catalog until the API is running.`
+            : "Backend unavailable. Showing starter catalog until the API is running.",
+        );
+      }
+    }
+
+    void loadBackendData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   React.useEffect(() => {
-    localStorage.setItem(orderStorageKey, JSON.stringify(orders));
-  }, [orders]);
+    localStorage.setItem(leadStorageKey, JSON.stringify(marketingLeads));
+  }, [marketingLeads]);
+
+  React.useEffect(() => {
+    localStorage.setItem(abandonedCartStorageKey, JSON.stringify(abandonedCarts));
+  }, [abandonedCarts]);
+
+  React.useEffect(() => {
+    initializeMarketingTracking();
+    trackMarketingEvent("page_view", { page_title: "Products4ThePeople Admin" });
+  }, []);
 
   React.useEffect(() => {
     const syncViewFromHash = () => {
-      setView(window.location.hash === "#storefront" ? "storefront" : "admin");
+      setView(isStorefrontHash(window.location.hash) ? "storefront" : "admin");
     };
     window.addEventListener("hashchange", syncViewFromHash);
     syncViewFromHash();
@@ -270,38 +440,68 @@ function App() {
     products.reduce((total, product) => total + product.retailMin - product.costMax - product.shippingMax, 0) /
     Math.max(products.length, 1);
   const totalInventory = products.reduce((total, product) => total + product.inventory, 0);
+  const openAbandonedCarts = abandonedCarts.filter((cart) => cart.status === "Open");
+  const recoveredAbandonedCarts = abandonedCarts.filter((cart) => cart.status === "Recovered");
 
-  const saveProduct = (form: ProductForm) => {
+  const saveProduct = async (form: ProductForm) => {
     if (editingProduct) {
-      setProducts((current) =>
-        current.map((product) =>
-          product.id === editingProduct.id ? { ...form, id: editingProduct.id } : product,
-        ),
-      );
-      setNotice(`${form.name} updated.`);
+      const updatedProduct = { ...form, id: editingProduct.id };
+      try {
+        const response = await saveApiProduct(updatedProduct);
+        setProducts((current) =>
+          current.map((product) => (product.id === editingProduct.id ? response.product : product)),
+        );
+        setNotice(`${form.name} updated in PostgreSQL.`);
+      } catch (error) {
+        setNotice(error instanceof Error ? `Product update failed: ${error.message}` : "Product update failed.");
+        return;
+      }
     } else {
       const id = uniqueId(slugify(form.name), products);
-      setProducts((current) => [{ ...form, id }, ...current]);
-      setNotice(`${form.name} added.`);
+      const newProduct = { ...form, id, source: "local" as const };
+      try {
+        const response = await saveApiProduct(newProduct);
+        setProducts((current) => [response.product, ...current]);
+        setNotice(`${form.name} added to PostgreSQL.`);
+      } catch (error) {
+        setNotice(error instanceof Error ? `Product create failed: ${error.message}` : "Product create failed.");
+        return;
+      }
     }
     setEditingProduct(null);
     setIsFormOpen(false);
   };
 
-  const updateStatus = (id: string, status: ProductStatus) => {
-    setProducts((current) => current.map((product) => (product.id === id ? { ...product, status } : product)));
-    setNotice("Product status updated.");
+  const updateStatus = async (id: string, status: ProductStatus) => {
+    try {
+      const response = await updateProductStatus(id, status);
+      setProducts((current) => current.map((product) => (product.id === id ? response.product : product)));
+      setNotice("Product status updated in PostgreSQL.");
+    } catch (error) {
+      setNotice(error instanceof Error ? `Status update failed: ${error.message}` : "Status update failed.");
+    }
   };
 
-  const deleteProduct = (id: string) => {
+  const deleteProduct = async (id: string) => {
     const product = products.find((item) => item.id === id);
-    setProducts((current) => current.filter((item) => item.id !== id));
-    setNotice(product ? `${product.name} deleted.` : "Product deleted.");
+    try {
+      await removeProduct(id);
+      setProducts((current) => current.filter((item) => item.id !== id));
+      setNotice(product ? `${product.name} deleted from PostgreSQL.` : "Product deleted from PostgreSQL.");
+    } catch (error) {
+      setNotice(error instanceof Error ? `Product delete failed: ${error.message}` : "Product delete failed.");
+    }
   };
 
-  const resetCatalog = () => {
-    setProducts(seedProducts);
-    setNotice("Catalog reset to the starter seed products.");
+  const resetCatalog = async () => {
+    const seeded = seedProducts.map((product) => ({ ...product, source: "seed" as const }));
+    try {
+      const response = await replaceProducts(seeded);
+      setProducts(response.products);
+      setNotice("Catalog reset to the starter seed products in PostgreSQL.");
+    } catch (error) {
+      setNotice(error instanceof Error ? `Catalog reset failed: ${error.message}` : "Catalog reset failed.");
+    }
   };
 
   const importCsv = async (file: File) => {
@@ -310,8 +510,19 @@ function App() {
       setNotice("No valid products found in that CSV.");
       return;
     }
-    setProducts((current) => mergeProducts(current, imported));
-    setNotice(`${imported.length} products imported from ${file.name}.`);
+    const importedWithSource = imported.map((product) => ({ ...product, source: "local" as const }));
+    try {
+      const response = await saveProducts(importedWithSource);
+      setProducts((current) => mergeProducts(current, response.products));
+      setNotice(`${imported.length} products imported from ${file.name} into PostgreSQL.`);
+    } catch (error) {
+      setProducts((current) => mergeProducts(current, importedWithSource));
+      setNotice(
+        error instanceof Error
+          ? `CSV import saved locally only because backend failed: ${error.message}`
+          : "CSV import saved locally only because backend failed.",
+      );
+    }
   };
 
   const exportCsv = () => {
@@ -319,25 +530,75 @@ function App() {
     setNotice(`${products.length} products exported.`);
   };
 
-  const placeOrder = (order: Omit<Order, "id" | "createdAt" | "status">) => {
-    const savedOrder: Order = {
-      ...order,
-      id: `P4TP-${Date.now().toString(36).toUpperCase()}`,
-      createdAt: new Date().toISOString(),
-      status: "Ready to fulfill",
-    };
+  const placeOrder = async (order: OrderDraft) => {
+    const response = await createOrder(order);
+    const savedOrder: Order = { ...normalizeStoredOrder(response.order), source: "local" };
     setOrders((current) => [savedOrder, ...current]);
+    captureMarketingLead({
+      email: order.email,
+      name: order.customerName,
+      source: "checkout",
+      niche: "general",
+    });
+    setAbandonedCarts((current) =>
+      current.map((cart) =>
+        cart.email.toLowerCase() === order.email.toLowerCase() && cart.status === "Open"
+          ? { ...cart, status: "Recovered" as const, updatedAt: new Date().toISOString() }
+          : cart,
+      ),
+    );
     return savedOrder.id;
+  };
+
+  const loginAdmin = (email: string, password: string) => {
+    if (email.trim().toLowerCase() !== adminEmail.toLowerCase() || password !== adminPassword) {
+      return false;
+    }
+
+    localStorage.setItem(adminSessionKey, JSON.stringify({ email: adminEmail, signedInAt: new Date().toISOString() }));
+    setIsAdminAuthed(true);
+    setNotice("Admin session started.");
+    return true;
+  };
+
+  const logoutAdmin = () => {
+    localStorage.removeItem(adminSessionKey);
+    setIsAdminAuthed(false);
+    window.location.hash = "#admin-login";
+  };
+
+  const captureMarketingLead = (lead: Omit<MarketingLead, "id" | "createdAt">) => {
+    const normalizedEmail = lead.email.trim().toLowerCase();
+    if (!isValidEmail(normalizedEmail)) return;
+
+    setMarketingLeads((current) => upsertMarketingLead(current, { ...lead, email: normalizedEmail }));
+    trackMarketingEvent("generate_lead", {
+      content_name: lead.source,
+      niche: lead.niche,
+    });
+  };
+
+  const captureAbandonedCart = (cart: Omit<AbandonedCart, "id" | "status" | "updatedAt">) => {
+    const normalizedEmail = cart.email.trim().toLowerCase();
+    if (!isValidEmail(normalizedEmail) || cart.items.length === 0) return;
+
+    setAbandonedCarts((current) =>
+      upsertAbandonedCart(current, {
+        ...cart,
+        email: normalizedEmail,
+      }),
+    );
   };
 
   const testBackend = async () => {
     try {
+      await testApi();
       await testMedusaConnection(medusaConnection);
       setMedusaStatus("Connected");
-      setNotice(`Medusa is reachable at ${medusaConnection.baseUrl}.`);
+      setNotice(`API and Medusa are reachable. Medusa is at ${medusaConnection.baseUrl}.`);
     } catch (error) {
       setMedusaStatus("Unavailable");
-      setNotice(error instanceof Error ? error.message : "Medusa backend is unavailable.");
+      setNotice(error instanceof Error ? error.message : "Backend is unavailable.");
     }
   };
 
@@ -346,9 +607,10 @@ function App() {
     try {
       const response = await listMedusaProducts(medusaConnection);
       const imported = response.products.map(mapMedusaProduct);
-      setProducts((current) => mergeProducts(current, imported));
+      const saved = await saveProducts(imported);
+      setProducts((current) => mergeProducts(current, saved.products));
       setMedusaStatus("Connected");
-      setNotice(`${imported.length} Medusa products synced into this admin catalog.`);
+      setNotice(`${imported.length} Medusa products synced into PostgreSQL.`);
     } catch (error) {
       setMedusaStatus("Unavailable");
       setNotice(
@@ -361,15 +623,61 @@ function App() {
     }
   };
 
+  const syncOrdersFromMedusa = async () => {
+    setIsSyncingOrders(true);
+    try {
+      const response = await listMedusaOrders(medusaConnection);
+      const imported = response.orders.map(mapMedusaOrder);
+      const saved = await saveOrders(imported);
+      setOrders((current) => mergeOrders(current, saved.orders.map(normalizeStoredOrder)));
+      setMedusaStatus("Connected");
+      setNotice(`${imported.length} Medusa orders synced into PostgreSQL.`);
+    } catch (error) {
+      setMedusaStatus("Unavailable");
+      setNotice(
+        error instanceof Error
+          ? `Medusa order sync failed: ${error.message}`
+          : "Medusa order sync failed. Check backend URL, CORS, and admin authentication.",
+      );
+    } finally {
+      setIsSyncingOrders(false);
+    }
+  };
+
+  const updateOrderStatus = async (id: string, status: Order["status"]) => {
+    try {
+      const response = await updateApiOrderStatus(id, status);
+      setOrders((current) => current.map((order) => (order.id === id ? normalizeStoredOrder({ ...order, ...response.order }) : order)));
+      setNotice("Order status updated in PostgreSQL.");
+    } catch (error) {
+      setNotice(error instanceof Error ? `Order status update failed: ${error.message}` : "Order status update failed.");
+    }
+  };
+
   if (view === "storefront") {
     return (
       <Storefront
         products={products.filter((product) => product.status === "Active")}
+        initialMode={getStorefrontModeFromHash()}
         onBackToAdmin={() => {
           window.location.hash = "#dashboard";
           setView("admin");
         }}
         onPlaceOrder={placeOrder}
+        onCaptureLead={captureMarketingLead}
+        onCaptureAbandonedCart={captureAbandonedCart}
+      />
+    );
+  }
+
+  if (!isAdminAuthed) {
+    return (
+      <AdminLogin
+        onLogin={loginAdmin}
+        onStorefront={() => {
+          window.location.hash = "#general";
+          setView("storefront");
+        }}
       />
     );
   }
@@ -390,9 +698,9 @@ function App() {
           ))}
         </nav>
         <div className="sidebar-card">
-          <Globe2 size={18} />
-          <strong>Local admin mode</strong>
-          <span>Catalog changes persist in this browser until the Medusa backend is connected.</span>
+          <ShieldCheck size={18} />
+          <strong>Protected admin</strong>
+          <span>Storefront routes stay public. Admin tools require this session gate before rendering.</span>
         </div>
       </aside>
 
@@ -404,11 +712,15 @@ function App() {
           </div>
           <div className="topbar-actions">
             <button type="button" onClick={() => {
-              window.location.hash = "#storefront";
+              window.location.hash = "#general";
               setView("storefront");
             }}>
               <ShoppingBag size={17} />
               View storefront
+            </button>
+            <button type="button" onClick={logoutAdmin}>
+              <LogOut size={17} />
+              Sign out
             </button>
             <button type="button" onClick={resetCatalog}>
               <RotateCcw size={17} />
@@ -440,7 +752,7 @@ function App() {
           <Metric icon={Package} label="Products" value={products.length.toString()} trend={`${filteredProducts.length} visible`} />
           <Metric icon={CheckCircle2} label="Active listings" value={activeCount.toString()} trend={`${reviewCount} in review`} />
           <Metric icon={CircleDollarSign} label="Avg. min profit" value={money(averageProfit)} trend="Before ad spend" />
-          <Metric icon={Database} label="Inventory units" value={totalInventory.toLocaleString()} trend="Shared pool" />
+          <Metric icon={Mail} label="Captured emails" value={marketingLeads.length.toString()} trend={`${openAbandonedCarts.length} open carts`} />
         </section>
 
         <section className="medusa-strip" id="medusa">
@@ -600,12 +912,28 @@ function App() {
             </div>
             <div className="import-stack">
               <ActionRow icon={FileUp} title="CSV import" detail="Upload Seed.csv-shaped product lists into the catalog." />
-              <ActionRow icon={Globe2} title="AliExpress URL import" detail="Placeholder for scraper/API enrichment in the backend phase." />
-              <ActionRow icon={Sparkles} title="Manual + AI entry" detail="Manual entry works now; AI content generation comes next." />
+              <button className="primary full" type="button" onClick={() => importInputRef.current?.click()}>
+                Start CSV import
+              </button>
+              
+              <hr style={{ border: '0', borderTop: '1px solid #e5eaee', margin: '8px 0' }} />
+              
+              <ActionRow icon={Globe2} title="AliExpress URL import" detail="Paste any product link to auto-parse details, images, and content angles." />
+              <form onSubmit={handleImportAliexpress} style={{ display: 'grid', gap: '6px' }}>
+                <div className="coupon-input-wrap" style={{ marginTop: '0' }}>
+                  <input
+                    value={aliexpressUrl}
+                    onChange={(event) => setAliexpressUrl(event.target.value)}
+                    placeholder="https://www.aliexpress.com/item/..."
+                    disabled={isImportingAliexpress}
+                    style={{ background: '#f7f9fa', border: '1px solid #dce3e7', borderRadius: '8px', padding: '8px 10px', flex: 1 }}
+                  />
+                  <button className="primary" type="submit" disabled={isImportingAliexpress || !aliexpressUrl.trim()}>
+                    {isImportingAliexpress ? "Importing..." : "Import"}
+                  </button>
+                </div>
+              </form>
             </div>
-            <button className="primary full" type="button" onClick={() => importInputRef.current?.click()}>
-              Start CSV import
-            </button>
           </article>
 
           <article className="panel">
@@ -628,15 +956,94 @@ function App() {
             <div className="panel-header">
               <div>
                 <p>Orders</p>
-                <h2>Shared queue</h2>
+                <h2>Backend queue</h2>
               </div>
-              <ShoppingCart size={22} />
+              <button type="button" onClick={syncOrdersFromMedusa} disabled={isSyncingOrders}>
+                <ShoppingCart size={17} />
+                {isSyncingOrders ? "Syncing" : "Sync orders"}
+              </button>
             </div>
             <div className="queue-list">
               <QueueRow label="Total orders" value={orders.length.toString()} />
               <QueueRow label="Ready to fulfill" value={orders.filter((order) => order.status === "Ready to fulfill").length.toString()} />
-              <QueueRow label="Needs review" value="0" />
-              <QueueRow label="Revenue captured" value={money(orders.reduce((total, order) => total + order.subtotal, 0))} />
+              <QueueRow label="Needs review" value={orders.filter((order) => order.status === "Needs review").length.toString()} />
+              <QueueRow label="Revenue captured" value={money(orders.filter((order) => order.paymentStatus === "paid").reduce((total, order) => total + order.total, 0))} />
+            </div>
+          </article>
+
+          <article className="panel wide" id="order-management">
+            <div className="panel-header">
+              <div>
+                <p>Order management</p>
+                <h2>Fulfillment worklist</h2>
+              </div>
+              <ClipboardList size={22} />
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Order</th>
+                    <th>Customer</th>
+                    <th>Items</th>
+                    <th>Total</th>
+                    <th>Payment</th>
+                    <th>Status</th>
+                    <th>Source</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.length === 0 ? (
+                    <tr>
+                      <td colSpan={7}>No orders yet. Storefront checkout and Medusa sync both feed this queue.</td>
+                    </tr>
+                  ) : orders.map((order) => (
+                    <tr key={order.id}>
+                      <td>
+                        <strong>{order.id}</strong>
+                        <span>{formatDate(order.createdAt)}</span>
+                      </td>
+                      <td>
+                        <strong>{order.customerName}</strong>
+                        <span>{order.email}</span>
+                      </td>
+                      <td className="hook">{order.items.map((item) => `${item.quantity}x ${item.name}`).join(", ")}</td>
+                      <td>
+                        <strong>{money(order.total)}</strong>
+                        <span>{money(order.subtotal)} subtotal</span>
+                      </td>
+                      <td>{titleCase(order.paymentStatus)}</td>
+                      <td>
+                        <select
+                          className={`status-select ${order.status === "Ready to fulfill" ? "active" : "review"}`}
+                          value={order.status}
+                          onChange={(event) => updateOrderStatus(order.id, event.target.value as Order["status"])}
+                        >
+                          <option>Ready to fulfill</option>
+                          <option>Needs review</option>
+                        </select>
+                      </td>
+                      <td>{order.source === "medusa" ? "Medusa" : "Storefront"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article className="panel" id="customers">
+            <div className="panel-header">
+              <div>
+                <p>Customers</p>
+                <h2>Email capture</h2>
+              </div>
+              <Users size={22} />
+            </div>
+            <div className="queue-list">
+              <QueueRow label="Captured emails" value={marketingLeads.length.toString()} />
+              <QueueRow label="Checkout customers" value={marketingLeads.filter((lead) => lead.source === "checkout").length.toString()} />
+              <QueueRow label="Open abandoned carts" value={openAbandonedCarts.length.toString()} />
+              <QueueRow label="Recovered carts" value={recoveredAbandonedCarts.length.toString()} />
             </div>
           </article>
 
@@ -649,7 +1056,7 @@ function App() {
               <Mail size={22} />
             </div>
             <div className="flow">
-              {["Landing", "Email capture", "Product page", "Cart upsell", "Checkout", "Post-purchase"].map((step) => (
+              {["Landing", "Email popup", "Product page", "Cart email capture", "Abandoned cart", "Checkout"].map((step) => (
                 <span key={step}>{step}</span>
               ))}
             </div>
@@ -672,10 +1079,10 @@ function App() {
               <span style={{ height: "80%" }} />
             </div>
             <div className="integration-row">
-              <span>TikTok Pixel</span>
-              <span>Meta Pixel</span>
-              <span>GA4</span>
-              <span>Pinterest</span>
+              <span>GA4 {pixelStatus(marketingConfig.ga4MeasurementId)}</span>
+              <span>Meta Pixel {pixelStatus(marketingConfig.metaPixelId)}</span>
+              <span>TikTok Pixel {pixelStatus(marketingConfig.tikTokPixelId)}</span>
+              <span>{totalInventory.toLocaleString()} inventory units</span>
             </div>
           </article>
 
@@ -705,8 +1112,8 @@ function App() {
             <div className="readiness-grid">
               <span><Database size={16} /> Medusa SDK installed</span>
               <span><Truck size={16} /> Inventory fields</span>
-              <span><CreditCard size={16} /> Stripe checkout next</span>
-              <span><Home size={16} /> PostgreSQL required</span>
+              <span><CreditCard size={16} /> Stripe Checkout wired</span>
+              <span><Mail size={16} /> Marketing basics</span>
             </div>
           </article>
         </section>
@@ -722,6 +1129,63 @@ function App() {
           onSave={saveProduct}
         />
       )}
+    </main>
+  );
+}
+
+function AdminLogin({
+  onLogin,
+  onStorefront,
+}: {
+  onLogin: (email: string, password: string) => boolean;
+  onStorefront: () => void;
+}) {
+  const [email, setEmail] = React.useState(adminEmail);
+  const [password, setPassword] = React.useState("");
+  const [error, setError] = React.useState("");
+
+  return (
+    <main className="auth-shell">
+      <section className="auth-panel">
+        <div className="auth-brand">
+          <ShieldCheck size={28} />
+          <div>
+            <p>Products4ThePeople.com</p>
+            <h1>Admin Login</h1>
+          </div>
+        </div>
+
+        <form
+          className="auth-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (onLogin(email, password)) return;
+            setError("Invalid admin email or password.");
+          }}
+        >
+          <label>
+            <span>Email</span>
+            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" required />
+          </label>
+          {error && <div className="auth-error" role="alert">{error}</div>}
+          <button className="primary full" type="submit">
+            <LogIn size={17} />
+            Sign in
+          </button>
+        </form>
+
+        <div className="auth-footer">
+          <button type="button" onClick={onStorefront}>
+            <ShoppingBag size={17} />
+            View storefront
+          </button>
+          <span>Set `VITE_ADMIN_EMAIL` and `VITE_ADMIN_PASSWORD` in `.env` before sharing this build.</span>
+        </div>
+      </section>
     </main>
   );
 }
@@ -750,11 +1214,14 @@ function ProductDialog({
           retailMax: 39,
           marginEst: "70-85%",
           priority: 1,
-          aliexpressSearchUrl: "",
-          contentAngle: "",
-          status: "Draft",
-          inventory: 0,
-        },
+           aliexpressSearchUrl: "",
+           contentAngle: "",
+           status: "Draft",
+           inventory: 0,
+           images: [],
+           seoTitle: "",
+           seoDescription: "",
+         },
   );
 
   const setField = <Key extends keyof ProductForm>(key: Key, value: ProductForm[Key]) => {
@@ -819,6 +1286,21 @@ function ProductDialog({
           <Field label="Content angle" wide>
             <textarea value={form.contentAngle} onChange={(event) => setField("contentAngle", event.target.value)} />
           </Field>
+          <Field label="Image URLs" wide>
+            <textarea
+              value={(form.images || []).join("\n")}
+              onChange={(event) =>
+                setField("images", event.target.value.split(/\r?\n/).map((url) => url.trim()).filter(Boolean))
+              }
+              placeholder="One image URL per line"
+            />
+          </Field>
+          <Field label="SEO title" wide>
+            <input value={form.seoTitle || ""} onChange={(event) => setField("seoTitle", event.target.value)} />
+          </Field>
+          <Field label="SEO description" wide>
+            <textarea value={form.seoDescription || ""} onChange={(event) => setField("seoDescription", event.target.value)} />
+          </Field>
         </div>
 
         <div className="modal-actions">
@@ -836,22 +1318,199 @@ function ProductDialog({
 
 function Storefront({
   products,
+  initialMode,
   onBackToAdmin,
   onPlaceOrder,
+  onCaptureLead,
+  onCaptureAbandonedCart,
 }: {
   products: Product[];
+  initialMode: StorefrontMode;
   onBackToAdmin: () => void;
-  onPlaceOrder: (order: Omit<Order, "id" | "createdAt" | "status">) => string;
+  onPlaceOrder: (order: OrderDraft) => Promise<string>;
+  onCaptureLead: (lead: Omit<MarketingLead, "id" | "createdAt">) => void;
+  onCaptureAbandonedCart: (cart: Omit<AbandonedCart, "id" | "status" | "updatedAt">) => void;
 }) {
-  const [activeNiche, setActiveNiche] = React.useState<StorefrontMode>("general");
+  const [activeNiche, setActiveNiche] = React.useState<StorefrontMode>(initialMode);
   const [activeSubcategory, setActiveSubcategory] = React.useState("All");
   const [cart, setCart] = React.useState<Record<string, number>>({});
+  const [productQuantities, setProductQuantities] = React.useState<Record<string, number>>({});
   const [email, setEmail] = React.useState("");
   const [customerName, setCustomerName] = React.useState("");
-  const [address, setAddress] = React.useState("");
   const [confirmation, setConfirmation] = React.useState("");
+  const [checkoutStatus, setCheckoutStatus] = React.useState<"idle" | "redirecting" | "confirming">("idle");
   const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
+  const [detailProductId, setDetailProductId] = React.useState(() => getProductIdFromHash());
+  const [leadEmail, setLeadEmail] = React.useState("");
+  const [leadName, setLeadName] = React.useState("");
+  const [isEmailPopupOpen, setIsEmailPopupOpen] = React.useState(false);
+
+  // Dynamic Spinning Wheel & Coupon Engine States
+  const [wheelState, setWheelState] = React.useState<"idle" | "spinning" | "won">("idle");
+  const [wheelResult, setWheelResult] = React.useState<{ label: string; code: string } | null>(null);
+  const [wheelRotation, setWheelRotation] = React.useState(0);
+  const [appliedCoupon, setAppliedCoupon] = React.useState<string | null>(null);
+  const [couponInput, setCouponInput] = React.useState("");
+  const [couponError, setCouponError] = React.useState("");
+
+  const wheelSegments = [
+    { label: "10% OFF", code: "WHEEL10" },
+    { label: "Free Shipping", code: "FREESHIP" },
+    { label: "15% OFF", code: "WHEEL15" },
+    { label: "Try Again", code: "TRYAGAIN" },
+    { label: "20% OFF", code: "WHEEL20" },
+    { label: "10% OFF", code: "WELCOME10" },
+  ];
+
+  const spinWheel = () => {
+    if (wheelState !== "idle") return;
+    setWheelState("spinning");
+    
+    // Choose a winning segment index (0, 1, 2, 4, or 5; skip TRYAGAIN for premium UX)
+    const winnable = [0, 1, 2, 4, 5];
+    const winningIndex = winnable[Math.floor(Math.random() * winnable.length)];
+    const prize = wheelSegments[winningIndex];
+
+    const spins = 5 + Math.floor(Math.random() * 3); // 5 to 7 full spins
+    const targetDeg = (spins * 360) - (winningIndex * 60) - 30; // 60 deg per segment (360/6)
+
+    setWheelRotation(targetDeg);
+
+    setTimeout(() => {
+      setWheelState("won");
+      setWheelResult(prize);
+    }, 4000);
+  };
+
+  const abandonedCartSignatureRef = React.useRef("");
   const config = storefrontNiches[activeNiche];
+
+  React.useEffect(() => {
+    const syncStorefrontFromHash = () => {
+      const productId = getProductIdFromHash();
+      setDetailProductId(productId);
+      if (productId) {
+        const product = products.find((item) => item.id === productId);
+        if (product) setActiveNiche(product.subdomain);
+        return;
+      }
+      setActiveNiche(getStorefrontModeFromHash());
+      setActiveSubcategory("All");
+    };
+    window.addEventListener("hashchange", syncStorefrontFromHash);
+    syncStorefrontFromHash();
+    return () => window.removeEventListener("hashchange", syncStorefrontFromHash);
+  }, [initialMode, products]);
+
+  React.useEffect(() => {
+    trackMarketingEvent("page_view", {
+      page_title: storefrontNiches[activeNiche].host,
+      niche: activeNiche,
+    });
+  }, [activeNiche]);
+
+  React.useEffect(() => {
+    if (localStorage.getItem(emailPopupDismissedKey) === "true") return;
+    const delayTimer = window.setTimeout(() => {
+      setIsEmailPopupOpen(true);
+    }, 15000);
+
+    const handleMouseLeave = (event: MouseEvent) => {
+      if (event.clientY < 20) {
+        setIsEmailPopupOpen(true);
+      }
+    };
+
+    document.addEventListener("mouseleave", handleMouseLeave);
+    return () => {
+      window.clearTimeout(delayTimer);
+      document.removeEventListener("mouseleave", handleMouseLeave);
+    };
+  }, []);
+
+  const detailProduct = detailProductId ? products.find((product) => product.id === detailProductId) : null;
+
+  React.useEffect(() => {
+    const metadata = detailProduct ? getProductSeo(detailProduct) : getStorefrontSeo(config);
+    document.title = metadata.title;
+    setMetaDescription(metadata.description);
+  }, [config, detailProduct]);
+
+  React.useEffect(() => {
+    return () => {
+      document.title = "Products4ThePeople";
+      setMetaDescription("Products4ThePeople commerce command center and storefront.");
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!detailProductId) return;
+    if (!products.some((product) => product.id === detailProductId)) {
+      window.location.hash = `#${activeNiche}`;
+    }
+  }, [activeNiche, detailProductId, products]);
+
+  React.useEffect(() => {
+    if (detailProduct) {
+      setProductQuantities((current) => ({ ...current, [detailProduct.id]: current[detailProduct.id] || 1 }));
+    }
+  }, [detailProduct]);
+
+  React.useEffect(() => {
+    const checkoutParams = new URLSearchParams(window.location.search);
+    const checkoutResult = checkoutParams.get("checkout");
+    const sessionId = checkoutParams.get("session_id");
+
+    if (checkoutResult === "cancelled") {
+      setConfirmation("Checkout was cancelled. Your cart is still here when you are ready.");
+      window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash || "#general"}`);
+      return;
+    }
+
+    if (checkoutResult !== "success" || !sessionId) return;
+
+    const confirmPaidOrder = async () => {
+      setCheckoutStatus("confirming");
+      try {
+        const pendingOrder = readPendingCheckout();
+        const response = await fetch(`/api/checkout-session?session_id=${encodeURIComponent(sessionId)}`);
+        if (!response.ok) throw new Error("Could not verify Stripe payment status.");
+        const session = (await response.json()) as { paymentStatus?: Order["paymentStatus"]; customerEmail?: string };
+
+        if (!pendingOrder) {
+          setConfirmation(`Stripe checkout returned with payment status: ${normalizePaymentStatus(session.paymentStatus)}.`);
+          return;
+        }
+
+        const paymentStatus = normalizePaymentStatus(session.paymentStatus);
+        const orderId = await onPlaceOrder({
+          ...pendingOrder,
+          email: session.customerEmail || pendingOrder.email,
+          paymentStatus,
+          stripeSessionId: sessionId,
+        });
+        if (paymentStatus === "paid") {
+          trackMarketingEvent("purchase", {
+            currency: "USD",
+            transaction_id: orderId,
+            value: pendingOrder.total,
+          });
+        }
+        localStorage.removeItem(pendingCheckoutKey);
+        setCart({});
+        setCustomerName("");
+        setEmail("");
+        setConfirmation(`Order ${orderId} confirmed. Payment status: ${paymentStatus}.`);
+      } catch (error) {
+        setConfirmation(error instanceof Error ? error.message : "Checkout confirmation failed.");
+      } finally {
+        setCheckoutStatus("idle");
+        window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash || "#general"}`);
+      }
+    };
+
+    void confirmPaidOrder();
+  }, [onPlaceOrder]);
 
   const storefrontProducts = products.filter((product) => activeNiche === "general" || product.subdomain === activeNiche);
   const subcategories = getSubcategories(storefrontProducts);
@@ -865,11 +1524,69 @@ function Storefront({
     })
     .filter((item): item is { product: Product; quantity: number } => Boolean(item));
   const subtotal = cartItems.reduce((total, item) => total + item.product.retailMin * item.quantity, 0);
-  const shipping = subtotal >= 75 || subtotal === 0 ? 0 : 7;
-  const total = subtotal + shipping;
 
-  const addToCart = (productId: string) => {
-    setCart((current) => ({ ...current, [productId]: (current[productId] ?? 0) + 1 }));
+  let discountPercent = 0;
+  if (appliedCoupon === "WHEEL10" || appliedCoupon === "WELCOME10") discountPercent = 0.1;
+  else if (appliedCoupon === "WHEEL15") discountPercent = 0.15;
+  else if (appliedCoupon === "WHEEL20") discountPercent = 0.2;
+
+  const discountAmount = roundMoney(subtotal * discountPercent);
+  const discountedSubtotal = Math.max(0, subtotal - discountAmount);
+
+  const shipping = (appliedCoupon === "FREESHIP" || subtotal >= 75 || subtotal === 0) ? 0 : 7;
+  const tax = subtotal > 0 ? roundMoney(discountedSubtotal * 0.06) : 0;
+  const total = roundMoney(discountedSubtotal + shipping + tax);
+
+  React.useEffect(() => {
+    if (!isValidEmail(email) || cartItems.length === 0) return;
+
+    const signature = JSON.stringify({
+      email: email.trim().toLowerCase(),
+      items: cartItems.map((item) => [item.product.id, item.quantity]),
+      subtotal,
+    });
+    if (abandonedCartSignatureRef.current === signature) return;
+    abandonedCartSignatureRef.current = signature;
+
+    onCaptureAbandonedCart({
+      email,
+      name: customerName,
+      niche: activeNiche,
+      subtotal,
+      items: cartItems.map((item) => ({
+        productId: item.product.id,
+        name: item.product.name,
+        quantity: item.quantity,
+        price: item.product.retailMin,
+      })),
+    });
+  }, [activeNiche, cartItems, customerName, email, onCaptureAbandonedCart, subtotal]);
+
+  const addToCart = (productId: string, quantity = 1) => {
+    setCart((current) => ({ ...current, [productId]: (current[productId] ?? 0) + Math.max(1, quantity) }));
+    const product = products.find((item) => item.id === productId);
+    if (product) {
+      trackMarketingEvent("add_to_cart", {
+        content_ids: [product.id],
+        content_name: product.name,
+        currency: "USD",
+        value: product.retailMin * Math.max(1, quantity),
+      });
+    }
+  };
+
+  const switchStorefront = (mode: StorefrontMode) => {
+    setActiveNiche(mode);
+    setActiveSubcategory("All");
+    setConfirmation("");
+    window.location.hash = `#${mode}`;
+  };
+
+  const openProduct = (product: Product) => {
+    setSelectedProduct(null);
+    setActiveNiche(product.subdomain);
+    setActiveSubcategory("All");
+    window.location.hash = `#product/${product.id}`;
   };
 
   const setQuantity = (productId: string, quantity: number) => {
@@ -881,26 +1598,84 @@ function Storefront({
     });
   };
 
-  const submitOrder = (event: React.FormEvent<HTMLFormElement>) => {
+  const submitLead = (event: React.FormEvent<HTMLFormElement>, source: MarketingLead["source"]) => {
+    event.preventDefault();
+    if (!isValidEmail(leadEmail)) return;
+
+    onCaptureLead({
+      email: leadEmail,
+      name: leadName,
+      source,
+      niche: activeNiche,
+    });
+    setConfirmation("You're on the list. Watch for offers and launch tests.");
+    setLeadEmail("");
+    setLeadName("");
+    setIsEmailPopupOpen(false);
+    localStorage.setItem(emailPopupDismissedKey, "true");
+  };
+
+  const dismissEmailPopup = () => {
+    setIsEmailPopupOpen(false);
+    localStorage.setItem(emailPopupDismissedKey, "true");
+  };
+
+  const submitOrder = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (cartItems.length === 0) return;
-    const orderId = onPlaceOrder({
+
+    const orderDraft: OrderDraft = {
       customerName,
       email,
-      address,
-      subtotal: total,
+      address: "Collected by Stripe Checkout",
+      subtotal,
+      shipping,
+      tax,
+      total,
+      paymentStatus: "pending",
       items: cartItems.map((item) => ({
         productId: item.product.id,
         name: item.product.name,
         quantity: item.quantity,
         price: item.product.retailMin,
       })),
+    };
+
+    onCaptureLead({
+      email,
+      name: customerName,
+      source: "checkout",
+      niche: activeNiche,
     });
-    setConfirmation(`Order ${orderId} received.`);
-    setCart({});
-    setCustomerName("");
-    setEmail("");
-    setAddress("");
+    trackMarketingEvent("begin_checkout", {
+      currency: "USD",
+      value: total,
+      num_items: cartItems.reduce((count, item) => count + item.quantity, 0),
+    });
+    setCheckoutStatus("redirecting");
+    setConfirmation("");
+    try {
+      const response = await fetch("/api/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName,
+          email,
+          items: orderDraft.items,
+          totals: { subtotal, shipping, tax, total },
+          storefront: activeNiche,
+          discountCode: appliedCoupon,
+        }),
+      });
+      const session = (await response.json()) as { url?: string; error?: string };
+      if (!response.ok || !session.url) throw new Error(session.error || "Stripe checkout is unavailable.");
+
+      localStorage.setItem(pendingCheckoutKey, JSON.stringify(orderDraft));
+      window.location.assign(session.url);
+    } catch (error) {
+      setCheckoutStatus("idle");
+      setConfirmation(error instanceof Error ? error.message : "Stripe checkout could not be started.");
+    }
   };
 
   return (
@@ -918,26 +1693,22 @@ function Storefront({
         <button
           className="storefront-brand"
           type="button"
-          onClick={() => {
-            setActiveNiche("general");
-            setActiveSubcategory("All");
-          }}
+          onClick={() => switchStorefront("general")}
         >
           <Store size={24} />
           <span>{config.host}</span>
         </button>
         <nav aria-label="Storefront navigation">
-          <a href="#shop">Shop</a>
+          <button type="button" onClick={() => switchStorefront(activeNiche)}>
+            Shop
+          </button>
           <a href="#checkout">Checkout</a>
           <details className="more-shops">
             <summary>More Shops</summary>
             <div>
               <button
                 type="button"
-                onClick={() => {
-                  setActiveNiche("general");
-                  setActiveSubcategory("All");
-                }}
+                onClick={() => switchStorefront("general")}
               >
                 General Store
               </button>
@@ -945,10 +1716,7 @@ function Storefront({
                 <button
                   key={niche}
                   type="button"
-                  onClick={() => {
-                    setActiveNiche(niche);
-                    setActiveSubcategory("All");
-                  }}
+                  onClick={() => switchStorefront(niche)}
                 >
                   {storefrontNiches[niche].label}
                 </button>
@@ -965,12 +1733,38 @@ function Storefront({
         <div>
           <p>{config.eyebrow}</p>
           <h1>{config.headline}</h1>
+          <small>{config.proof}</small>
           <span>{config.offer}</span>
         </div>
       </section>
 
+      <section className="email-capture-band" aria-label="Email offers">
+        <div>
+          <p>Test offer list</p>
+          <h2>Get early discounts before the next product drop.</h2>
+        </div>
+        <form onSubmit={(event) => submitLead(event, "inline")}>
+          <input
+            value={leadName}
+            onChange={(event) => setLeadName(event.target.value)}
+            placeholder="First name"
+          />
+          <input
+            value={leadEmail}
+            onChange={(event) => setLeadEmail(event.target.value)}
+            placeholder="Email"
+            required
+            type="email"
+          />
+          <button className="primary" type="submit">
+            Join
+          </button>
+        </form>
+      </section>
+
       {confirmation && <div className="store-notice">{confirmation}</div>}
 
+      {!detailProduct && (
       <section className="store-layout" id="shop">
         <div>
           <div className="store-section-head">
@@ -1007,13 +1801,17 @@ function Storefront({
               </div>
             ) : visibleProducts.map((product) => (
               <article className="shop-card" key={product.id}>
-                <div className="product-image" aria-hidden="true">
-                  <Package size={42} />
-                </div>
+                <button className="product-image product-image-button" type="button" onClick={() => openProduct(product)}>
+                  <img src={getProductImages(product)[0]} alt="" />
+                </button>
                 <div className="shop-card-body">
                   <span>{product.niche}</span>
-                  <h3>{product.name}</h3>
-                  <p>{product.contentAngle || "Customer-ready product from the active catalog."}</p>
+                  <h3>
+                    <button type="button" onClick={() => openProduct(product)}>
+                      {product.name}
+                    </button>
+                  </h3>
+                <p>{getConsumerCopy(product)}</p>
                   <div className="shop-price">
                     <strong>{money(product.retailMin)}</strong>
                     <small>{product.inventory} in stock</small>
@@ -1044,7 +1842,11 @@ function Storefront({
 
           <div className="cart-lines">
             {cartItems.length === 0 ? (
-              <p>Your cart is empty.</p>
+              <div className="checkout-empty">
+                <ShoppingBag size={28} />
+                <strong>Your cart is empty.</strong>
+                <span>Add a product to see checkout totals, free-shipping progress, and the Stripe handoff.</span>
+              </div>
             ) : (
               cartItems.map(({ product, quantity }) => (
                 <div className="cart-line" key={product.id}>
@@ -1064,32 +1866,268 @@ function Storefront({
             )}
           </div>
 
+          {cartItems.length > 0 && (
+            <>
+              <div className="coupon-input-wrap">
+                <input
+                  value={couponInput}
+                  onChange={(event) => {
+                    setCouponInput(event.target.value);
+                    setCouponError("");
+                  }}
+                  placeholder="Promo code"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const code = couponInput.trim().toUpperCase();
+                    if (["WHEEL10", "WELCOME10", "WHEEL15", "WHEEL20", "FREESHIP"].includes(code)) {
+                      setAppliedCoupon(code);
+                      setCouponInput("");
+                      setConfirmation(`Coupon ${code} applied successfully!`);
+                    } else {
+                      setCouponError("Invalid promo code.");
+                    }
+                  }}
+                >
+                  Apply
+                </button>
+              </div>
+              {couponError && <p className="auth-error" style={{ fontSize: '0.8rem', padding: '6px 8px', marginTop: '6px', marginBottom: '6px' }}>{couponError}</p>}
+              
+              {appliedCoupon && (
+                <div className="applied-coupon-badge" style={{ marginBottom: '12px' }}>
+                  <span>🏷️ <strong>{appliedCoupon}</strong> ({
+                    appliedCoupon === "FREESHIP" ? "Free Shipping" : 
+                    appliedCoupon === "WHEEL20" ? "20% OFF" :
+                    appliedCoupon === "WHEEL15" ? "15% OFF" : "10% OFF"
+                  })</span>
+                  <button type="button" onClick={() => {
+                    setAppliedCoupon(null);
+                    setConfirmation("Coupon removed.");
+                  }}>✕</button>
+                </div>
+              )}
+            </>
+          )}
+
           <div className="totals">
             <span>Subtotal <strong>{money(subtotal)}</strong></span>
+            {discountAmount > 0 && (
+              <span style={{ color: 'var(--store-accent, #176c61)' }}>
+                Discount ({discountPercent * 100}%) <strong>-{money(discountAmount)}</strong>
+              </span>
+            )}
             <span>Shipping <strong>{shipping === 0 ? "Free" : money(shipping)}</strong></span>
+            <span>Estimated tax <strong>{money(tax)}</strong></span>
             <span>Total <strong>{money(total)}</strong></span>
           </div>
+          {cartItems.length > 0 && subtotal < 75 && (
+            <p className="checkout-progress">{money(75 - subtotal)} away from free shipping.</p>
+          )}
 
           <form className="checkout-form" onSubmit={submitOrder}>
             <input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Full name" required />
             <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" type="email" required />
-            <textarea value={address} onChange={(event) => setAddress(event.target.value)} placeholder="Shipping address" required />
-            <button className="primary full" type="submit" disabled={cartItems.length === 0}>
-              Place order
+            <p className="checkout-note">Shipping address and payment details are collected securely by Stripe.</p>
+            <button className="primary full" type="submit" disabled={cartItems.length === 0 || checkoutStatus !== "idle"}>
+              {checkoutStatus === "redirecting" ? "Opening secure checkout" : checkoutStatus === "confirming" ? "Confirming payment" : "Pay with Stripe"}
             </button>
           </form>
         </aside>
       </section>
+      )}
+
+      {detailProduct && (
+        <ProductDetailPage
+          product={detailProduct}
+          products={products}
+          quantity={productQuantities[detailProduct.id] || 1}
+          onBack={() => {
+            window.location.hash = `#${detailProduct.subdomain}`;
+          }}
+          onOpenProduct={openProduct}
+          onQuantityChange={(quantity) =>
+            setProductQuantities((current) => ({ ...current, [detailProduct.id]: quantity }))
+          }
+          onAddToCart={(quantity) => {
+            addToCart(detailProduct.id, quantity);
+            setConfirmation(`${quantity} ${detailProduct.name} added to cart.`);
+          }}
+        />
+      )}
 
       {selectedProduct && (
         <ProductQuickView
           product={selectedProduct}
           onClose={() => setSelectedProduct(null)}
+          onViewDetails={() => openProduct(selectedProduct)}
           onAddToCart={() => {
             addToCart(selectedProduct.id);
             setConfirmation(`${selectedProduct.name} added to cart.`);
           }}
         />
+      )}
+
+      {isEmailPopupOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <div
+            className="email-capture-popup"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="email-capture-title"
+          >
+            <button className="email-popup-close" type="button" onClick={dismissEmailPopup} aria-label="Close email signup">
+              <X size={18} />
+            </button>
+            
+            {/* Left Column: Spinning Wheel */}
+            <div className="wheel-container">
+              <div className="wheel-pointer" style={{ color: config.accent }}>
+                <svg viewBox="0 0 24 30" fill="currentColor" width="24" height="30">
+                  <path d="M12 30 L2 10 A12 12 0 0 1 22 10 Z" />
+                </svg>
+              </div>
+              <div className="wheel-center-pin" style={{ borderColor: config.accent, color: config.accent }}>
+                P4TP
+              </div>
+              <div 
+                className="wheel-svg-wrap" 
+                style={{ transform: `rotate(${wheelRotation}deg)` }}
+              >
+                <svg viewBox="0 0 200 200" width="100%" height="100%">
+                  {/* Outer Rim */}
+                  <circle cx="100" cy="100" r="95" fill="none" stroke={config.accent} strokeWidth="8" />
+                  <circle cx="100" cy="100" r="91" fill="none" stroke="#fff" strokeWidth="2" />
+                  
+                  {/* Wedges */}
+                  {wheelSegments.map((seg, i) => {
+                    const startAngle = i * 60;
+                    const endAngle = (i + 1) * 60;
+                    const radStart = (startAngle - 90) * Math.PI / 180;
+                    const radEnd = (endAngle - 90) * Math.PI / 180;
+                    const x1 = 100 + 90 * Math.cos(radStart);
+                    const y1 = 100 + 90 * Math.sin(radStart);
+                    const x2 = 100 + 90 * Math.cos(radEnd);
+                    const y2 = 100 + 90 * Math.sin(radEnd);
+                    
+                    const pathData = `M 100,100 L ${x1},${y1} A 90,90 0 0,1 ${x2},${y2} Z`;
+                    const fill = i % 2 === 0 ? config.soft : "#ffffff";
+                    
+                    return (
+                      <g key={i} className="wheel-segment">
+                        <path d={pathData} fill={fill} stroke="#dce3e7" strokeWidth="1" />
+                        <g transform={`rotate(${startAngle + 30}, 100, 100)`}>
+                          <text
+                            x="100"
+                            y="45"
+                            fill={config.accent}
+                            fontSize="7.5"
+                            fontWeight="900"
+                            textAnchor="middle"
+                            transform="rotate(90, 100, 45)"
+                          >
+                            {seg.label}
+                          </text>
+                        </g>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            </div>
+            
+            {/* Right Column: Copy & Actions */}
+            <div className="wheel-content-side">
+              {wheelState === "idle" && (
+                <>
+                  <span className="wheel-badge">🎡 Spin & Win</span>
+                  <h2 id="email-capture-title" style={{ fontSize: '1.4rem', fontWeight: 900 }}>Try Your Luck!</h2>
+                  <p style={{ color: '#52636a', lineHeight: 1.4, margin: '6px 0 12px' }}>
+                    Spin the wheel to unlock an exclusive discount of up to 20% off your entire order today.
+                  </p>
+                  <button 
+                    className="primary full" 
+                    type="button" 
+                    onClick={spinWheel}
+                    style={{ minHeight: '44px', fontSize: '1rem' }}
+                  >
+                    🎰 SPIN NOW
+                  </button>
+                </>
+              )}
+              
+              {wheelState === "spinning" && (
+                <>
+                  <span className="wheel-badge">💫 Spinning...</span>
+                  <h2 style={{ fontSize: '1.4rem', fontWeight: 900 }}>Fingers Crossed!</h2>
+                  <p style={{ color: '#52636a', lineHeight: 1.4, margin: '6px 0 12px' }}>
+                    The wheel is spinning. Get ready to claim your exclusive discount code...
+                  </p>
+                  <button 
+                    className="primary full" 
+                    type="button" 
+                    disabled 
+                    style={{ minHeight: '44px', fontSize: '1rem', background: '#ccc', borderColor: '#ccc' }}
+                  >
+                    🔄 Spinning...
+                  </button>
+                </>
+              )}
+              
+              {wheelState === "won" && (
+                <>
+                  <span className="wheel-badge">🎉 Congratulations!</span>
+                  <h2 style={{ fontSize: '1.4rem', fontWeight: 900 }}>You Won {wheelResult?.label}!</h2>
+                  <p style={{ color: '#52636a', lineHeight: 1.4, margin: '6px 0' }}>
+                    Enter your email to unlock your exclusive promo code and apply it to your cart.
+                  </p>
+                  
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      if (!isValidEmail(leadEmail) || !wheelResult) return;
+                      
+                      onCaptureLead({
+                        email: leadEmail,
+                        name: leadName,
+                        source: "popup",
+                        niche: activeNiche,
+                      });
+
+                      if (wheelResult.code !== "TRYAGAIN") {
+                        setAppliedCoupon(wheelResult.code);
+                        setConfirmation(`Coupon ${wheelResult.code} applied! Your ${wheelResult.label} discount is active.`);
+                      }
+
+                      setIsEmailPopupOpen(false);
+                      localStorage.setItem(emailPopupDismissedKey, "true");
+                    }}
+                    style={{ display: 'grid', gap: '8px', marginTop: '4px' }}
+                  >
+                    <input
+                      value={leadName}
+                      onChange={(event) => setLeadName(event.target.value)}
+                      placeholder="First name"
+                      style={{ background: '#f7f9fa' }}
+                    />
+                    <input
+                      value={leadEmail}
+                      onChange={(event) => setLeadEmail(event.target.value)}
+                      placeholder="Email address"
+                      required
+                      type="email"
+                      style={{ background: '#f7f9fa' }}
+                    />
+                    <button className="primary full" type="submit" style={{ minHeight: '44px', fontWeight: 900 }}>
+                      🎁 CLAIM DISCOUNT
+                    </button>
+                  </form>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );
@@ -1098,17 +2136,21 @@ function Storefront({
 function ProductQuickView({
   product,
   onClose,
+  onViewDetails,
   onAddToCart,
 }: {
   product: Product;
   onClose: () => void;
+  onViewDetails: () => void;
   onAddToCart: () => void;
 }) {
+  const images = getProductImages(product);
+
   return (
     <div className="modal-backdrop" role="presentation">
       <div className="store-product-modal" role="dialog" aria-modal="true" aria-labelledby="quick-view-title">
         <div className="quick-view-media" aria-hidden="true">
-          <Package size={58} />
+          <img src={images[0]} alt="" />
         </div>
         <div className="quick-view-copy">
           <div className="modal-header">
@@ -1122,7 +2164,7 @@ function ProductQuickView({
           </div>
 
           <p className="quick-view-lede">
-            {product.contentAngle || "A customer-ready product from the Products4ThePeople catalog."}
+            {getConsumerCopy(product)}
           </p>
 
           <div className="quick-view-stats">
@@ -1141,8 +2183,9 @@ function ProductQuickView({
           </div>
 
           <div className="quick-view-notes">
-            <span>Designed for everyday routines and easy gifting.</span>
-            <span>Ships with order confirmation and fulfillment updates.</span>
+            {getProductBenefits(product).map((benefit) => (
+              <span key={benefit}>{benefit}</span>
+            ))}
           </div>
 
           <div className="quick-view-actions">
@@ -1150,10 +2193,140 @@ function ProductQuickView({
               <ShoppingCart size={17} />
               Add to cart
             </button>
+            <button type="button" onClick={onViewDetails}>
+              View details
+            </button>
           </div>
         </div>
       </div>
     </div>
+  );
+}
+
+function ProductDetailPage({
+  product,
+  products,
+  quantity,
+  onBack,
+  onOpenProduct,
+  onQuantityChange,
+  onAddToCart,
+}: {
+  product: Product;
+  products: Product[];
+  quantity: number;
+  onBack: () => void;
+  onOpenProduct: (product: Product) => void;
+  onQuantityChange: (quantity: number) => void;
+  onAddToCart: (quantity: number) => void;
+}) {
+  const [activeImage, setActiveImage] = React.useState(0);
+  const images = getProductImages(product);
+  const subcategory = getProductSubcategory(product);
+  const relatedProducts = products
+    .filter((item) => item.id !== product.id && item.status === "Active" && getProductSubcategory(item) === subcategory)
+    .slice(0, 4);
+
+  React.useEffect(() => {
+    setActiveImage(0);
+  }, [product.id]);
+
+  return (
+    <section className="product-detail-page" aria-labelledby="product-detail-title">
+      <button className="detail-back" type="button" onClick={onBack}>
+        Back to {storefrontNiches[product.subdomain].label}
+      </button>
+
+      <div className="product-detail-grid">
+        <div className="product-gallery">
+          <div className="gallery-main">
+            <img src={images[activeImage]} alt={product.name} />
+          </div>
+          <div className="gallery-thumbs" aria-label={`${product.name} image gallery`}>
+            {images.map((image, index) => (
+              <button
+                className={activeImage === index ? "active" : ""}
+                key={`${product.id}-${image}`}
+                type="button"
+                onClick={() => setActiveImage(index)}
+              >
+                <img src={image} alt="" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="product-detail-copy">
+          <span>{subcategory}</span>
+          <h2 id="product-detail-title">{product.name}</h2>
+          <p>{getConsumerCopy(product)}</p>
+
+          <div className="detail-price-row">
+            <strong>{money(product.retailMin)}</strong>
+            <small>{product.inventory} in stock</small>
+          </div>
+
+          <div className="quantity-row">
+            <span>Quantity</span>
+            <div className="quantity-stepper">
+              <button type="button" onClick={() => onQuantityChange(Math.max(1, quantity - 1))}>
+                -
+              </button>
+              <input
+                aria-label={`${product.name} quantity`}
+                min="1"
+                type="number"
+                value={quantity}
+                onChange={(event) => onQuantityChange(Math.max(1, Number(event.target.value) || 1))}
+              />
+              <button type="button" onClick={() => onQuantityChange(quantity + 1)}>
+                +
+              </button>
+            </div>
+          </div>
+
+          <button className="primary detail-cart-button" type="button" onClick={() => onAddToCart(quantity)}>
+            <ShoppingCart size={18} />
+            Add to cart
+          </button>
+
+          <div className="detail-notes">
+            {getProductBenefits(product).map((benefit) => (
+              <span key={benefit}>{benefit}</span>
+            ))}
+            <span>Free shipping over $75</span>
+            <span>Category: {product.niche}</span>
+          </div>
+        </div>
+      </div>
+
+      <section className="related-products" aria-labelledby="related-title">
+        <div className="store-section-head">
+          <div>
+            <p>{subcategory}</p>
+            <h2 id="related-title">Related products</h2>
+          </div>
+        </div>
+        <div className="related-grid">
+          {relatedProducts.length === 0 ? (
+            <div className="empty-store">
+              <Package size={30} />
+              <h3>No related products yet.</h3>
+              <p>Add more active products in {subcategory} to populate this section.</p>
+            </div>
+          ) : (
+            relatedProducts.map((relatedProduct) => (
+              <button className="related-card" key={relatedProduct.id} type="button" onClick={() => onOpenProduct(relatedProduct)}>
+                <img src={getProductImages(relatedProduct)[0]} alt="" />
+                <span>{getProductSubcategory(relatedProduct)}</span>
+                <strong>{relatedProduct.name}</strong>
+                <small>{money(relatedProduct.retailMin)}</small>
+              </button>
+            ))
+          )}
+        </div>
+      </section>
+    </section>
   );
 }
 
@@ -1236,26 +2409,248 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
   );
 }
 
-function loadProducts() {
+function loadMarketingLeads() {
   try {
-    const stored = localStorage.getItem(storageKey);
-    if (!stored) return seedProducts;
-    const parsed = JSON.parse(stored) as Product[];
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : seedProducts;
-  } catch {
-    return seedProducts;
-  }
-}
-
-function loadOrders() {
-  try {
-    const stored = localStorage.getItem(orderStorageKey);
+    const stored = localStorage.getItem(leadStorageKey);
     if (!stored) return [];
-    const parsed = JSON.parse(stored) as Order[];
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed = JSON.parse(stored) as MarketingLead[];
+    return Array.isArray(parsed) ? parsed.filter((lead) => isValidEmail(lead.email)) : [];
   } catch {
     return [];
   }
+}
+
+function loadAbandonedCarts() {
+  try {
+    const stored = localStorage.getItem(abandonedCartStorageKey);
+    if (!stored) return [];
+    const parsed = JSON.parse(stored) as AbandonedCart[];
+    return Array.isArray(parsed) ? parsed.filter((cart) => isValidEmail(cart.email)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function upsertMarketingLead(current: MarketingLead[], lead: Omit<MarketingLead, "id" | "createdAt">): MarketingLead[] {
+  const existing = current.find((item) => item.email.toLowerCase() === lead.email.toLowerCase());
+  if (existing) {
+    return current.map((item) =>
+      item.id === existing.id
+        ? { ...item, ...lead, name: lead.name || item.name, source: lead.source, niche: lead.niche }
+        : item,
+    );
+  }
+
+  return [
+    {
+      ...lead,
+      id: `LEAD-${Date.now().toString(36).toUpperCase()}`,
+      createdAt: new Date().toISOString(),
+    },
+    ...current,
+  ];
+}
+
+function upsertAbandonedCart(current: AbandonedCart[], cart: Omit<AbandonedCart, "id" | "status" | "updatedAt">): AbandonedCart[] {
+  const existing = current.find((item) => item.email.toLowerCase() === cart.email.toLowerCase() && item.status === "Open");
+  if (existing) {
+    return current.map((item) =>
+      item.id === existing.id
+        ? { ...item, ...cart, name: cart.name || item.name, updatedAt: new Date().toISOString() }
+        : item,
+    );
+  }
+
+  return [
+    {
+      ...cart,
+      id: `CART-${Date.now().toString(36).toUpperCase()}`,
+      status: "Open" as const,
+      updatedAt: new Date().toISOString(),
+    },
+    ...current,
+  ];
+}
+
+function normalizeStoredOrder(order: Order | Partial<Order> | ApiOrder): Order {
+  const subtotal = numeric(order.subtotal, 0);
+  const shipping = numeric(order.shipping, 0);
+  const tax = numeric(order.tax, 0);
+  const total = numeric(order.total, subtotal);
+  return {
+    id: value(order.id) || `P4TP-${Date.now().toString(36).toUpperCase()}`,
+    customerName: value(order.customerName),
+    email: value(order.email),
+    address: value(order.address),
+    items: Array.isArray(order.items) ? order.items as Order["items"] : [],
+    subtotal: total && !order.total ? total : subtotal,
+    shipping,
+    tax,
+    total: total || subtotal + shipping + tax,
+    paymentStatus: normalizePaymentStatus(order.paymentStatus),
+    stripeSessionId: value(order.stripeSessionId) || undefined,
+    status: order.status === "Ready to fulfill" || order.status === "Needs review" ? order.status : "Needs review",
+    createdAt: value(order.createdAt) || new Date().toISOString(),
+    source: order.source === "medusa" ? "medusa" : "local",
+  };
+}
+
+function loadAdminSession() {
+  try {
+    const stored = localStorage.getItem(adminSessionKey);
+    if (!stored) return false;
+    const parsed = JSON.parse(stored) as { email?: string; signedInAt?: string };
+    return parsed.email === adminEmail && Boolean(parsed.signedInAt);
+  } catch {
+    return false;
+  }
+}
+
+function mergeOrders(current: Order[], imported: Array<Order | Partial<Order> | ApiOrder>) {
+  const byId = new Map(current.map((order) => [order.id, order]));
+  imported.map(normalizeStoredOrder).forEach((order) => byId.set(order.id, order));
+  return Array.from(byId.values()).sort((first, second) => second.createdAt.localeCompare(first.createdAt));
+}
+
+function mapMedusaOrder(order: MedusaOrder): Order {
+  const subtotal = centsToDollars(order.subtotal ?? order.total ?? 0);
+  const total = centsToDollars(order.total ?? order.subtotal ?? 0);
+  const customerName = [
+    order.shipping_address?.first_name,
+    order.shipping_address?.last_name,
+  ].map(value).filter(Boolean).join(" ") || value(order.email) || "Medusa customer";
+  const address = [
+    order.shipping_address?.address_1,
+    order.shipping_address?.city,
+    order.shipping_address?.province,
+    order.shipping_address?.postal_code,
+  ].map(value).filter(Boolean).join(", ");
+
+  return {
+    id: order.display_id ? `MEDUSA-${order.display_id}` : order.id,
+    customerName,
+    email: value(order.email),
+    address,
+    items: (order.items || []).map((item) => ({
+      productId: value(item.id) || "medusa-item",
+      name: value(item.title) || "Medusa item",
+      quantity: Number(item.quantity ?? 1),
+      price: centsToDollars(item.unit_price ?? 0),
+    })),
+    subtotal,
+    shipping: Math.max(total - subtotal, 0),
+    tax: 0,
+    total,
+    paymentStatus: normalizePaymentStatus(order.status === "canceled" ? "failed" : "paid"),
+    status: order.status === "canceled" ? "Needs review" : "Ready to fulfill",
+    createdAt: value(order.created_at) || new Date().toISOString(),
+    source: "medusa",
+  };
+}
+
+function centsToDollars(valueToConvert: unknown) {
+  const amount = numeric(valueToConvert, 0);
+  return amount > 999 ? amount / 100 : amount;
+}
+
+function readPendingCheckout(): OrderDraft | null {
+  try {
+    const stored = localStorage.getItem(pendingCheckoutKey);
+    if (!stored) return null;
+    const parsed = JSON.parse(stored) as OrderDraft;
+    return parsed && Array.isArray(parsed.items) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function normalizePaymentStatus(status: unknown): Order["paymentStatus"] {
+  const normalized = value(status).toLowerCase();
+  if (normalized === "paid") return "paid";
+  if (normalized === "unpaid") return "unpaid";
+  if (normalized === "failed") return "failed";
+  return "pending";
+}
+
+function initializeMarketingTracking() {
+  if (marketingConfig.ga4MeasurementId) {
+    appendMarketingScript("ga4-script", `https://www.googletagmanager.com/gtag/js?id=${marketingConfig.ga4MeasurementId}`);
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = window.gtag || function gtag(...args: unknown[]) {
+      window.dataLayer?.push(args);
+    };
+    window.gtag("js", new Date());
+    window.gtag("config", marketingConfig.ga4MeasurementId);
+  }
+
+  if (marketingConfig.metaPixelId) {
+    const fbq = window.fbq as ((...args: unknown[]) => void) & { queue?: unknown[]; loaded?: boolean; version?: string };
+    if (!fbq) {
+      const fbqQueue: unknown[] = [];
+      const queuedFbq = ((...args: unknown[]) => {
+        fbqQueue.push(args);
+      }) as ((...args: unknown[]) => void) & { queue?: unknown[]; loaded?: boolean; version?: string };
+      queuedFbq.queue = fbqQueue;
+      queuedFbq.loaded = true;
+      queuedFbq.version = "2.0";
+      window.fbq = queuedFbq;
+      window._fbq = queuedFbq;
+      appendMarketingScript("meta-pixel-script", "https://connect.facebook.net/en_US/fbevents.js");
+    }
+    window.fbq?.("init", marketingConfig.metaPixelId);
+    window.fbq?.("track", "PageView");
+  }
+
+  if (marketingConfig.tikTokPixelId) {
+    window.ttq = window.ttq || {
+      track: () => undefined,
+      page: () => undefined,
+    };
+    appendMarketingScript(
+      "tiktok-pixel-script",
+      `https://analytics.tiktok.com/i18n/pixel/events.js?sdkid=${marketingConfig.tikTokPixelId}&lib=ttq`,
+    );
+    window.ttq.page?.();
+  }
+}
+
+function appendMarketingScript(id: string, src: string) {
+  if (document.getElementById(id)) return;
+  const script = document.createElement("script");
+  script.async = true;
+  script.id = id;
+  script.src = src;
+  document.head.appendChild(script);
+}
+
+function trackMarketingEvent(eventName: "page_view" | "generate_lead" | "add_to_cart" | "begin_checkout" | "purchase", params: Record<string, unknown> = {}) {
+  window.gtag?.("event", eventName, params);
+
+  const metaEvent = {
+    add_to_cart: "AddToCart",
+    begin_checkout: "InitiateCheckout",
+    generate_lead: "Lead",
+    page_view: "PageView",
+    purchase: "Purchase",
+  }[eventName];
+  window.fbq?.("track", metaEvent, params);
+
+  const tikTokEvent = {
+    add_to_cart: "AddToCart",
+    begin_checkout: "InitiateCheckout",
+    generate_lead: "SubmitForm",
+    page_view: "PageView",
+    purchase: "CompletePayment",
+  }[eventName];
+  window.ttq?.track?.(tikTokEvent, params);
+}
+
+function pixelStatus(pixelId: string) {
+  return pixelId ? "configured" : "missing";
+}
+
+function isValidEmail(email: string) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
 function loadMedusaConnection(): MedusaConnection {
@@ -1270,6 +2665,22 @@ function loadMedusaConnection(): MedusaConnection {
     baseUrl: import.meta.env.VITE_MEDUSA_BACKEND_URL || "http://localhost:9000",
     apiKey: import.meta.env.VITE_MEDUSA_ADMIN_API_KEY || "",
   };
+}
+
+function isStorefrontHash(hash: string) {
+  const normalized = hash.replace("#", "").toLowerCase();
+  return normalized === "storefront" || normalized.startsWith("product/") || storefrontHashes.includes(normalized as StorefrontMode);
+}
+
+function getStorefrontModeFromHash(): StorefrontMode {
+  const normalized = window.location.hash.replace("#", "").toLowerCase();
+  if (storefrontHashes.includes(normalized as StorefrontMode)) return normalized as StorefrontMode;
+  return "general";
+}
+
+function getProductIdFromHash() {
+  const normalized = window.location.hash.replace("#", "");
+  return normalized.startsWith("product/") ? decodeURIComponent(normalized.replace("product/", "")) : null;
 }
 
 function toForm(product: Product): ProductForm {
@@ -1311,6 +2722,149 @@ function getProductSubcategory(product: Product) {
   return "Featured";
 }
 
+function getProductImages(product: Product) {
+  if (product.images?.length) return product.images;
+  const fallback = productImageFallbacks[getProductSubcategory(product)] || productImageFallbacks.Featured;
+  return fallback.map((url) => `${url}&auto=format&fit=crop&w=1200&q=80`);
+}
+
+function getConsumerCopy(product: Product) {
+  const subcategory = getProductSubcategory(product);
+  const angle = product.contentAngle.trim();
+  if (angle) {
+    if (product.subdomain === "beauty") return `${angle}. Easy to add to a daily routine and simple enough to demo at a glance.`;
+    if (product.subdomain === "pets") return `${angle}. Built for everyday pet-owner messes, outings, and calmer routines.`;
+    if (product.subdomain === "home") return `${angle}. A practical home upgrade with a clear use case and giftable price point.`;
+    return `${angle}. A simple fitness helper for home workouts, recovery, or active days.`;
+  }
+
+  if (product.subdomain === "beauty") return `A ${subcategory.toLowerCase()} pick for fast routines, easy gifting, and visible everyday value.`;
+  if (product.subdomain === "pets") return `A ${subcategory.toLowerCase()} pick for pet owners who want less friction in daily care.`;
+  if (product.subdomain === "home") return "A useful home upgrade selected for simple setup and everyday value.";
+  return "A fitness helper selected for straightforward use and clear routine support.";
+}
+
+function getProductBenefits(product: Product) {
+  const subcategory = getProductSubcategory(product);
+  if (product.subdomain === "beauty") {
+    if (subcategory === "Hair Care") return ["Protects styling time", "Low-friction morning or overnight routine", "Strong bundle fit with beauty add-ons"];
+    if (subcategory === "LED Therapy") return ["Premium at-home spa positioning", "Strong visual demo potential", "Easy upgrade path into beauty bundles"];
+    if (subcategory === "Cleansing Tools") return ["Clear before-and-after story", "Simple routine education", "Accessible price for first-time buyers"];
+    return ["Quick refresh use case", "Compact and giftable", "Easy add-on for beauty bundles"];
+  }
+
+  if (product.subdomain === "pets") {
+    if (subcategory === "Travel & Cleanup") return ["Solves a visible daily mess", "Great for walks, cars, and errands", "Easy pet-owner gift"];
+    if (subcategory === "Comfort & Enrichment") return ["Supports calmer downtime", "Clear emotional purchase driver", "Pairs well with pet essentials"];
+    if (subcategory === "Feeding") return ["Convenience-led daily routine", "Useful for busy households", "Strong practical value"];
+    if (subcategory === "Safety") return ["Clear night-walk safety angle", "Simple visual demo", "Impulse-friendly accessory"];
+    return ["Keeps pets engaged", "Easy indoor-use story", "Great checkout add-on"];
+  }
+
+  if (product.subdomain === "home") return ["Simple setup", "Everyday utility", "Giftable home upgrade"];
+  return ["Routine support", "Easy to use at home", "Clear demo potential"];
+}
+
+function getProductSeo(product: Product) {
+  return {
+    title: product.seoTitle?.trim() || `${product.name} | Products4ThePeople`,
+    description:
+      product.seoDescription?.trim() ||
+      product.contentAngle ||
+      `Shop ${product.name} from Products4ThePeople with simple checkout and fast fulfillment updates.`,
+  };
+}
+
+function getStorefrontSeo(config: StorefrontNicheConfig) {
+  return {
+    title: `${config.label} | Products4ThePeople`,
+    description: config.headline,
+  };
+}
+
+function setMetaDescription(content: string) {
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+  if (!meta) {
+    meta = document.createElement("meta");
+    meta.name = "description";
+    document.head.appendChild(meta);
+  }
+  meta.content = content;
+}
+
+const productImageFallbacks: Record<string, string[]> = {
+  "Hair Care": [
+    "https://images.unsplash.com/photo-1522337660859-02fbefca4702?",
+    "https://images.unsplash.com/photo-1562322140-8baeececf3df?",
+    "https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?",
+  ],
+  "LED Therapy": [
+    "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?",
+    "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?",
+    "https://images.unsplash.com/photo-1596462502278-27bfdc403348?",
+  ],
+  "Cleansing Tools": [
+    "https://images.unsplash.com/photo-1556228720-195a672e8a03?",
+    "https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?",
+    "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?",
+  ],
+  "Skin Refresh": [
+    "https://images.unsplash.com/photo-1556228578-8c89e6adf883?",
+    "https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?",
+    "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?",
+  ],
+  "Beauty Tools": [
+    "https://images.unsplash.com/photo-1596462502278-27bfdc403348?",
+    "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?",
+    "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?",
+  ],
+  "Travel & Cleanup": [
+    "https://images.unsplash.com/photo-1601758124510-52d02ddb7cbd?",
+    "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?",
+    "https://images.unsplash.com/photo-1517849845537-4d257902454a?",
+  ],
+  "Comfort & Enrichment": [
+    "https://images.unsplash.com/photo-1534361960057-19889db9621e?",
+    "https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?",
+    "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?",
+  ],
+  Feeding: [
+    "https://images.unsplash.com/photo-1558944351-cfb7eaa395f6?",
+    "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?",
+    "https://images.unsplash.com/photo-1601758174114-e711c0cbaa69?",
+  ],
+  Safety: [
+    "https://images.unsplash.com/photo-1507146426996-ef05306b995a?",
+    "https://images.unsplash.com/photo-1517423440428-a5a00ad493e8?",
+    "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?",
+  ],
+  Toys: [
+    "https://images.unsplash.com/photo-1545249390-6bdfa286032f?",
+    "https://images.unsplash.com/photo-1573865526739-10659fec78a5?",
+    "https://images.unsplash.com/photo-1518791841217-8f162f1e1131?",
+  ],
+  "Pet Essentials": [
+    "https://images.unsplash.com/photo-1450778869180-41d0601e046e?",
+    "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?",
+    "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?",
+  ],
+  "Home Essentials": [
+    "https://images.unsplash.com/photo-1513694203232-719a280e022f?",
+    "https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?",
+    "https://images.unsplash.com/photo-1484154218962-a197022b5858?",
+  ],
+  "Fitness Gear": [
+    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?",
+    "https://images.unsplash.com/photo-1518611012118-696072aa579a?",
+    "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?",
+  ],
+  Featured: [
+    "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?",
+    "https://images.unsplash.com/photo-1607083206968-13611e3d76db?",
+    "https://images.unsplash.com/photo-1472851294608-062f824d29cc?",
+  ],
+};
+
 function matchesAny(text: string, terms: string[]) {
   return terms.some((term) => text.includes(term));
 }
@@ -1321,6 +2875,20 @@ function money(value: number) {
     currency: "USD",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function roundMoney(value: number) {
+  return Math.round(value * 100) / 100;
+}
+
+function formatDate(date: string) {
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) return "Unknown date";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(parsed);
 }
 
 function slugify(value: string) {
@@ -1368,10 +2936,16 @@ function parseSeedCsv(csv: string, existingProducts: Product[]) {
         numeric(row.priority, index + 1),
         value(row.aliexpress_search_url),
         value(row.content_angle || row.description),
-        "Draft",
-        0,
+        normalizeStatus(value(row.status) || "draft"),
+        numeric(row.inventory, 0),
       );
-      return { ...product, id: uniqueId(product.id, existingProducts) };
+      return {
+        ...product,
+        id: uniqueId(product.id, existingProducts),
+        images: parseImageList(row.images || row.image_urls || row.image_url),
+        seoTitle: value(row.seo_title),
+        seoDescription: value(row.seo_description),
+      };
     })
     .filter((product) => product.name);
 }
@@ -1430,6 +3004,9 @@ function mapMedusaProduct(product: MedusaProduct): Product {
     contentAngle: value(metadata.content_angle || product.description || product.subtitle),
     status: normalizeStatus(product.status),
     inventory: Number(firstVariant?.inventory_quantity ?? 0),
+    images: parseImageList(metadata.images || metadata.image_urls || metadata.image_url || product.images?.map((image) => image.url)),
+    seoTitle: value(metadata.seo_title || metadata.title_tag),
+    seoDescription: value(metadata.seo_description || metadata.meta_description),
     source: "medusa",
   };
 }
@@ -1458,6 +3035,9 @@ function downloadCsv(products: Product[]) {
     "content_angle",
     "status",
     "inventory",
+    "images",
+    "seo_title",
+    "seo_description",
   ];
   const rows = products.map((product) =>
     [
@@ -1476,6 +3056,9 @@ function downloadCsv(products: Product[]) {
       product.contentAngle,
       product.status,
       product.inventory,
+      (product.images || []).join("|"),
+      product.seoTitle || "",
+      product.seoDescription || "",
     ].map(escapeCsv),
   );
   const blob = new Blob([[headers.join(","), ...rows.map((row) => row.join(","))].join("\n")], {
@@ -1497,6 +3080,14 @@ function escapeCsv(value: string | number) {
 function numeric(valueToParse: unknown, fallback: number) {
   const parsed = Number(value(valueToParse));
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function parseImageList(valueToParse: unknown) {
+  if (Array.isArray(valueToParse)) return valueToParse.map(value).filter(Boolean);
+  return value(valueToParse)
+    .split(/[\n|,]/)
+    .map((url) => url.trim())
+    .filter(Boolean);
 }
 
 function value(valueToRead: unknown) {
