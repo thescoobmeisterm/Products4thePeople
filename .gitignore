@@ -24,6 +24,7 @@ out/
 .next/
 .vite/
 coverage/
+*.tsbuildinfo
 
 # Logs
 *.log
