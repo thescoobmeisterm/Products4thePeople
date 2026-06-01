@@ -49,17 +49,24 @@ interface DbSchema {
   products: Record<string, any>;
   orders: Record<string, any>;
   contacts: Record<string, any>;
+  customers: Record<string, any>;
 }
 
 function readDb(): DbSchema {
   try {
     if (!fs.existsSync(DB_FILE)) {
-      return { products: {}, orders: {}, contacts: {} };
+      return { products: {}, orders: {}, contacts: {}, customers: {} };
     }
     const content = fs.readFileSync(DB_FILE, "utf-8");
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    return {
+      products: parsed.products || {},
+      orders: parsed.orders || {},
+      contacts: parsed.contacts || {},
+      customers: parsed.customers || {},
+    };
   } catch {
-    return { products: {}, orders: {}, contacts: {} };
+    return { products: {}, orders: {}, contacts: {}, customers: {} };
   }
 }
 
@@ -1440,6 +1447,103 @@ app.post("/api/settings/config", requireAdmin, async (request, response) => {
     });
   } catch (error) {
     response.status(500).json({ error: error instanceof Error ? error.message : "Failed to update configurations" });
+  }
+});
+
+// GET /api/orders/:id retrieves a specific order (for public order tracking timeline)
+app.get("/api/orders/:id", async (request, response) => {
+  try {
+    const orders = await getOrdersDb();
+    const order = orders.find((o: any) => o.id === request.params.id);
+    if (!order) {
+      response.status(404).json({ error: "Order not found" });
+      return;
+    }
+    response.json({ order });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to fetch order details" });
+  }
+});
+
+// GET /api/orders/customer/:email retrieves order history for a customer
+app.get("/api/orders/customer/:email", async (request, response) => {
+  try {
+    const email = request.params.email.trim().toLowerCase();
+    const orders = await getOrdersDb();
+    const matched = orders.filter((o: any) => o.email.toLowerCase() === email);
+    response.json({ orders: matched });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to fetch customer order history" });
+  }
+});
+
+// GET /api/customers/:email/profile fetches preferences and saved carts
+app.get("/api/customers/:email/profile", async (request, response) => {
+  try {
+    const email = request.params.email.trim().toLowerCase();
+    if (usePostgres) {
+      const result = await pool.query("select payload from contacts where email = $1", [email]);
+      if (result.rowCount > 0) {
+        response.json(result.rows[0].payload);
+      } else {
+        response.json({ email, preferences: {}, savedCart: {} });
+      }
+    } else {
+      const db = readDb();
+      const customer = db.customers[email] || { email, preferences: {}, savedCart: {} };
+      response.json(customer);
+    }
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to fetch customer profile" });
+  }
+});
+
+// POST /api/customers/:email/profile saves preferences and carts
+app.post("/api/customers/:email/profile", async (request, response) => {
+  try {
+    const email = request.params.email.trim().toLowerCase();
+    const { preferences, savedCart, name } = request.body;
+
+    if (usePostgres) {
+      await pool.query(
+        `insert into contacts (email, customer_name, address, payload)
+         values ($1, $2, $3, $4)
+         on conflict (email) do update set
+           customer_name = excluded.customer_name,
+           payload = excluded.payload,
+           updated_at = now()`,
+        [
+          email, 
+          name || "Customer", 
+          preferences?.address || "Collected by Portal", 
+          { email, name, preferences, savedCart, updatedAt: new Date().toISOString() }
+        ]
+      );
+    } else {
+      const db = readDb();
+      const existing = db.customers[email] || {};
+      db.customers[email] = {
+        email,
+        name: name || existing.name || "Customer",
+        preferences: preferences || existing.preferences || {},
+        savedCart: savedCart || existing.savedCart || {},
+        updatedAt: new Date().toISOString(),
+      };
+      
+      // Sync to contacts as well for admin directory visibility
+      db.contacts[email] = {
+        email,
+        customerName: name || existing.name || db.contacts[email]?.customerName || "Customer",
+        address: preferences?.address || db.contacts[email]?.address || "Subscribed via Account Portal",
+        lastOrderId: db.contacts[email]?.lastOrderId || null,
+        updatedAt: new Date().toISOString()
+      };
+      writeDb(db);
+    }
+
+    response.json({ ok: true });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to save customer profile" });
   }
 });
 
