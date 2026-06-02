@@ -1562,7 +1562,7 @@ const distPath = path.resolve("dist");
 app.use(express.static(distPath));
 
 // Fallback all other GET requests to index.html for React SPA routing
-app.get("/*", (request, response, next) => {
+app.get("*all", (request, response, next) => {
   if (request.path.startsWith("/api") || (request.headers.accept && !request.headers.accept.includes("text/html"))) {
     next();
     return;
