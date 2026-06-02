@@ -2659,6 +2659,29 @@ function Storefront({
               </div>
             ) : visibleProducts.map((product) => (
               <article className="shop-card" key={product.id}>
+                {product.priority === 1 && (
+                  <span className="best-seller-badge" style={{
+                    position: 'absolute',
+                    top: '12px',
+                    left: '12px',
+                    zIndex: 3,
+                    background: 'linear-gradient(135deg, #f39c12, #e67e22)',
+                    color: '#fff',
+                    fontSize: '0.68rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    pointerEvents: 'none'
+                  }}>
+                    🔥 Best Seller
+                  </span>
+                )}
                 <button className="product-image product-image-button" type="button" onClick={() => openProduct(product)}>
                   <img src={getProductImages(product)[0]} alt="" />
                 </button>
@@ -3683,7 +3706,24 @@ function ProductQuickView({
         <div className="quick-view-copy">
           <div className="modal-header">
             <div>
-              <p>{product.niche}</p>
+              <p style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>{product.niche}</span>
+                {product.priority === 1 && (
+                  <span style={{
+                    background: 'linear-gradient(135deg, #f39c12, #e67e22)',
+                    color: '#fff',
+                    fontSize: '0.62rem',
+                    fontWeight: 800,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    display: 'inline-block'
+                  }}>
+                    🔥 Best Seller
+                  </span>
+                )}
+              </p>
               <h2 id="quick-view-title">{product.name}</h2>
             </div>
             <button type="button" onClick={onClose}>
@@ -3789,7 +3829,24 @@ function ProductDetailPage({
         </div>
 
         <div className="product-detail-copy">
-          <span>{subcategory}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>{subcategory}</span>
+            {product.priority === 1 && (
+              <span style={{
+                background: 'linear-gradient(135deg, #f39c12, #e67e22)',
+                color: '#fff',
+                fontSize: '0.62rem',
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                display: 'inline-block'
+              }}>
+                🔥 Best Seller
+              </span>
+            )}
+          </div>
           <h2 id="product-detail-title">{product.name}</h2>
           <p>{getConsumerCopy(product)}</p>
 
