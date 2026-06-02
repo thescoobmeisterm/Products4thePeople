@@ -1547,6 +1547,14 @@ app.post("/api/customers/:email/profile", async (request, response) => {
   }
 });
 
+app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
+  if (error instanceof z.ZodError) {
+    response.status(400).json({ error: "Validation failed", details: error.flatten() });
+    return;
+  }
+
+  const message = error instanceof Error ? error.message : "Unexpected server error";
+  response.status(500).json({ error: message });
 });
 
 // Serve static frontend assets from dist folder in production
