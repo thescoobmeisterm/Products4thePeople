@@ -2155,7 +2155,11 @@ function Storefront({
       const product = products.find((item) => item.id === productId);
       return product ? { product, quantity } : null;
     })
-    .filter((item): item is { product: Product; quantity: number } => Boolean(item));
+    .filter((item): item is { product: Product; quantity: number } => {
+      if (!item) return false;
+      if (activeNiche !== "general" && item.product.subdomain !== activeNiche) return false;
+      return true;
+    });
   const subtotal = cartItems.reduce((total, item) => total + item.product.retailMin * item.quantity, 0);
   const totalCartCount = cartItems.reduce((count, item) => count + item.quantity, 0);
 
