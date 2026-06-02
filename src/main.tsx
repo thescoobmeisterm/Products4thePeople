@@ -1860,6 +1860,7 @@ function Storefront({
 
   // Mobile Cart Drawer
   const [isCartDrawerOpen, setIsCartDrawerOpen] = React.useState(false);
+  const [isMoreOpen, setIsMoreOpen] = React.useState(false);
 
   // Add-to-cart animation
   const [addedProductId, setAddedProductId] = React.useState<string | null>(null);
@@ -2208,6 +2209,7 @@ function Storefront({
     setCartBounce(true);
     setTimeout(() => setAddedProductId(null), 1500);
     setTimeout(() => setCartBounce(false), 500);
+    setIsCartDrawerOpen(true);
   };
 
   const switchStorefront = (mode: StorefrontMode) => {
@@ -2500,14 +2502,14 @@ function Storefront({
           </button>
           <a href="#checkout">Checkout</a>
           
-          <details className="more-shops">
+          <details className="more-shops" open={isMoreOpen} onToggle={(e) => setIsMoreOpen(e.currentTarget.open)}>
             <summary>More</summary>
             <div>
               {/* Customer Portal & Authentication */}
               {currentUser ? (
                 <button 
                   type="button" 
-                  onClick={() => setIsPortalOpen(true)}
+                  onClick={() => { setIsPortalOpen(true); setIsMoreOpen(false); }}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#176c61', fontWeight: 600 }}
                 >
                   <User size={13} />
@@ -2516,14 +2518,14 @@ function Storefront({
               ) : (
                 <button 
                   type="button" 
-                  onClick={() => setIsAuthOpen(true)}
+                  onClick={() => { setIsAuthOpen(true); setIsMoreOpen(false); }}
                   style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#176c61', fontWeight: 600 }}
                 >
                   <LogIn size={13} />
                   <span>Sign In</span>
                 </button>
               )}
-              <button type="button" onClick={() => setIsTrackOrderOpen(true)}>
+              <button type="button" onClick={() => { setIsTrackOrderOpen(true); setIsMoreOpen(false); }}>
                 Track Order
               </button>
               
@@ -2532,7 +2534,7 @@ function Storefront({
               {/* Shop Switchers */}
               <button
                 type="button"
-                onClick={() => switchStorefront("general")}
+                onClick={() => { switchStorefront("general"); setIsMoreOpen(false); }}
               >
                 General Store
               </button>
@@ -2540,13 +2542,13 @@ function Storefront({
                 <button
                   key={niche}
                   type="button"
-                  onClick={() => switchStorefront(niche)}
+                  onClick={() => { switchStorefront(niche); setIsMoreOpen(false); }}
                 >
                   {storefrontNiches[niche].label}
                 </button>
               ))}
               {currentUser?.isAdmin && (
-                <button type="button" onClick={onBackToAdmin}>
+                <button type="button" onClick={() => { onBackToAdmin(); setIsMoreOpen(false); }}>
                   Admin
                 </button>
               )}
@@ -4183,7 +4185,7 @@ function loadMedusaConnection(): MedusaConnection {
 
 function isStorefrontHash(hash: string) {
   const normalized = hash.replace("#", "").toLowerCase();
-  return normalized === "storefront" || normalized.startsWith("product/") || storefrontHashes.includes(normalized as StorefrontMode);
+  return normalized === "storefront" || normalized === "checkout" || normalized.startsWith("product/") || storefrontHashes.includes(normalized as StorefrontMode);
 }
 
 function getStorefrontModeFromHash(): StorefrontMode {
