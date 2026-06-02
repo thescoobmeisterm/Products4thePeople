@@ -2472,9 +2472,11 @@ function Storefront({
                   {storefrontNiches[niche].label}
                 </button>
               ))}
-              <button type="button" onClick={onBackToAdmin}>
-                Admin
-              </button>
+              {currentUser?.isAdmin && (
+                <button type="button" onClick={onBackToAdmin}>
+                  Admin
+                </button>
+              )}
             </div>
           </details>
         </nav>
