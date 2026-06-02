@@ -2426,31 +2426,37 @@ function Storefront({
             Shop
           </button>
           <a href="#checkout">Checkout</a>
-          <button type="button" onClick={() => setIsTrackOrderOpen(true)}>
-            Track Order
-          </button>
-          {currentUser ? (
-            <button 
-              type="button" 
-              onClick={() => setIsPortalOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'rgba(23,108,97,0.1)', color: '#176c61', padding: '6px 12px', borderRadius: '20px', border: '1px solid rgba(23,108,97,0.2)', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
-            >
-              <User size={13} />
-              <span>{currentUser.name}</span>
-            </button>
-          ) : (
-            <button 
-              type="button" 
-              onClick={() => setIsAuthOpen(true)}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#176c61', color: '#fff', padding: '6px 12px', borderRadius: '20px', border: 'none', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}
-            >
-              <LogIn size={13} />
-              <span>Sign In</span>
-            </button>
-          )}
+          
           <details className="more-shops">
-            <summary>More Shops</summary>
+            <summary>More</summary>
             <div>
+              {/* Customer Portal & Authentication */}
+              {currentUser ? (
+                <button 
+                  type="button" 
+                  onClick={() => setIsPortalOpen(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#176c61', fontWeight: 600 }}
+                >
+                  <User size={13} />
+                  <span>{currentUser.name} (Account)</span>
+                </button>
+              ) : (
+                <button 
+                  type="button" 
+                  onClick={() => setIsAuthOpen(true)}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#176c61', fontWeight: 600 }}
+                >
+                  <LogIn size={13} />
+                  <span>Sign In</span>
+                </button>
+              )}
+              <button type="button" onClick={() => setIsTrackOrderOpen(true)}>
+                Track Order
+              </button>
+              
+              <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #e5eaee' }} />
+              
+              {/* Shop Switchers */}
               <button
                 type="button"
                 onClick={() => switchStorefront("general")}
