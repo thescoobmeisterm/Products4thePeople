@@ -80,3 +80,26 @@ the Medusa server can run locally.
 ```powershell
 npm.cmd run build
 ```
+
+## Running Progress Log
+
+### 🚀 Phase 3: Storefront UX & Conversion Features (June 2026)
+- **Toast Notification Engine**: State-driven visual card popups (`toasts`, `addToast`) for transactional alerts (coupons, logins, orders) with automatic dismissing and beautiful entrance/exit slide transitions.
+- **Header Search Bar**: Instant product catalog queries filtering items dynamically by name, niche, benefits, and category tags.
+- **Persistent Wishlist**: Browser-cached wishlist system complete with quick hearts on product cards/details and a specialized portal collection interface supporting instant checkout transfers.
+- **Add-to-Cart Micro-Animations**: Interactivity rewards including scale bounce spring states on cart indicators and localized button lockouts ("Added ✓").
+- **Responsive Cart Drawer**: Full-height sidebar drawer sliding out on mobile/tablet devices, equipped with active item updates, promo calculations, and inline secure checkout forms.
+- **Brand Footer Section**: Sleek 5-column layout presenting store networks, trust seals (Stripe Verified, Free Delivery), support portals, and active newsletter hooks.
+
+### 🔐 Phase 2: Google Authentication & Customer Portals (June 2026)
+- **Integrated Customer Database**: Extended backend SQL schemas with customer models, address registries, notification matrices, and synced state-based cart backups.
+- **Google OAuth Button & Emulator Drawer**: Unified auth layouts allowing live Google Auth button sign-in backed by quick developer simulation tools (mocking admins, Jane Customer, and custom accounts).
+- **Interactive Account Center**: Slide-out customer portal listing saved preferences, delivery targets, and chronological order histories.
+- **Fulfillment Milestone Tracker**: Gorgeous 5-step visual delivery timeline (Placed -> Paid -> Packaged -> Shipped -> Delivered) updating in real-time matching order databases.
+
+### 🔌 Phase 1: MVP Stabilization & Simulators (June 2026)
+- **Stripe & Medusa Settings Forms**: Active dynamic administrative environment tools allowing instant `.env` reads, secret keys masking, environment hot-reloads, and client reinitializations.
+- **Zero-Config Stripe Checkout Simulator**: Pre-templated mock payment gateways matching Stripe styles, facilitating full order summaries, mock credit cards, and sandbox checkout callbacks.
+- **Offline Medusa Scaffold**: Mock backend endpoints on port 4000 allowing admin dashboards to verify connections, synchronize catalogs, and fetch processing queues out-of-the-box.
+- **AI Copywriter Studio**: Dynamic UGC script generators and product email copy engines utilizing custom generation logic in Express backend environments.
+
