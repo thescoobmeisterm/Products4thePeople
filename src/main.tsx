@@ -12,6 +12,7 @@ import {
   Download,
   FileUp,
   Globe2,
+  Heart,
   Home,
   Import,
   LayoutDashboard,
@@ -1846,6 +1847,52 @@ function Storefront({
   const [couponInput, setCouponInput] = React.useState("");
   const [couponError, setCouponError] = React.useState("");
 
+  // Search
+  const [searchQuery, setSearchQuery] = React.useState("");
+
+  // Wishlist (persisted per user)
+  const [wishlist, setWishlist] = React.useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem("p4tp_wishlist");
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+
+  // Mobile Cart Drawer
+  const [isCartDrawerOpen, setIsCartDrawerOpen] = React.useState(false);
+
+  // Add-to-cart animation
+  const [addedProductId, setAddedProductId] = React.useState<string | null>(null);
+  const [cartBounce, setCartBounce] = React.useState(false);
+
+  // Toast notifications
+  const [toasts, setToasts] = React.useState<Array<{ id: string; message: string; type: "success" | "error" | "info"; exiting?: boolean }>>([]);
+
+  const addToast = React.useCallback((message: string, type: "success" | "error" | "info" = "success") => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    setToasts((prev) => [...prev.slice(-4), { id, message, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.map((t) => t.id === id ? { ...t, exiting: true } : t));
+      setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 300);
+    }, 3000);
+  }, []);
+
+  // Persist wishlist
+  React.useEffect(() => {
+    localStorage.setItem("p4tp_wishlist", JSON.stringify(wishlist));
+  }, [wishlist]);
+
+  const toggleWishlist = (productId: string) => {
+    setWishlist((prev) =>
+      prev.includes(productId) ? prev.filter((id) => id !== productId) : [...prev, productId]
+    );
+    const product = products.find((p) => p.id === productId);
+    if (product) {
+      const isAdding = !wishlist.includes(productId);
+      addToast(isAdding ? `${product.name} added to wishlist` : `${product.name} removed from wishlist`, "info");
+    }
+  };
+
   const wheelSegments = [
     { label: "10% OFF", code: "WHEEL10" },
     { label: "Free Shipping", code: "FREESHIP" },
@@ -1935,7 +1982,7 @@ function Storefront({
           if (savedItemCount > 0 && currentItemCount === 0) {
             // Auto-restore saved cart if current cart is empty
             setCart(savedCart);
-            setConfirmation("Your saved cart has been automatically restored!");
+            addToast("Your saved cart has been automatically restored!", "success");
           } else if (savedItemCount > 0 && JSON.stringify(savedCart) !== JSON.stringify(cart)) {
             // Keep saved cart available for manual restore if current cart has elements
             setSavedCartAvailable(savedCart);
@@ -2038,7 +2085,7 @@ function Storefront({
     const sessionId = checkoutParams.get("session_id");
 
     if (checkoutResult === "cancelled") {
-      setConfirmation("Checkout was cancelled. Your cart is still here when you are ready.");
+      addToast("Checkout was cancelled. Your cart is still here when you are ready.", "info");
       window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash || "#general"}`);
       return;
     }
@@ -2076,9 +2123,9 @@ function Storefront({
         setCart({});
         setCustomerName("");
         setEmail("");
-        setConfirmation(`Order ${orderId} confirmed. Payment status: ${paymentStatus}.`);
+        addToast(`Order ${orderId} confirmed. Payment status: ${paymentStatus}.`, "success");
       } catch (error) {
-        setConfirmation(error instanceof Error ? error.message : "Checkout confirmation failed.");
+        addToast(error instanceof Error ? error.message : "Checkout confirmation failed.", "error");
       } finally {
         setCheckoutStatus("idle");
         window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash || "#general"}`);
@@ -2090,8 +2137,13 @@ function Storefront({
 
   const storefrontProducts = products.filter((product) => activeNiche === "general" || product.subdomain === activeNiche);
   const subcategories = getSubcategories(storefrontProducts);
+  const searchLower = searchQuery.trim().toLowerCase();
   const visibleProducts = storefrontProducts.filter(
-    (product) => activeSubcategory === "All" || getProductSubcategory(product) === activeSubcategory,
+    (product) => {
+      const matchesSubcategory = activeSubcategory === "All" || getProductSubcategory(product) === activeSubcategory;
+      const matchesSearch = !searchLower || product.name.toLowerCase().includes(searchLower) || product.niche.toLowerCase().includes(searchLower) || product.contentAngle.toLowerCase().includes(searchLower);
+      return matchesSubcategory && matchesSearch;
+    },
   );
   const cartItems = Object.entries(cart)
     .map(([productId, quantity]) => {
@@ -2100,6 +2152,7 @@ function Storefront({
     })
     .filter((item): item is { product: Product; quantity: number } => Boolean(item));
   const subtotal = cartItems.reduce((total, item) => total + item.product.retailMin * item.quantity, 0);
+  const totalCartCount = cartItems.reduce((count, item) => count + item.quantity, 0);
 
   let discountPercent = 0;
   if (appliedCoupon === "WHEEL10" || appliedCoupon === "WELCOME10") discountPercent = 0.1;
@@ -2148,7 +2201,13 @@ function Storefront({
         currency: "USD",
         value: product.retailMin * Math.max(1, quantity),
       });
+      addToast(`${product.name} added to cart`, "success");
     }
+    // Animation
+    setAddedProductId(productId);
+    setCartBounce(true);
+    setTimeout(() => setAddedProductId(null), 1500);
+    setTimeout(() => setCartBounce(false), 500);
   };
 
   const switchStorefront = (mode: StorefrontMode) => {
@@ -2184,7 +2243,7 @@ function Storefront({
       source,
       niche: activeNiche,
     });
-    setConfirmation("You're on the list. Watch for offers and launch tests.");
+    addToast("You're on the list! Watch for offers and launch tests.", "success");
     setLeadEmail("");
     setLeadName("");
     setIsEmailPopupOpen(false);
@@ -2263,11 +2322,11 @@ function Storefront({
       setCurrentUser(user);
       localStorage.setItem("p4tp_customer", JSON.stringify(user));
       setIsAuthOpen(false);
-      setConfirmation(`Signed in as ${user.name} via Google`);
+      addToast(`Signed in as ${user.name} via Google`, "success");
 
       if (user.isAdmin) {
         localStorage.setItem(adminSessionKey, JSON.stringify({ email: user.email, signedInAt: new Date().toISOString() }));
-        setConfirmation(`Admin authentication active! Welcome back.`);
+        addToast(`Admin authentication active! Welcome back.`, "success");
       }
     } catch (e) {
       console.error("Failed to parse Google credentials:", e);
@@ -2295,7 +2354,7 @@ function Storefront({
       localStorage.setItem(adminSessionKey, JSON.stringify({ email: cleanEmail, signedInAt: new Date().toISOString() }));
       setConfirmation(`Admin authentication active! Welcome back.`);
     } else {
-      setConfirmation(`Signed in as ${cleanName} (Simulated Google Auth)`);
+      addToast(`Signed in as ${cleanName}`, "success");
     }
   };
 
@@ -2307,7 +2366,7 @@ function Storefront({
     setEmail("");
     setCustomerName("");
     setIsPortalOpen(false);
-    setConfirmation("Signed out successfully.");
+    addToast("Signed out successfully.", "info");
   };
 
   const handleSavePreferences = async (addressInput: string, phoneInput: string, notifyVal: boolean) => {
@@ -2317,7 +2376,7 @@ function Storefront({
     setPreferences(updatedPref);
     
     await syncProfileToBackend(currentUser.email, currentUser.name, updatedPref, cart);
-    setConfirmation("Saved account preferences successfully!");
+    addToast("Saved account preferences successfully!", "success");
   };
 
   const handleTrackOrder = async (e: React.FormEvent) => {
@@ -2421,6 +2480,20 @@ function Storefront({
           <Store size={24} />
           <span>{config.host}</span>
         </button>
+        <div className="storefront-search">
+          <Search size={15} />
+          <input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search products..."
+            type="search"
+          />
+          {searchQuery && (
+            <button className="search-clear" type="button" onClick={() => setSearchQuery("")} aria-label="Clear search">
+              <X size={14} />
+            </button>
+          )}
+        </div>
         <nav aria-label="Storefront navigation">
           <button type="button" onClick={() => switchStorefront(activeNiche)}>
             Shop
@@ -2479,6 +2552,18 @@ function Storefront({
               )}
             </div>
           </details>
+
+          <button
+            className="cart-toggle-btn"
+            type="button"
+            onClick={() => setIsCartDrawerOpen(true)}
+            aria-label="Open cart"
+          >
+            <ShoppingCart size={20} />
+            {totalCartCount > 0 && (
+              <span className={`cart-count-badge${cartBounce ? " cart-badge-bounce" : ""}`}>{totalCartCount}</span>
+            )}
+          </button>
         </nav>
       </header>
 
@@ -2545,6 +2630,12 @@ function Storefront({
             ))}
           </div>
 
+          {searchQuery && (
+            <p className="search-results-count">
+              {visibleProducts.length} result{visibleProducts.length !== 1 ? "s" : ""} for "{searchQuery}"
+            </p>
+          )}
+
           <div className="shop-grid">
             {visibleProducts.length === 0 ? (
               <div className="empty-store">
@@ -2556,6 +2647,14 @@ function Storefront({
               <article className="shop-card" key={product.id}>
                 <button className="product-image product-image-button" type="button" onClick={() => openProduct(product)}>
                   <img src={getProductImages(product)[0]} alt="" />
+                </button>
+                <button
+                  className={`wishlist-btn${wishlist.includes(product.id) ? " wishlisted" : ""}`}
+                  type="button"
+                  onClick={() => toggleWishlist(product.id)}
+                  aria-label={wishlist.includes(product.id) ? "Remove from wishlist" : "Add to wishlist"}
+                >
+                  <Heart size={16} />
                 </button>
                 <div className="shop-card-body">
                   <span>{product.niche}</span>
@@ -2573,9 +2672,16 @@ function Storefront({
                     <button type="button" onClick={() => setSelectedProduct(product)}>
                       Quick view
                     </button>
-                    <button className="primary" type="button" onClick={() => addToCart(product.id)}>
-                      <ShoppingCart size={17} />
-                      Add
+                    <button
+                      className={`primary${addedProductId === product.id ? " added" : ""}`}
+                      type="button"
+                      onClick={() => addToCart(product.id)}
+                    >
+                      {addedProductId === product.id ? (
+                        <><CheckCircle2 size={17} /> Added</>  
+                      ) : (
+                        <><ShoppingCart size={17} /> Add</>  
+                      )}
                     </button>
                   </div>
                 </div>
@@ -2637,7 +2743,7 @@ function Storefront({
                     if (["WHEEL10", "WELCOME10", "WHEEL15", "WHEEL20", "FREESHIP"].includes(code)) {
                       setAppliedCoupon(code);
                       setCouponInput("");
-                      setConfirmation(`Coupon ${code} applied successfully!`);
+                      addToast(`Coupon ${code} applied successfully!`, "success");
                     } else {
                       setCouponError("Invalid promo code.");
                     }
@@ -2657,7 +2763,7 @@ function Storefront({
                   })</span>
                   <button type="button" onClick={() => {
                     setAppliedCoupon(null);
-                    setConfirmation("Coupon removed.");
+                    addToast("Coupon removed.", "info");
                   }}>✕</button>
                 </div>
               )}
@@ -2705,8 +2811,9 @@ function Storefront({
           }
           onAddToCart={(quantity) => {
             addToCart(detailProduct.id, quantity);
-            setConfirmation(`${quantity} ${detailProduct.name} added to cart.`);
           }}
+          isWishlisted={wishlist.includes(detailProduct.id)}
+          onToggleWishlist={() => toggleWishlist(detailProduct.id)}
         />
       )}
 
@@ -2717,7 +2824,6 @@ function Storefront({
           onViewDetails={() => openProduct(selectedProduct)}
           onAddToCart={() => {
             addToCart(selectedProduct.id);
-            setConfirmation(`${selectedProduct.name} added to cart.`);
           }}
         />
       )}
@@ -3018,7 +3124,7 @@ function Storefront({
                     onClick={() => {
                       setCart(savedCartAvailable);
                       setSavedCartAvailable(null);
-                      setConfirmation("Your saved cart has been successfully restored!");
+                      addToast("Your saved cart has been successfully restored!", "success");
                     }}
                   >
                     Restore Cart
@@ -3119,6 +3225,49 @@ function Storefront({
                 )}
               </div>
             </div>
+
+              {/* Wishlist */}
+              <div className="portal-section">
+                <h4>❤️ Wishlist ({wishlist.length})</h4>
+                {wishlist.length === 0 ? (
+                  <p className="no-orders-msg">Your wishlist is empty. Tap the heart icon on any product to save it here.</p>
+                ) : (
+                  <div className="wishlist-section">
+                    {wishlist.map((productId) => {
+                      const product = products.find((p) => p.id === productId);
+                      if (!product) return null;
+                      return (
+                        <div key={productId} className="wishlist-item">
+                          <img src={getProductImages(product)[0]} alt="" />
+                          <div className="wishlist-item-info">
+                            <strong>{product.name}</strong>
+                            <span>{money(product.retailMin)}</span>
+                          </div>
+                          <div className="wishlist-item-actions">
+                            <button
+                              type="button"
+                              className="move-to-cart-btn"
+                              onClick={() => {
+                                addToCart(productId);
+                                toggleWishlist(productId);
+                              }}
+                            >
+                              Add to Cart
+                            </button>
+                            <button
+                              type="button"
+                              className="remove-wishlist-btn"
+                              onClick={() => toggleWishlist(productId)}
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
 
             <div className="drawer-footer">
               <button type="button" className="signout-btn" onClick={handleSignOut}>
@@ -3226,6 +3375,254 @@ function Storefront({
           </div>
         </div>
       )}
+
+      {/* Storefront Footer */}
+      <footer className="storefront-footer">
+        <div className="footer-grid">
+          <div className="footer-column">
+            <h4>Products4thePeople</h4>
+            <p style={{ fontSize: '0.84rem', margin: '8px 0 16px', color: '#8c9ba5' }}>
+              Premium hyper-niche direct-to-consumer store network. Curated quality products at your fingertips.
+            </p>
+            <p style={{ fontSize: '0.78rem', color: '#5a6b74' }}>
+              &copy; {new Date().getFullYear()} Products4thePeople. All rights reserved.
+            </p>
+          </div>
+
+          <div className="footer-column">
+            <h4>Quick Links</h4>
+            <button type="button" onClick={() => {
+              setSearchQuery("");
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}>Shop Home</button>
+            <button type="button" onClick={() => setIsTrackOrderOpen(true)}>Track Shipment</button>
+          </div>
+
+          <div className="footer-column">
+            <h4>Customer Care</h4>
+            <button type="button" onClick={() => setIsPortalOpen(true)}>
+              {currentUser ? "My Account & Wishlist" : "Customer Log In / Register"}
+            </button>
+            <a href="#" onClick={(e) => { e.preventDefault(); addToast("Help Center stub: support@products4thepeople.com", "info"); }}>Support Email</a>
+          </div>
+
+          <div className="footer-column">
+            <h4>Curated Niches</h4>
+            {Object.keys(storefrontNiches).map((niche) => (
+              <button
+                key={niche}
+                type="button"
+                onClick={() => {
+                  switchStorefront(niche as StorefrontMode);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              >
+                {storefrontNiches[niche as StorefrontMode].label}
+              </button>
+            ))}
+          </div>
+
+          <div className="footer-column" style={{ minWidth: '220px' }}>
+            <h4>Weekly Product Drops</h4>
+            <p style={{ fontSize: '0.84rem', color: '#8c9ba5' }}>Subscribe to get exclusive early launch access.</p>
+            <form onSubmit={(event) => submitLead(event, "inline")} className="footer-newsletter">
+              <input
+                value={leadEmail}
+                onChange={(event) => setLeadEmail(event.target.value)}
+                placeholder="Email address"
+                required
+                type="email"
+                aria-label="Newsletter email"
+              />
+              <button type="submit">Join</button>
+            </form>
+          </div>
+        </div>
+
+        <hr className="footer-divider" />
+
+        <div className="footer-bottom">
+          <p>Secure global shopping guaranteed.</p>
+          <div className="trust-badges">
+            <div className="trust-badge">
+              <ShieldCheck size={16} />
+              <span>Stripe Verified</span>
+            </div>
+            <div className="trust-badge">
+              <Truck size={16} />
+              <span>Free Delivery &gt;$75</span>
+            </div>
+            <div className="trust-badge">
+              <RotateCcw size={16} />
+              <span>30-Day Returns</span>
+            </div>
+          </div>
+        </div>
+      </footer>
+
+      {/* Mobile Cart Drawer */}
+      {isCartDrawerOpen && (
+        <>
+          <div className="cart-drawer-backdrop" onClick={() => setIsCartDrawerOpen(false)} />
+          <aside className="cart-drawer">
+            <div className="cart-drawer-header">
+              <span>🛒 Shopping Cart</span>
+              <button type="button" onClick={() => setIsCartDrawerOpen(false)} aria-label="Close cart">
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="cart-drawer-body">
+              {cartItems.length === 0 ? (
+                <div className="checkout-empty" style={{ padding: '40px 20px', textAlign: 'center' }}>
+                  <ShoppingBag size={32} style={{ marginBottom: '12px', color: '#8c9ba5' }} />
+                  <strong>Your cart is empty.</strong>
+                  <span>Add some amazing products to get started!</span>
+                </div>
+              ) : (
+                <div className="cart-drawer-lines">
+                  {cartItems.map(({ product, quantity }) => (
+                    <div className="cart-drawer-line" key={product.id}>
+                      <div className="wishlist-item-info" style={{ flex: 1, minWidth: 0 }}>
+                        <strong style={{ fontSize: '0.9rem', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {product.name}
+                        </strong>
+                        <span style={{ fontSize: '0.8rem', color: '#52636a' }}>{money(product.retailMin)} each</span>
+                      </div>
+                      
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <input
+                          aria-label={`${product.name} quantity`}
+                          min="0"
+                          type="number"
+                          value={quantity}
+                          onChange={(event) => setQuantity(product.id, Number(event.target.value))}
+                          style={{ width: '48px', padding: '4px', textAlign: 'center', borderRadius: '6px', border: '1px solid #e5eaee' }}
+                        />
+                        <button
+                          type="button"
+                          className="remove-btn"
+                          onClick={() => setQuantity(product.id, 0)}
+                          aria-label={`Remove ${product.name}`}
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {cartItems.length > 0 && (
+                <div style={{ marginTop: '20px' }}>
+                  <div className="coupon-input-wrap">
+                    <input
+                      value={couponInput}
+                      onChange={(event) => {
+                        setCouponInput(event.target.value);
+                        setCouponError("");
+                      }}
+                      placeholder="Promo code"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const code = couponInput.trim().toUpperCase();
+                        if (["WHEEL10", "WELCOME10", "WHEEL15", "WHEEL20", "FREESHIP"].includes(code)) {
+                          setAppliedCoupon(code);
+                          setCouponInput("");
+                          addToast(`Coupon ${code} applied successfully!`, "success");
+                        } else {
+                          setCouponError("Invalid promo code.");
+                        }
+                      }}
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  {couponError && <p className="auth-error" style={{ fontSize: '0.8rem', padding: '6px 8px', marginTop: '6px' }}>{couponError}</p>}
+                  
+                  {appliedCoupon && (
+                    <div className="applied-coupon-badge" style={{ marginTop: '12px' }}>
+                      <span>🏷️ <strong>{appliedCoupon}</strong> ({
+                        appliedCoupon === "FREESHIP" ? "Free Shipping" : 
+                        appliedCoupon === "WHEEL20" ? "20% OFF" :
+                        appliedCoupon === "WHEEL15" ? "15% OFF" : "10% OFF"
+                      })</span>
+                      <button type="button" onClick={() => {
+                        setAppliedCoupon(null);
+                        addToast("Coupon removed.", "info");
+                      }}>✕</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {cartItems.length > 0 && (
+              <div className="cart-drawer-footer">
+                <div className="totals">
+                  <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Subtotal</span>
+                    <strong>{money(subtotal)}</strong>
+                  </div>
+                  {discountAmount > 0 && (
+                    <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px', color: 'var(--store-accent, #176c61)' }}>
+                      <span>Discount ({discountPercent * 100}%)</span>
+                      <strong>-{money(discountAmount)}</strong>
+                    </div>
+                  )}
+                  <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Shipping</span>
+                    <strong>{shipping === 0 ? "Free" : money(shipping)}</strong>
+                  </div>
+                  <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                    <span>Estimated tax</span>
+                    <strong>{money(tax)}</strong>
+                  </div>
+                  <div className="totals-row" style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '1.1rem', marginTop: '8px', borderTop: '1px solid #e5eaee', paddingTop: '8px' }}>
+                    <span>Total</span>
+                    <strong>{money(total)}</strong>
+                  </div>
+                </div>
+
+                {subtotal < 75 && (
+                  <p className="checkout-progress" style={{ fontSize: '0.8rem', color: '#52636a', marginBottom: '12px', textAlign: 'center' }}>
+                    {money(75 - subtotal)} away from free shipping.
+                  </p>
+                )}
+
+                <form className="checkout-form" onSubmit={(e) => {
+                  submitOrder(e);
+                  setIsCartDrawerOpen(false);
+                }}>
+                  <input value={customerName} onChange={(event) => setCustomerName(event.target.value)} placeholder="Full name" required />
+                  <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" type="email" required />
+                  <p className="checkout-note" style={{ fontSize: '0.75rem', color: '#8c9ba5', margin: '8px 0', textAlign: 'center' }}>
+                    Shipping address and payment details are collected securely by Stripe.
+                  </p>
+                  <button className="primary full" type="submit" disabled={checkoutStatus !== "idle"}>
+                    {checkoutStatus === "redirecting" ? "Opening secure checkout..." : checkoutStatus === "confirming" ? "Confirming payment..." : "Pay with Stripe"}
+                  </button>
+                </form>
+              </div>
+            )}
+          </aside>
+        </>
+      )}
+
+      {/* Toast notifications */}
+      <div className="toast-container">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`toast toast-${toast.type}${toast.exiting ? " toast-exit" : ""}`}
+          >
+            <span>{toast.message}</span>
+            <div className="toast-progress" />
+          </div>
+        ))}
+      </div>
     </main>
   );
 }
@@ -3308,6 +3705,8 @@ function ProductDetailPage({
   onOpenProduct,
   onQuantityChange,
   onAddToCart,
+  isWishlisted,
+  onToggleWishlist,
 }: {
   product: Product;
   products: Product[];
@@ -3316,6 +3715,8 @@ function ProductDetailPage({
   onOpenProduct: (product: Product) => void;
   onQuantityChange: (quantity: number) => void;
   onAddToCart: (quantity: number) => void;
+  isWishlisted: boolean;
+  onToggleWishlist: () => void;
 }) {
   const [activeImage, setActiveImage] = React.useState(0);
   const images = getProductImages(product);
@@ -3385,6 +3786,15 @@ function ProductDetailPage({
           <button className="primary detail-cart-button" type="button" onClick={() => onAddToCart(quantity)}>
             <ShoppingCart size={18} />
             Add to cart
+          </button>
+
+          <button
+            className={`wishlist-detail-btn${isWishlisted ? " wishlisted" : ""}`}
+            type="button"
+            onClick={onToggleWishlist}
+          >
+            <Heart size={16} />
+            {isWishlisted ? "Saved to Wishlist" : "Save to Wishlist"}
           </button>
 
           <div className="detail-notes">
