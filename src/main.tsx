@@ -192,7 +192,7 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     host: "products4thepeople.com",
     eyebrow: "Products for everyday people",
     headline: "Practical products people actually use, tested niche by niche.",
-    offer: "Free shipping over $75 across the whole store",
+    offer: "Free shipping over $25 across the whole store",
     proof: "Beauty and pet best-sellers are ready now. Home and fitness collections are queued for launch testing.",
     accent: "#176c61",
     soft: "#eef7f5",
@@ -204,7 +204,7 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     host: "beauty.products4thepeople.com",
     eyebrow: "At-home glow-up tools",
     headline: "Beauty tools for quick routines, calmer mornings, and camera-ready skin.",
-    offer: "Free shipping over $75 on beauty bundles",
+    offer: "Free shipping over $25 on beauty bundles",
     proof: "Focused on low-lift tools customers can understand in seconds and use the same day they arrive.",
     accent: "#c84d7d",
     soft: "#fff1f5",
@@ -216,7 +216,7 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     host: "pets.products4thepeople.com",
     eyebrow: "Everyday pet problem solvers",
     headline: "Pet gear that keeps walks, rides, meals, and cleanups easier.",
-    offer: "Free shipping over $75 on pet essentials",
+    offer: "Free shipping over $25 on pet essentials",
     proof: "Built around daily pet-owner pain points: fur, mud, anxiety, feeding, safety, and car mess.",
     accent: "#247b73",
     soft: "#eefaf7",
@@ -2171,7 +2171,7 @@ function Storefront({
   const discountAmount = roundMoney(subtotal * discountPercent);
   const discountedSubtotal = Math.max(0, subtotal - discountAmount);
 
-  const shipping = (appliedCoupon === "FREESHIP" || subtotal >= 75 || subtotal === 0) ? 0 : 7;
+  const shipping = (appliedCoupon === "FREESHIP" || subtotal >= 25 || subtotal === 0) ? 0 : 7;
   const tax = subtotal > 0 ? roundMoney(discountedSubtotal * 0.06) : 0;
   const total = roundMoney(discountedSubtotal + shipping + tax);
 
@@ -2796,8 +2796,8 @@ function Storefront({
             <span>Estimated tax <strong>{money(tax)}</strong></span>
             <span>Total <strong>{money(total)}</strong></span>
           </div>
-          {cartItems.length > 0 && subtotal < 75 && (
-            <p className="checkout-progress">{money(75 - subtotal)} away from free shipping.</p>
+          {cartItems.length > 0 && subtotal < 25 && (
+            <p className="checkout-progress">{money(25 - subtotal)} away from free shipping.</p>
           )}
 
           <form className="checkout-form" onSubmit={submitOrder}>
@@ -3484,7 +3484,7 @@ function Storefront({
             </div>
             <div className="trust-badge">
               <Truck size={16} />
-              <span>Free Delivery &gt;$75</span>
+              <span>Free Delivery &gt;$25</span>
             </div>
             <div className="trust-badge">
               <RotateCcw size={16} />
@@ -3620,9 +3620,9 @@ function Storefront({
                   </div>
                 </div>
 
-                {subtotal < 75 && (
+                {subtotal < 25 && (
                   <p className="checkout-progress" style={{ fontSize: '0.8rem', color: '#52636a', marginBottom: '12px', textAlign: 'center' }}>
-                    {money(75 - subtotal)} away from free shipping.
+                    {money(25 - subtotal)} away from free shipping.
                   </p>
                 )}
 
@@ -3703,7 +3703,7 @@ function ProductQuickView({
               Availability <strong>{product.inventory > 0 ? "In stock" : "Limited"}</strong>
             </span>
             <span>
-              Shipping <strong>Free over $75</strong>
+              Shipping <strong>Free over $25</strong>
             </span>
             <span>
               Category <strong>{product.niche}</strong>
@@ -3835,7 +3835,7 @@ function ProductDetailPage({
             {getProductBenefits(product).map((benefit) => (
               <span key={benefit}>{benefit}</span>
             ))}
-            <span>Free shipping over $75</span>
+            <span>Free shipping over $25</span>
             <span>Category: {product.niche}</span>
           </div>
         </div>
