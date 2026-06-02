@@ -4274,7 +4274,10 @@ function loadMedusaConnection(): MedusaConnection {
 
 function isStorefrontHash(hash: string) {
   const normalized = hash.replace("#", "").toLowerCase();
-  return normalized === "storefront" || normalized === "checkout" || normalized.startsWith("product/") || storefrontHashes.includes(normalized as StorefrontMode);
+  if (!normalized) return true;
+  const adminHashes = ["admin", "dashboard", "import", "orders", "customers", "funnels", "analytics", "ai", "settings"];
+  const isAdmin = adminHashes.includes(normalized) || normalized.startsWith("admin-");
+  return !isAdmin;
 }
 
 function getStorefrontModeFromHash(): StorefrontMode {
