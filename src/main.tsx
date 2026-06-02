@@ -2704,6 +2704,7 @@ function Storefront({
           </div>
         </div>
 
+        {window.location.hash === "#checkout" && (
         <aside className="checkout-panel" id="checkout">
           <div className="panel-header">
             <div>
@@ -2808,6 +2809,7 @@ function Storefront({
             </button>
           </form>
         </aside>
+        )}
       </section>
       )}
 

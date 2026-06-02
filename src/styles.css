@@ -1186,8 +1186,12 @@ tr:last-child td {
 .store-layout {
   display: grid;
   gap: 24px;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: 1fr;
   padding: clamp(34px, 6vw, 72px) clamp(18px, 5vw, 72px);
+}
+
+.store-layout:has(.checkout-panel) {
+  grid-template-columns: minmax(0, 1fr) 360px;
 }
 
 .store-section-head {
