@@ -124,6 +124,8 @@ type MarketingLead = {
   source: "popup" | "inline" | "checkout";
   niche: StorefrontMode;
   createdAt: string;
+  phone?: string;
+  wantsSms?: boolean;
 };
 
 type AbandonedCart = {
@@ -1818,6 +1820,8 @@ function Storefront({
   const [detailProductId, setDetailProductId] = React.useState(() => getProductIdFromHash());
   const [leadEmail, setLeadEmail] = React.useState("");
   const [leadName, setLeadName] = React.useState("");
+  const [leadPhone, setLeadPhone] = React.useState("");
+  const [wantsSms, setWantsSms] = React.useState(false);
   const [isEmailPopupOpen, setIsEmailPopupOpen] = React.useState(false);
 
   // Google Auth & Customer Portal States
@@ -2244,10 +2248,14 @@ function Storefront({
       name: leadName,
       source,
       niche: activeNiche,
+      phone: leadPhone || undefined,
+      wantsSms: wantsSms || undefined,
     });
     addToast("You're on the list! Watch for offers and launch tests.", "success");
     setLeadEmail("");
     setLeadName("");
+    setLeadPhone("");
+    setWantsSms(false);
     setIsEmailPopupOpen(false);
     localStorage.setItem(emailPopupDismissedKey, "true");
   };
@@ -2954,6 +2962,8 @@ function Storefront({
                         name: leadName,
                         source: "popup",
                         niche: activeNiche,
+                        phone: leadPhone || undefined,
+                        wantsSms: wantsSms || undefined,
                       });
 
                       if (wheelResult.code !== "TRYAGAIN") {
@@ -2980,6 +2990,22 @@ function Storefront({
                       type="email"
                       style={{ background: '#f7f9fa' }}
                     />
+                    <input
+                      value={leadPhone}
+                      onChange={(event) => setLeadPhone(event.target.value)}
+                      placeholder="Phone number (optional for SMS offers)"
+                      type="tel"
+                      style={{ background: '#f7f9fa' }}
+                    />
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.8rem', color: '#52636a', margin: '4px 0', cursor: 'pointer' }}>
+                      <input
+                        type="checkbox"
+                        checked={wantsSms}
+                        onChange={(event) => setWantsSms(event.target.checked)}
+                        style={{ width: 'auto', margin: 0 }}
+                      />
+                      <span>Get shop notifications & offers via SMS</span>
+                    </label>
                     <button className="primary full" type="submit" style={{ minHeight: '44px', fontWeight: 900 }}>
                       🎁 CLAIM DISCOUNT
                     </button>
