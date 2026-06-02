@@ -1547,14 +1547,19 @@ app.post("/api/customers/:email/profile", async (request, response) => {
   }
 });
 
-app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
-  if (error instanceof z.ZodError) {
-    response.status(400).json({ error: "Validation failed", details: error.flatten() });
+});
+
+// Serve static frontend assets from dist folder in production
+const distPath = path.join(__dirname, "../dist");
+app.use(express.static(distPath));
+
+// Fallback all other GET requests to index.html for React SPA routing
+app.get("*", (request, response, next) => {
+  if (request.path.startsWith("/api") || (request.headers.accept && !request.headers.accept.includes("text/html"))) {
+    next();
     return;
   }
-
-  const message = error instanceof Error ? error.message : "Unexpected server error";
-  response.status(500).json({ error: message });
+  response.sendFile(path.join(distPath, "index.html"));
 });
 
 // Database Abstraction & SQL Helpers
