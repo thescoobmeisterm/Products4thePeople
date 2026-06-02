@@ -1558,7 +1558,7 @@ app.use((error: unknown, _request: express.Request, response: express.Response, 
 });
 
 // Serve static frontend assets from dist folder in production
-const distPath = path.join(__dirname, "../dist");
+const distPath = path.resolve("dist");
 app.use(express.static(distPath));
 
 // Fallback all other GET requests to index.html for React SPA routing
