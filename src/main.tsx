@@ -2651,6 +2651,15 @@ function Storefront({
           <details className="more-shops" open={isMoreOpen} onToggle={(e) => setIsMoreOpen(e.currentTarget.open)}>
             <summary>More</summary>
             <div>
+              {currentUser?.isAdmin && (
+                <button 
+                  type="button" 
+                  onClick={() => { onBackToAdmin(); setIsMoreOpen(false); }}
+                  style={{ fontWeight: 700, color: 'var(--store-accent, #176c61)' }}
+                >
+                  Admin Panel
+                </button>
+              )}
               {/* Customer Portal & Authentication */}
               {currentUser ? (
                 <button 
@@ -2678,6 +2687,9 @@ function Storefront({
               <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #e5eaee' }} />
               
               {/* Shop Switchers */}
+              <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#8c9ba5', padding: '4px 8px 2px', textTransform: 'uppercase', letterSpacing: '0.5px', display: 'block' }}>
+                More Stores
+              </span>
               <button
                 type="button"
                 onClick={() => { switchStorefront("general"); setIsMoreOpen(false); }}
@@ -2693,11 +2705,6 @@ function Storefront({
                   {storefrontNiches[niche].label}
                 </button>
               ))}
-              {currentUser?.isAdmin && (
-                <button type="button" onClick={() => { onBackToAdmin(); setIsMoreOpen(false); }}>
-                  Admin
-                </button>
-              )}
             </div>
           </details>
 
