@@ -204,7 +204,7 @@ declare global {
 
 const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
   general: {
-    label: "General Store",
+    label: "Products4thePeople",
     host: "products4thepeople.com",
     eyebrow: "Products for everyday people",
     headline: "Practical products people actually use, tested brand by brand.",
@@ -2682,7 +2682,7 @@ function Storefront({
                 type="button"
                 onClick={() => { switchStorefront("general"); setIsMoreOpen(false); }}
               >
-                General Store
+                Products4thePeople
               </button>
               {(["beauty", "pets", "home", "fitness", "automotive"] as const).map((niche) => (
                 <button
