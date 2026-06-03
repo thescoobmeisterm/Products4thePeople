@@ -853,6 +853,11 @@ tr:last-child td {
   min-height: 36px;
 }
 
+.storefront .secondary {
+  background: color-mix(in srgb, var(--store-accent), transparent 85%);
+  color: var(--store-accent);
+}
+
 .more-shops {
   position: relative;
 }
@@ -862,6 +867,7 @@ tr:last-child td {
   background: #fff;
   border: 1px solid #d5dde2;
   border-radius: 8px;
+  color: #11191d;
   cursor: pointer;
   display: flex;
   font-weight: 900;
@@ -885,10 +891,18 @@ tr:last-child td {
 }
 
 .more-shops button {
+  background: transparent;
   border: 0;
+  color: #11191d;
+  cursor: pointer;
   justify-content: flex-start;
   min-height: 36px;
   width: 100%;
+}
+
+.more-shops button:hover {
+  background: #f0f3f5;
+  color: var(--store-accent, #176c61);
 }
 
 .store-hero {
@@ -3277,15 +3291,16 @@ tr:last-child td {
 }
 
 .storefront .secondary {
-  background: transparent;
-  border: 2px solid var(--store-accent);
-  color: var(--store-accent);
+  background: color-mix(in srgb, var(--store-accent) 80%, black 20%);
+  border: 2px solid color-mix(in srgb, var(--store-accent) 80%, black 20%);
+  color: #fff;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.25s ease;
 }
 
 .storefront .secondary:hover {
-  background: var(--store-soft);
+  background: color-mix(in srgb, var(--store-accent) 65%, black 35%);
+  border-color: color-mix(in srgb, var(--store-accent) 65%, black 35%);
   transform: translateY(-1px);
 }
