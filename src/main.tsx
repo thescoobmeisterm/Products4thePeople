@@ -1008,7 +1008,7 @@ function App() {
         <header className="topbar">
           <div>
             <p>Products4ThePeople.com</p>
-            <h1>Commerce Command Center</h1>
+            <h1>Commerce Command Center <span style={{ fontSize: '0.45em', opacity: 0.6, fontWeight: 'normal', backgroundColor: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: '4px', marginLeft: '10px', verticalAlign: 'middle', display: 'inline-block' }}>v1.0.1</span></h1>
           </div>
           <div className="topbar-actions">
             <button type="button" onClick={() => {
