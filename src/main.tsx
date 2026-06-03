@@ -62,7 +62,7 @@ import {
 } from "./lib/api";
 import "./styles.css";
 
-type Niche = "beauty" | "pets" | "home" | "fitness";
+type Niche = "beauty" | "pets" | "home" | "fitness" | "automotive";
 type ProductStatus = "Active" | "Review" | "Draft";
 
 type Product = {
@@ -154,6 +154,21 @@ type StorefrontNicheConfig = {
   accent: string;
   soft: string;
   heroImage: string;
+  // Brand Design System config
+  positioning: string;
+  primaryColor: string;
+  secondaryColor?: string;
+  accentColor: string;
+  backgroundColor: string;
+  textColor: string;
+  headingFont: string;
+  bodyFont: string;
+  accentFont?: string;
+  collections: string[];
+  heroHeadline: string;
+  heroSubheadline: string;
+  ctaText: string;
+  secondaryCtaText?: string;
 };
 
 const medusaConfigKey = "p4tp-medusa-connection";
@@ -194,62 +209,153 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     headline: "Practical products people actually use, tested niche by niche.",
     offer: "Free shipping over $25 across the whole store",
     proof: "Beauty and pet best-sellers are ready now. Home and fitness collections are queued for launch testing.",
-    accent: "#176c61",
-    soft: "#eef7f5",
+    accent: "#2563EB",
+    soft: "#EFF6FF",
     heroImage:
       "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1600&q=80",
+    positioning: "Discover Products That Make Life Better",
+    primaryColor: "#0F172A",
+    secondaryColor: "#2563EB",
+    accentColor: "#2563EB",
+    backgroundColor: "#F8FAFC",
+    textColor: "#111827",
+    headingFont: "Manrope",
+    bodyFont: "Inter",
+    accentFont: "Space Grotesk",
+    collections: ["Beauty", "Pets", "Home Optimization", "Fitness Gear", "Automotive"],
+    heroHeadline: "Discover Products That Make Life Better",
+    heroSubheadline: "We've done the research so you don't have to.",
+    ctaText: "Explore Categories",
+    secondaryCtaText: "Shop Best Sellers",
   },
   beauty: {
-    label: "Beauty",
+    label: "GlowTheory",
     host: "beauty.products4thepeople.com",
     eyebrow: "At-home glow-up tools",
     headline: "Beauty tools for quick routines, calmer mornings, and camera-ready skin.",
     offer: "Free shipping over $25 on beauty bundles",
     proof: "Focused on low-lift tools customers can understand in seconds and use the same day they arrive.",
-    accent: "#c84d7d",
-    soft: "#fff1f5",
+    accent: "#D87A9D",
+    soft: "#FFF9F8",
     heroImage:
       "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=1600&q=80",
+    positioning: "Science-Backed Beauty & Self-Care",
+    primaryColor: "#F5D7DF",
+    secondaryColor: "#E8B4C2",
+    accentColor: "#D87A9D",
+    backgroundColor: "#FFF9F8",
+    textColor: "#1A1A1A",
+    headingFont: "Playfair Display",
+    bodyFont: "Poppins",
+    collections: ["LED Beauty Devices", "Anti-Aging", "Hair Care", "Facial Sculpting", "Self-Care Essentials", "Beauty Bundles"],
+    heroHeadline: "Reveal Your Best Self",
+    heroSubheadline: "Science-backed beauty tools designed to help you look refreshed, confident, and radiant from home.",
+    ctaText: "Shop Collection",
+    secondaryCtaText: "View Bundles",
   },
   pets: {
-    label: "Pets",
+    label: "Wagwell",
     host: "pets.products4thepeople.com",
     eyebrow: "Everyday pet problem solvers",
     headline: "Pet gear that keeps walks, rides, meals, and cleanups easier.",
     offer: "Free shipping over $25 on pet essentials",
     proof: "Built around daily pet-owner pain points: fur, mud, anxiety, feeding, safety, and car mess.",
-    accent: "#247b73",
-    soft: "#eefaf7",
+    accent: "#4CAF50",
+    soft: "#FFF8F0",
     heroImage:
       "https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=1600&q=80",
+    positioning: "Happier Pets. Easier Lives.",
+    primaryColor: "#4CAF50",
+    secondaryColor: "#A8D5A2",
+    accentColor: "#F7A531",
+    backgroundColor: "#FFF8F0",
+    textColor: "#1A1A1A",
+    headingFont: "Poppins",
+    bodyFont: "Poppins",
+    collections: ["Travel & Adventure", "Feeding Essentials", "Grooming", "Comfort & Sleep", "Toys & Enrichment", "Pet Wellness"],
+    heroHeadline: "Because Every Tail Deserves To Wag",
+    heroSubheadline: "Practical products that help pets stay happy and owners stress less.",
+    ctaText: "Explore Gear",
+    secondaryCtaText: "View Wellness",
   },
   home: {
-    label: "Home",
+    label: "NestTheory",
     host: "home.products4thepeople.com",
     eyebrow: "Home upgrades",
     headline: "Small home upgrades with everyday utility and easy gift appeal.",
     offer: "Home storefront ready for product testing",
     proof: "This niche is staged for the next product wave once active home listings are approved.",
-    accent: "#8067b7",
-    soft: "#f4efff",
+    accent: "#8B7355",
+    soft: "#F9F7F2",
     heroImage:
       "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=1600&q=80",
+    positioning: "Simplify Every Room",
+    primaryColor: "#ECE7E0",
+    secondaryColor: "#D8C9B2",
+    accentColor: "#8B7355",
+    backgroundColor: "#F9F7F2",
+    textColor: "#1F1F1F",
+    headingFont: "Poppins",
+    bodyFont: "Poppins",
+    collections: ["Kitchen Organization", "Closet Solutions", "Bathroom Storage", "Workspace Setup", "Entryway Essentials", "Space Saving Products"],
+    heroHeadline: "Less Clutter. More Calm.",
+    heroSubheadline: "Smart storage and organization products for a cleaner, more intentional home.",
+    ctaText: "Organize Now",
+    secondaryCtaText: "View Solutions",
   },
   fitness: {
-    label: "Fitness",
+    label: "RecoverLab",
     host: "fitness.products4thepeople.com",
     eyebrow: "Fitness helpers",
     headline: "Fitness helpers for stretching, recovery, hydration, and home workouts.",
     offer: "Fitness storefront ready for product testing",
     proof: "This niche is staged for the next product wave once active fitness listings are approved.",
-    accent: "#d06b2f",
-    soft: "#fff3eb",
+    accent: "#2563EB",
+    soft: "#111827",
     heroImage:
       "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?auto=format&fit=crop&w=1600&q=80",
+    positioning: "Recover Faster. Perform Better.",
+    primaryColor: "#0D1117",
+    secondaryColor: "#111827",
+    accentColor: "#2563EB",
+    backgroundColor: "#0D1117",
+    textColor: "#FFFFFF",
+    headingFont: "Oswald",
+    bodyFont: "Inter",
+    collections: ["Massage Recovery", "Cold Therapy", "Mobility", "Compression", "Sleep Optimization", "Recovery Bundles"],
+    heroHeadline: "Train Hard. Recover Smarter.",
+    heroSubheadline: "Recovery tools trusted by athletes, lifters, runners, and everyday performers.",
+    ctaText: "Start Recovery",
+    secondaryCtaText: "View Bundles",
+  },
+  automotive: {
+    label: "DriveCraft",
+    host: "automotive.products4thepeople.com",
+    eyebrow: "Professional Detailing",
+    headline: "Your Vehicle. Showroom Ready.",
+    offer: "Free shipping over $50 on detailing kits",
+    proof: "Premium detailing products and accessories trusted by enthusiasts.",
+    accent: "#E53935",
+    soft: "#111318",
+    heroImage:
+      "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?auto=format&fit=crop&w=1600&q=80",
+    positioning: "Professional Results. Garage Convenience.",
+    primaryColor: "#0B0D10",
+    secondaryColor: "#111318",
+    accentColor: "#E53935",
+    backgroundColor: "#0B0D10",
+    textColor: "#FFFFFF",
+    headingFont: "Bebas Neue",
+    bodyFont: "Poppins",
+    collections: ["Exterior Wash", "Interior Care", "Paint Protection", "Wheels & Tires", "Detailing Tools", "Garage Essentials"],
+    heroHeadline: "Your Vehicle. Showroom Ready.",
+    heroSubheadline: "Premium detailing products and accessories trusted by enthusiasts.",
+    ctaText: "Shop DriveCraft",
+    secondaryCtaText: "View Detail Kits",
   },
 };
 
-const storefrontHashes: StorefrontMode[] = ["general", "beauty", "pets", "home", "fitness"];
+const storefrontHashes: StorefrontMode[] = ["general", "beauty", "pets", "home", "fitness", "automotive"];
 
 const seedProducts: Product[] = [
   makeProduct("LED Face Mask", "Beauty", "beauty", 18, 35, 6, 12, 79, 149, "60-75%", 1, "https://www.aliexpress.us/w/wholesale-led-face-mask.html", "Luxury spa results at home", "Active", 126),
@@ -277,6 +383,9 @@ const seedProducts: Product[] = [
   makeProduct("Sunset Lamp", "Home", "home", 3, 5, 2, 4, 19, 24, "70-80%", 1, "https://www.aliexpress.us/w/wholesale-sunset-lamp.html", "Bring atmospheric sunset colors into your bedroom", "Active", 220),
   makeProduct("Flame Diffuser", "Home", "home", 6, 12, 3, 6, 34, 39, "65-75%", 2, "https://www.aliexpress.us/w/wholesale-flame-diffuser.html", "Ultrasonic cool mist with realistic flame lighting", "Active", 130),
   makeProduct("Self-Wringing Mop", "Home", "home", 5, 10, 3, 6, 29, 34, "65-75%", 3, "https://www.aliexpress.us/w/wholesale-flat-mop-hands-free.html", "Hands-free self-wringing floor mop", "Active", 95),
+  makeProduct("Ceramic Wax Spray", "Automotive", "automotive", 4, 10, 3, 6, 29, 39, "60-70%", 1, "https://www.aliexpress.us/w/wholesale-ceramic-wax-spray.html", "Mirror-like shine and water beading", "Active", 180),
+  makeProduct("Microfiber Wash Mitt", "Automotive", "automotive", 1, 3, 2, 4, 14, 19, "70-80%", 2, "https://www.aliexpress.us/w/wholesale-microfiber-wash-mitt.html", "Scratch-free car wash experience", "Active", 350),
+  makeProduct("Interior Cleaner Wipes", "Automotive", "automotive", 2, 5, 2, 4, 19, 29, "65-75%", 3, "https://www.aliexpress.us/w/wholesale-interior-detailing-wipes.html", "Restore showroom matte look to dashboard", "Active", 240),
 ];
 
 const navItems = [
@@ -2479,8 +2588,15 @@ function Storefront({
       className={`storefront storefront-${activeNiche}`}
       style={
         {
-          "--store-accent": config.accent,
+          "--store-accent": config.accentColor,
           "--store-soft": config.soft,
+          "--store-primary": config.primaryColor,
+          "--store-bg": config.backgroundColor,
+          "--store-text": config.textColor,
+          "--store-font-heading": config.headingFont,
+          "--store-font-body": config.bodyFont,
+          "--store-header-bg": config.backgroundColor + "f0",
+          "--store-border": config.textColor + "1a",
           "--store-hero": `linear-gradient(90deg, rgba(17, 25, 29, 0.8), rgba(17, 25, 29, 0.18)), url(${config.heroImage})`,
         } as React.CSSProperties
       }
@@ -2492,7 +2608,7 @@ function Storefront({
           onClick={() => switchStorefront("general")}
         >
           <Store size={24} />
-          <span>{config.host}</span>
+          <span>{config.label}</span>
         </button>
         <div className="storefront-search">
           <Search size={15} />
@@ -2550,7 +2666,7 @@ function Storefront({
               >
                 General Store
               </button>
-              {(["beauty", "pets", "home", "fitness"] as const).map((niche) => (
+              {(["beauty", "pets", "home", "fitness", "automotive"] as const).map((niche) => (
                 <button
                   key={niche}
                   type="button"
@@ -2584,9 +2700,26 @@ function Storefront({
       <section className="store-hero">
         <div>
           <p>{config.eyebrow}</p>
-          <h1>{config.headline}</h1>
-          <small>{config.proof}</small>
-          <span>{config.offer}</span>
+          <h1>{config.heroHeadline}</h1>
+          <p className="hero-subheadline" style={{ fontSize: '1.2rem', opacity: 0.9, maxWidth: '640px', margin: '8px 0 24px' }}>
+            {config.heroSubheadline}
+          </p>
+          <div className="hero-ctas" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>
+            <button className="primary" onClick={() => {
+              document.querySelector(".shop-grid")?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }} style={{ minHeight: '44px', padding: '0 24px', fontWeight: 600 }}>
+              {config.ctaText}
+            </button>
+            {config.secondaryCtaText && (
+              <button className="secondary" onClick={() => {
+                document.querySelector(".subcategory-filter")?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+              }} style={{ minHeight: '44px', padding: '0 24px', fontWeight: 600 }}>
+                {config.secondaryCtaText}
+              </button>
+            )}
+          </div>
+          <small style={{ display: 'block', marginTop: '10px', opacity: 0.8 }}>{config.proof}</small>
+          <span style={{ display: 'inline-block', marginTop: '4px', fontWeight: 600, color: 'var(--store-accent)' }}>{config.offer}</span>
         </div>
       </section>
 
@@ -4309,24 +4442,50 @@ function getProductSubcategory(product: Product) {
   const haystack = `${product.name} ${product.contentAngle} ${product.niche}`.toLowerCase();
 
   if (product.subdomain === "beauty") {
-    if (matchesAny(haystack, ["hair", "curl", "scalp", "satin", "wrap"])) return "Hair Care";
-    if (matchesAny(haystack, ["led", "mask", "anti-aging", "neck"])) return "LED Therapy";
-    if (matchesAny(haystack, ["clean", "pore", "blackhead", "brush", "vacuum"])) return "Cleansing Tools";
-    if (matchesAny(haystack, ["ice", "eye", "depuff", "glow"])) return "Skin Refresh";
-    return "Beauty Tools";
+    if (matchesAny(haystack, ["led", "mask", "neck"])) return "LED Beauty Devices";
+    if (matchesAny(haystack, ["anti-aging", "wrinkle", "aging", "lift"])) return "Anti-Aging";
+    if (matchesAny(haystack, ["hair", "curl", "scalp", "satin", "wrap", "growth", "brush", "massager"])) return "Hair Care";
+    if (matchesAny(haystack, ["sculpt", "ice", "roller", "massage", "gua sha"])) return "Facial Sculpting";
+    if (matchesAny(haystack, ["self-care", "clean", "pore", "cleansing", "vacuum", "patches", "eye"])) return "Self-Care Essentials";
+    return "Beauty Bundles";
   }
 
   if (product.subdomain === "pets") {
-    if (matchesAny(haystack, ["water", "seat", "paw", "travel", "car"])) return "Travel & Cleanup";
-    if (matchesAny(haystack, ["bed", "calm", "lick", "anxious", "enrichment"])) return "Comfort & Enrichment";
-    if (matchesAny(haystack, ["feeder", "feed", "bottle"])) return "Feeding";
-    if (matchesAny(haystack, ["collar", "led", "safety", "night"])) return "Safety";
-    if (matchesAny(haystack, ["cat", "laser", "toy"])) return "Toys";
-    return "Pet Essentials";
+    if (matchesAny(haystack, ["travel", "car", "seat", "water bottle", "outdoor"])) return "Travel & Adventure";
+    if (matchesAny(haystack, ["feed", "feeder", "bowl", "bottle"])) return "Feeding Essentials";
+    if (matchesAny(haystack, ["groom", "hair", "remover", "fur", "cleaner", "paw", "brush"])) return "Grooming";
+    if (matchesAny(haystack, ["bed", "sleep", "calm", "anxious", "blanket"])) return "Comfort & Sleep";
+    if (matchesAny(haystack, ["toy", "laser", "lick", "mat", "enrichment"])) return "Toys & Enrichment";
+    return "Pet Wellness";
   }
 
-  if (product.subdomain === "home") return "Home Essentials";
-  if (product.subdomain === "fitness") return "Fitness Gear";
+  if (product.subdomain === "fitness") {
+    if (matchesAny(haystack, ["massage", "roller", "gun", "sore", "muscle"])) return "Massage Recovery";
+    if (matchesAny(haystack, ["cold", "ice", "plunge", "cryo", "freeze"])) return "Cold Therapy";
+    if (matchesAny(haystack, ["mobility", "stretching", "stretch", "yoga", "mat"])) return "Mobility";
+    if (matchesAny(haystack, ["compression", "sleeve", "wrap", "band"])) return "Compression";
+    if (matchesAny(haystack, ["sleep", "pillow", "recovery sleep"])) return "Sleep Optimization";
+    return "Recovery Bundles";
+  }
+
+  if (product.subdomain === "home") {
+    if (matchesAny(haystack, ["kitchen", "spice", "pantry", "drawer", "fridge"])) return "Kitchen Organization";
+    if (matchesAny(haystack, ["closet", "hanger", "wardrobe", "shoe"])) return "Closet Solutions";
+    if (matchesAny(haystack, ["bathroom", "shower", "vanity", "soap"])) return "Bathroom Storage";
+    if (matchesAny(haystack, ["workspace", "desk", "monitor", "stand"])) return "Workspace Setup";
+    if (matchesAny(haystack, ["entryway", "key", "coat", "rack"])) return "Entryway Essentials";
+    return "Space Saving Products";
+  }
+
+  if (product.subdomain === "automotive") {
+    if (matchesAny(haystack, ["wash", "shampoo", "foam", "soap", "mitt", "bucket"])) return "Exterior Wash";
+    if (matchesAny(haystack, ["interior", "wipe", "dashboard", "leather", "vacuum"])) return "Interior Care";
+    if (matchesAny(haystack, ["paint", "wax", "ceramic", "sealant", "coating", "spray"])) return "Paint Protection";
+    if (matchesAny(haystack, ["wheel", "tire", "rim", "tire shine"])) return "Wheels & Tires";
+    if (matchesAny(haystack, ["tool", "towel", "brush", "applicator"])) return "Detailing Tools";
+    return "Garage Essentials";
+  }
+
   return "Featured";
 }
 
@@ -4356,20 +4515,21 @@ function getProductBenefits(product: Product) {
   const subcategory = getProductSubcategory(product);
   if (product.subdomain === "beauty") {
     if (subcategory === "Hair Care") return ["Protects styling time", "Low-friction morning or overnight routine", "Strong bundle fit with beauty add-ons"];
-    if (subcategory === "LED Therapy") return ["Premium at-home spa positioning", "Strong visual demo potential", "Easy upgrade path into beauty bundles"];
-    if (subcategory === "Cleansing Tools") return ["Clear before-and-after story", "Simple routine education", "Accessible price for first-time buyers"];
+    if (subcategory === "LED Beauty Devices") return ["Premium at-home spa positioning", "Strong visual demo potential", "Easy upgrade path into beauty bundles"];
+    if (subcategory === "Self-Care Essentials") return ["Clear before-and-after story", "Simple routine education", "Accessible price for first-time buyers"];
     return ["Quick refresh use case", "Compact and giftable", "Easy add-on for beauty bundles"];
   }
 
   if (product.subdomain === "pets") {
-    if (subcategory === "Travel & Cleanup") return ["Solves a visible daily mess", "Great for walks, cars, and errands", "Easy pet-owner gift"];
-    if (subcategory === "Comfort & Enrichment") return ["Supports calmer downtime", "Clear emotional purchase driver", "Pairs well with pet essentials"];
-    if (subcategory === "Feeding") return ["Convenience-led daily routine", "Useful for busy households", "Strong practical value"];
-    if (subcategory === "Safety") return ["Clear night-walk safety angle", "Simple visual demo", "Impulse-friendly accessory"];
+    if (subcategory === "Travel & Adventure") return ["Solves a visible daily mess", "Great for walks, cars, and errands", "Easy pet-owner gift"];
+    if (subcategory === "Comfort & Sleep") return ["Supports calmer downtime", "Clear emotional purchase driver", "Pairs well with pet essentials"];
+    if (subcategory === "Feeding Essentials") return ["Convenience-led daily routine", "Useful for busy households", "Strong practical value"];
+    if (subcategory === "Pet Wellness") return ["Clear night-walk safety angle", "Simple visual demo", "Impulse-friendly accessory"];
     return ["Keeps pets engaged", "Easy indoor-use story", "Great checkout add-on"];
   }
 
   if (product.subdomain === "home") return ["Simple setup", "Everyday utility", "Giftable home upgrade"];
+  if (product.subdomain === "automotive") return ["Professional garage results", "Premium detailing performance", "Enthusiast trusted quality"];
   return ["Routine support", "Easy to use at home", "Clear demo potential"];
 }
 
@@ -4401,71 +4561,116 @@ function setMetaDescription(content: string) {
 }
 
 const productImageFallbacks: Record<string, string[]> = {
+  // Beauty (GlowTheory)
+  "LED Beauty Devices": [
+    "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?",
+    "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?",
+    "https://images.unsplash.com/photo-1596462502278-27bfdc403348?",
+  ],
+  "Anti-Aging": [
+    "https://images.unsplash.com/photo-1556228578-8c89e6adf883?",
+    "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?",
+  ],
   "Hair Care": [
     "https://images.unsplash.com/photo-1522337660859-02fbefca4702?",
     "https://images.unsplash.com/photo-1562322140-8baeececf3df?",
     "https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?",
   ],
-  "LED Therapy": [
-    "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881?",
-    "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?",
-    "https://images.unsplash.com/photo-1596462502278-27bfdc403348?",
-  ],
-  "Cleansing Tools": [
-    "https://images.unsplash.com/photo-1556228720-195a672e8a03?",
-    "https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?",
-    "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?",
-  ],
-  "Skin Refresh": [
-    "https://images.unsplash.com/photo-1556228578-8c89e6adf883?",
+  "Facial Sculpting": [
     "https://images.unsplash.com/photo-1608248543803-ba4f8c70ae0b?",
-    "https://images.unsplash.com/photo-1620916566398-39f1143ab7be?",
+    "https://images.unsplash.com/photo-1598440947619-2c35fc9aa908?",
   ],
-  "Beauty Tools": [
-    "https://images.unsplash.com/photo-1596462502278-27bfdc403348?",
+  "Self-Care Essentials": [
+    "https://images.unsplash.com/photo-1556228720-195a672e8a03?",
     "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?",
+  ],
+  "Beauty Bundles": [
     "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?",
   ],
-  "Travel & Cleanup": [
+
+  // Pets (Wagwell)
+  "Travel & Adventure": [
     "https://images.unsplash.com/photo-1601758124510-52d02ddb7cbd?",
     "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?",
-    "https://images.unsplash.com/photo-1517849845537-4d257902454a?",
   ],
-  "Comfort & Enrichment": [
+  "Feeding Essentials": [
+    "https://images.unsplash.com/photo-1558944351-cfb7eaa395f6?",
+  ],
+  "Grooming": [
+    "https://images.unsplash.com/photo-1516733725897-1aa73b87c8e8?",
+  ],
+  "Comfort & Sleep": [
+    "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?",
+    "https://images.unsplash.com/photo-1534361960057-19889db9621e?",
+  ],
+  "Toys & Enrichment": [
     "https://images.unsplash.com/photo-1534361960057-19889db9621e?",
     "https://images.unsplash.com/photo-1583511655857-d19b40a7a54e?",
+  ],
+  "Pet Wellness": [
     "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?",
   ],
-  Feeding: [
-    "https://images.unsplash.com/photo-1558944351-cfb7eaa395f6?",
-    "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?",
-    "https://images.unsplash.com/photo-1601758174114-e711c0cbaa69?",
+
+  // Fitness (RecoverLab)
+  "Massage Recovery": [
+    "https://images.unsplash.com/photo-1519826310-790ab6143b66?",
   ],
-  Safety: [
-    "https://images.unsplash.com/photo-1507146426996-ef05306b995a?",
-    "https://images.unsplash.com/photo-1517423440428-a5a00ad493e8?",
-    "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?",
+  "Cold Therapy": [
+    "https://images.unsplash.com/photo-1506126613408-eca07ce68773?",
   ],
-  Toys: [
-    "https://images.unsplash.com/photo-1545249390-6bdfa286032f?",
-    "https://images.unsplash.com/photo-1573865526739-10659fec78a5?",
-    "https://images.unsplash.com/photo-1518791841217-8f162f1e1131?",
+  "Mobility": [
+    "https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?",
   ],
-  "Pet Essentials": [
-    "https://images.unsplash.com/photo-1450778869180-41d0601e046e?",
-    "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?",
-    "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?",
+  "Compression": [
+    "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?",
   ],
-  "Home Essentials": [
+  "Sleep Optimization": [
+    "https://images.unsplash.com/photo-1511295742364-927d44afca6b?",
+  ],
+  "Recovery Bundles": [
+    "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?",
+  ],
+
+  // Home (NestTheory)
+  "Kitchen Organization": [
+    "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?",
+  ],
+  "Closet Solutions": [
+    "https://images.unsplash.com/photo-1595428774223-ef52624120d2?",
+  ],
+  "Bathroom Storage": [
+    "https://images.unsplash.com/photo-1584622650111-993a426fbf0a?",
+  ],
+  "Workspace Setup": [
+    "https://images.unsplash.com/photo-1527689368864-3a821dbccc34?",
+  ],
+  "Entryway Essentials": [
+    "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?",
+  ],
+  "Space Saving Products": [
     "https://images.unsplash.com/photo-1513694203232-719a280e022f?",
-    "https://images.unsplash.com/photo-1556228453-efd6c1ff04f6?",
-    "https://images.unsplash.com/photo-1484154218962-a197022b5858?",
   ],
-  "Fitness Gear": [
-    "https://images.unsplash.com/photo-1517836357463-d25dfeac3438?",
-    "https://images.unsplash.com/photo-1518611012118-696072aa579a?",
-    "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?",
+
+  // Automotive (DriveCraft)
+  "Exterior Wash": [
+    "https://images.unsplash.com/photo-1607860108855-64acf2078ed9?",
   ],
+  "Interior Care": [
+    "https://images.unsplash.com/photo-1563720223185-11003d516935?",
+  ],
+  "Paint Protection": [
+    "https://images.unsplash.com/photo-1618843479313-40f8afb4b4d8?",
+  ],
+  "Wheels & Tires": [
+    "https://images.unsplash.com/photo-1580273916550-e323be2ae537?",
+  ],
+  "Detailing Tools": [
+    "https://images.unsplash.com/photo-1507136566006-cfc505b114fc?",
+  ],
+  "Garage Essentials": [
+    "https://images.unsplash.com/photo-1580273916550-e323be2ae537?",
+  ],
+
   Featured: [
     "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?",
     "https://images.unsplash.com/photo-1607083206968-13611e3d76db?",

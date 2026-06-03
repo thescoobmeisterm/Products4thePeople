@@ -788,18 +788,38 @@ tr:last-child td {
 .storefront {
   --store-accent: #247b73;
   --store-soft: #eefaf7;
+  --store-primary: #0F172A;
+  --store-bg: #f8f5f0;
+  --store-text: #151f22;
+  --store-font-heading: 'Manrope', sans-serif;
+  --store-font-body: 'Inter', sans-serif;
   --store-hero:
     linear-gradient(90deg, rgba(17, 25, 29, 0.8), rgba(17, 25, 29, 0.2)),
     url("https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=1600&q=80");
-  background: #f8f5f0;
-  color: #151f22;
+  background: var(--store-bg);
+  color: var(--store-text);
+  font-family: var(--store-font-body), sans-serif;
   min-height: 100vh;
+}
+
+.storefront h1,
+.storefront h2,
+.storefront h3,
+.storefront h4,
+.storefront h5,
+.storefront h6,
+.storefront-brand,
+.hero-content h2,
+.hero-content h1,
+.store-hero h1,
+.store-hero p {
+  font-family: var(--store-font-heading), sans-serif;
 }
 
 .storefront-header {
   align-items: center;
-  background: rgba(248, 245, 240, 0.94);
-  border-bottom: 1px solid rgba(21, 31, 34, 0.1);
+  background: var(--store-header-bg, rgba(248, 245, 240, 0.94));
+  border-bottom: 1px solid var(--store-border, rgba(21, 31, 34, 0.1));
   display: flex;
   justify-content: space-between;
   gap: 18px;
@@ -3254,4 +3274,18 @@ tr:last-child td {
 
 .trust-badge svg {
   color: var(--store-accent, #176c61);
+}
+
+.storefront .secondary {
+  background: transparent;
+  border: 2px solid var(--store-accent);
+  color: var(--store-accent);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.storefront .secondary:hover {
+  background: var(--store-soft);
+  transform: translateY(-1px);
 }

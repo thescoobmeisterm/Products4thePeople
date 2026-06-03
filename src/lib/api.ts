@@ -3,7 +3,7 @@ export type ApiProduct = {
   medusaId?: string;
   name: string;
   niche: string;
-  subdomain: "beauty" | "pets" | "home" | "fitness";
+  subdomain: "beauty" | "pets" | "home" | "fitness" | "automotive";
   costMin: number;
   costMax: number;
   shippingMin: number;
