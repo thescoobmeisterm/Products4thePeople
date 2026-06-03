@@ -711,7 +711,8 @@ tr:last-child td {
 }
 
 .modal {
-  background: #fff;
+  background: var(--store-card-bg, #fff);
+  color: var(--store-card-text, #172023);
   border-radius: 8px;
   box-shadow: 0 30px 80px rgba(17, 25, 29, 0.24);
   max-height: min(820px, 92vh);
@@ -814,6 +815,22 @@ tr:last-child td {
 .store-hero h1,
 .store-hero p {
   font-family: var(--store-font-heading), sans-serif;
+}
+
+.storefront h1,
+.storefront h2,
+.storefront h3,
+.storefront h4,
+.storefront h5,
+.storefront h6 {
+  color: var(--store-text, inherit);
+}
+
+.storefront input,
+.storefront textarea,
+.storefront select {
+  background: #ffffff;
+  color: #11191d;
 }
 
 .storefront-header {
@@ -1281,8 +1298,9 @@ tr:last-child td {
 
 .shop-card,
 .checkout-panel {
-  background: #fff;
-  border: 1px solid #e0d9ce;
+  background: var(--store-card-bg, #fff);
+  color: var(--store-card-text, #172023);
+  border: 1px solid var(--store-border, #e0d9ce);
   border-radius: 8px;
   overflow: hidden;
 }
@@ -1348,7 +1366,8 @@ tr:last-child td {
 }
 
 .shop-card p {
-  color: #59676b;
+  color: var(--store-card-text, #59676b);
+  opacity: 0.78;
   line-height: 1.5;
 }
 
@@ -1411,7 +1430,7 @@ tr:last-child td {
 }
 
 .checkout-empty strong {
-  color: #151f22;
+  color: inherit;
 }
 
 .checkout-empty span {
@@ -1463,7 +1482,7 @@ tr:last-child td {
 }
 
 .totals strong {
-  color: #151f22;
+  color: inherit;
 }
 
 .checkout-form {
@@ -1591,7 +1610,7 @@ tr:last-child td {
 }
 
 .quick-view-stats strong {
-  color: #151f22;
+  color: inherit;
   font-size: 1.12rem;
 }
 
@@ -1781,9 +1800,9 @@ tr:last-child td {
 
 .related-card {
   align-items: stretch;
-  background: #fff;
-  border-color: #e0d9ce;
-  color: #151f22;
+  background: var(--store-card-bg, #fff);
+  border-color: var(--store-border, #e0d9ce);
+  color: var(--store-card-text, #151f22);
   display: grid;
   justify-content: stretch;
   min-height: 0;

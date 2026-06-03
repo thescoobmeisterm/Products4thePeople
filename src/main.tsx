@@ -2604,6 +2604,8 @@ function Storefront({
           "--store-header-bg": config.backgroundColor + "f0",
           "--store-border": config.textColor + "1a",
           "--store-hero": `linear-gradient(90deg, rgba(17, 25, 29, 0.8), rgba(17, 25, 29, 0.18)), url(${config.heroImage})`,
+          "--store-card-bg": activeNiche === "fitness" || activeNiche === "automotive" ? (config.secondaryColor || "#111827") : "#ffffff",
+          "--store-card-text": config.textColor,
         } as React.CSSProperties
       }
     >
