@@ -885,7 +885,7 @@ function App() {
       <AdminLogin
         onLogin={loginAdmin}
         onStorefront={() => {
-          window.location.hash = "#general";
+          window.location.hash = "#products4thepeople";
           setView("storefront");
         }}
       />
@@ -934,7 +934,7 @@ function App() {
           </div>
           <div className="topbar-actions">
             <button type="button" onClick={() => {
-              window.location.hash = "#general";
+              window.location.hash = "#products4thepeople";
               setView("storefront");
             }}>
               <ShoppingBag size={17} />
@@ -2189,7 +2189,7 @@ function Storefront({
   React.useEffect(() => {
     if (!detailProductId) return;
     if (!products.some((product) => product.id === detailProductId)) {
-      window.location.hash = `#${activeNiche}`;
+      window.location.hash = `#${modeToHash[activeNiche]}`;
     }
   }, [activeNiche, detailProductId, products]);
 
@@ -2339,7 +2339,7 @@ function Storefront({
     setActiveNiche(mode);
     setActiveSubcategory("All");
     setConfirmation("");
-    window.location.hash = `#${mode}`;
+    window.location.hash = `#${modeToHash[mode]}`;
   };
 
   const openProduct = (product: Product) => {
@@ -3000,7 +3000,7 @@ function Storefront({
           products={products}
           quantity={productQuantities[detailProduct.id] || 1}
           onBack={() => {
-            window.location.hash = `#${detailProduct.subdomain}`;
+            window.location.hash = `#${modeToHash[detailProduct.subdomain]}`;
           }}
           onOpenProduct={openProduct}
           onQuantityChange={(quantity) =>
@@ -4438,10 +4438,44 @@ function isStorefrontHash(hash: string) {
   return !isAdmin;
 }
 
+const modeToHash: Record<StorefrontMode, string> = {
+  general: "products4thepeople",
+  beauty: "glowtheory",
+  pets: "wagwell",
+  home: "nesttheory",
+  fitness: "recoverlab",
+  automotive: "drivecraft",
+};
+
+const hashToMode: Record<string, StorefrontMode> = {
+  products4thepeople: "general",
+  glowtheory: "beauty",
+  wagwell: "pets",
+  nesttheory: "home",
+  recoverlab: "fitness",
+  drivecraft: "automotive",
+  general: "general",
+  beauty: "beauty",
+  pets: "pets",
+  home: "home",
+  fitness: "fitness",
+  automotive: "automotive",
+};
+
+function getStorefrontModeFromHostname(): StorefrontMode {
+  const host = window.location.hostname.toLowerCase();
+  if (host.startsWith("beauty") || host.startsWith("glowtheory")) return "beauty";
+  if (host.startsWith("pets") || host.startsWith("wagwell")) return "pets";
+  if (host.startsWith("home") || host.startsWith("nesttheory")) return "home";
+  if (host.startsWith("fitness") || host.startsWith("recoverlab")) return "fitness";
+  if (host.startsWith("automotive") || host.startsWith("drivecraft")) return "automotive";
+  return "general";
+}
+
 function getStorefrontModeFromHash(): StorefrontMode {
   const normalized = window.location.hash.replace("#", "").toLowerCase();
-  if (storefrontHashes.includes(normalized as StorefrontMode)) return normalized as StorefrontMode;
-  return "general";
+  if (hashToMode[normalized]) return hashToMode[normalized];
+  return getStorefrontModeFromHostname();
 }
 
 function getProductIdFromHash() {
