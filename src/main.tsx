@@ -2269,6 +2269,14 @@ function StoreDialog({
             />
           </Field>
 
+          <Field label="Logo URL / Path">
+            <input
+              value={form.logo || ""}
+              onChange={(e) => setField("logo", e.target.value)}
+              placeholder="e.g. ./Logos/Product4thePeople_Logo.png or https://example.com/logo.png"
+            />
+          </Field>
+
           <Field label="Accent Color">
             <div style={{ display: 'flex', gap: '8px' }}>
               <input
