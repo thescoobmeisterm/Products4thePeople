@@ -870,6 +870,26 @@ tr:last-child td {
   min-height: 36px;
 }
 
+.storefront-header nav a {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #d5dde2;
+  border-radius: 8px;
+  color: #172023;
+  display: inline-flex;
+  font-weight: 850;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 13px;
+  box-sizing: border-box;
+}
+
+.storefront-header nav a:hover {
+  background: #f0f3f5;
+  color: var(--store-accent, #176c61);
+}
+
+
 .storefront .secondary {
   background: color-mix(in srgb, var(--store-accent), transparent 85%);
   color: var(--store-accent);
