@@ -70,7 +70,7 @@ type Product = {
   medusaId?: string;
   name: string;
   niche: string;
-  subdomain: Niche;
+  subdomain: string;
   costMin: number;
   costMax: number;
   shippingMin: number;
@@ -115,7 +115,7 @@ type Order = {
 
 type OrderDraft = Omit<Order, "id" | "createdAt" | "status">;
 
-type StorefrontMode = "general" | Niche;
+type StorefrontMode = string;
 
 type MarketingLead = {
   id: string;
@@ -170,6 +170,7 @@ type StorefrontNicheConfig = {
   ctaText: string;
   secondaryCtaText?: string;
   logo?: string;
+  status?: "draft" | "review" | "active";
 };
 
 const medusaConfigKey = "p4tp-medusa-connection";
@@ -396,6 +397,7 @@ const seedProducts: Product[] = [
 
 const navItems = [
   ["Dashboard", LayoutDashboard],
+  ["Stores", Store],
   ["Products", Package],
   ["Imports", Import],
   ["Orders", ClipboardList],
@@ -409,7 +411,7 @@ const navItems = [
 function makeProduct(
   name: string,
   niche: string,
-  subdomain: Niche,
+  subdomain: string,
   costMin: number,
   costMax: number,
   shippingMin: number,
@@ -445,18 +447,93 @@ function makeProduct(
 
 function App() {
   const [products, setProducts] = React.useState<Product[]>(seedProducts);
+  const [stores, setStores] = React.useState<Record<string, StorefrontNicheConfig>>(() => {
+    try {
+      const stored = localStorage.getItem("p4tp-stores-config");
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error("Failed to parse stores config:", e);
+    }
+    const initialStores = { ...storefrontNiches };
+    Object.keys(initialStores).forEach((key) => {
+      if (!initialStores[key].status) {
+        initialStores[key].status = "active";
+      }
+    });
+    return initialStores;
+  });
+
   const [orders, setOrders] = React.useState<Order[]>([]);
   const [marketingLeads, setMarketingLeads] = React.useState<MarketingLead[]>(() => loadMarketingLeads());
   const [abandonedCarts, setAbandonedCarts] = React.useState<AbandonedCart[]>(() => loadAbandonedCarts());
   const [view, setView] = React.useState(() => (isStorefrontHash(window.location.hash) ? "storefront" : "admin"));
   const [isAdminAuthed, setIsAdminAuthed] = React.useState(() => loadAdminSession());
-  const [activeNiche, setActiveNiche] = React.useState<"all" | Niche>("all");
+  const [activeNiche, setActiveNiche] = React.useState<string>("all");
   const [query, setQuery] = React.useState("");
   const [editingProduct, setEditingProduct] = React.useState<Product | null>(null);
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [notice, setNotice] = React.useState("Connecting to backend storage.");
   const [adminTab, setAdminTab] = React.useState("dashboard");
   const [dbContacts, setDbContacts] = React.useState<any[]>([]);
+
+  // Stores Manager Dialog States & Handlers
+  const [editingStoreKey, setEditingStoreKey] = React.useState<string | null>(null);
+  const [isStoreFormOpen, setIsStoreFormOpen] = React.useState(false);
+
+  const saveStore = (key: string, storeData: StorefrontNicheConfig) => {
+    setStores((current) => {
+      const copy = { ...current, [key]: storeData };
+      return copy;
+    });
+    setEditingStoreKey(null);
+    setIsStoreFormOpen(false);
+    setNotice(`Store "${storeData.label}" successfully saved.`);
+  };
+
+  const deleteStore = (key: string) => {
+    if (["general", "beauty", "pets", "home", "fitness", "automotive"].includes(key)) {
+      setNotice("Safety Alert: Default system stores cannot be deleted.");
+      return;
+    }
+    if (window.confirm(`Are you sure you want to delete the store "${stores[key]?.label || key}"? This cannot be undone.`)) {
+      setStores((current) => {
+        const copy = { ...current };
+        delete copy[key];
+        return copy;
+      });
+      setNotice(`Store "${key}" deleted.`);
+    }
+  };
+
+  // Persist stores changes to localStorage
+  React.useEffect(() => {
+    localStorage.setItem("p4tp-stores-config", JSON.stringify(stores));
+  }, [stores]);
+
+  // Auto-switch empty Active stores to Review status
+  React.useEffect(() => {
+    let updated = false;
+    const newStores = { ...stores };
+    Object.keys(newStores).forEach((key) => {
+      if (key === "general") return;
+      const store = newStores[key];
+      if (store.status === "active") {
+        const activeProductCount = products.filter(
+          (p) => p.subdomain === key && p.status === "Active"
+        ).length;
+        if (activeProductCount === 0) {
+          store.status = "review";
+          updated = true;
+        }
+      }
+    });
+    if (updated) {
+      setStores(newStores);
+      setNotice("Notice: One or more storefronts switched from Active to Review due to having 0 active products.");
+    }
+  }, [products, stores]);
   
   // AliExpress URL Importer States & Handler
   const [aliexpressUrl, setAliexpressUrl] = React.useState("");
@@ -868,6 +945,7 @@ function App() {
       <Storefront
         products={products.filter((product) => product.status === "Active")}
         initialMode={getStorefrontModeFromHash()}
+        stores={stores}
         onBackToAdmin={() => {
           setIsAdminAuthed(loadAdminSession());
           window.location.hash = "#dashboard";
@@ -1556,16 +1634,178 @@ function App() {
             </article>
           </div>
         )}
+
+        {adminTab === "stores" && (
+          <article className="panel" id="stores-manager">
+            <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div>
+                <p>Multi-Store Network</p>
+                <h2>Storefronts Manager</h2>
+              </div>
+              <button 
+                type="button" 
+                className="primary" 
+                onClick={() => { setEditingStoreKey(null); setIsStoreFormOpen(true); }}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Plus size={16} /> Add Store
+              </button>
+            </div>
+            
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e5eaee', color: '#68777d', fontSize: '13px', fontWeight: 700 }}>
+                    <th style={{ padding: '12px 16px' }}>Store Name / Identifier</th>
+                    <th style={{ padding: '12px 16px' }}>Status</th>
+                    <th style={{ padding: '12px 16px' }}>Domain / Host</th>
+                    <th style={{ padding: '12px 16px' }}>Branding</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'center' }}>Active Products</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'center' }}>Total Products</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.keys(stores).map((key) => {
+                    const store = stores[key];
+                    const allProducts = products.filter(p => p.subdomain === key);
+                    const activeProducts = allProducts.filter(p => p.status === "Active");
+                    const isDefault = ["general", "beauty", "pets", "home", "fitness", "automotive"].includes(key);
+                    
+                    let statusColor = "#68777d";
+                    let statusBg = "#f0f3f5";
+                    if (store.status === "active") {
+                      statusColor = "#10b981";
+                      statusBg = "#ecfdf5";
+                    } else if (store.status === "review") {
+                      statusColor = "#f59e0b";
+                      statusBg = "#fffbeb";
+                    }
+                    
+                    return (
+                      <tr key={key} style={{ borderBottom: '1px solid #e5eaee', fontSize: '14.5px' }}>
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                            <div style={{ width: '32px', height: '32px', borderRadius: '6px', background: '#f7f9fa', border: '1px solid #dce3e7', display: 'flex', alignItems: 'center', justifySelf: 'center', overflow: 'hidden' }}>
+                              {store.logo ? (
+                                <img src={store.logo} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }} />
+                              ) : (
+                                <Store size={16} style={{ color: '#8c9ba5', margin: '0 auto' }} />
+                              )}
+                            </div>
+                            <div>
+                              <strong>{store.label}</strong>
+                              <div style={{ fontSize: '11px', color: '#8c9ba5' }}>key: {key}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ padding: '14px 16px' }}>
+                          <span style={{ 
+                            display: 'inline-block', 
+                            padding: '4px 10px', 
+                            borderRadius: '12px', 
+                            fontSize: '11.5px', 
+                            fontWeight: 700, 
+                            color: statusColor, 
+                            backgroundColor: statusBg,
+                            textTransform: 'uppercase' 
+                          }}>
+                            {store.status || "draft"}
+                          </span>
+                        </td>
+                        <td style={{ padding: '14px 16px', color: '#4b5563', fontFamily: 'monospace' }}>
+                          {store.host}
+                        </td>
+                        <td style={{ padding: '14px 16px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ 
+                              display: 'inline-block', 
+                              width: '12px', 
+                              height: '12px', 
+                              borderRadius: '50%', 
+                              backgroundColor: store.accentColor || '#2563EB', 
+                              border: '1px solid #d5dde2' 
+                            }} />
+                            <span style={{ fontSize: '12px', color: '#68777d' }}>{store.headingFont} / {store.bodyFont}</span>
+                          </div>
+                        </td>
+                        <td style={{ padding: '14px 16px', textAlign: 'center', fontWeight: 600, color: activeProducts.length > 0 ? '#111827' : '#ef4444' }}>
+                          {activeProducts.length}
+                        </td>
+                        <td style={{ padding: '14px 16px', textAlign: 'center', color: '#4b5563' }}>
+                          {allProducts.length}
+                        </td>
+                        <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                            <button
+                              type="button"
+                              className="secondary"
+                              onClick={() => {
+                                window.location.hash = `#${getHashFromMode(key, stores)}`;
+                                setView("storefront");
+                              }}
+                              style={{ padding: '4px 10px', fontSize: '12.5px', minHeight: '30px' }}
+                            >
+                              Preview
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingStoreKey(key);
+                                setIsStoreFormOpen(true);
+                              }}
+                              style={{ padding: '4px 10px', fontSize: '12.5px', minHeight: '30px' }}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isDefault}
+                              onClick={() => deleteStore(key)}
+                              style={{ 
+                                padding: '4px 10px', 
+                                fontSize: '12.5px', 
+                                minHeight: '30px', 
+                                color: isDefault ? '#c3cbd0' : '#ef4444', 
+                                borderColor: isDefault ? '#e5eaee' : '#fecaca',
+                                cursor: isDefault ? 'not-allowed' : 'pointer'
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        )}
       </section>
 
       {isFormOpen && (
         <ProductDialog
           product={editingProduct}
+          stores={stores}
           onCancel={() => {
             setEditingProduct(null);
             setIsFormOpen(false);
           }}
           onSave={saveProduct}
+        />
+      )}
+
+      {isStoreFormOpen && (
+        <StoreDialog
+          storeKey={editingStoreKey}
+          store={editingStoreKey ? stores[editingStoreKey] : null}
+          onCancel={() => {
+            setEditingStoreKey(null);
+            setIsStoreFormOpen(false);
+          }}
+          onSave={saveStore}
         />
       )}
 
@@ -1784,10 +2024,12 @@ function AiStudioDialog({
 
 function ProductDialog({
   product,
+  stores,
   onCancel,
   onSave,
 }: {
   product: Product | null;
+  stores: Record<string, StorefrontNicheConfig>;
   onCancel: () => void;
   onSave: (product: ProductForm) => void;
 }) {
@@ -1846,12 +2088,13 @@ function ProductDialog({
           <Field label="Niche">
             <input value={form.niche} onChange={(event) => setField("niche", event.target.value)} required />
           </Field>
-          <Field label="Subdomain">
-            <select value={form.subdomain} onChange={(event) => setField("subdomain", event.target.value as Niche)}>
-              <option value="beauty">beauty</option>
-              <option value="pets">pets</option>
-              <option value="home">home</option>
-              <option value="fitness">fitness</option>
+          <Field label="Subdomain / Store">
+            <select value={form.subdomain} onChange={(event) => setField("subdomain", event.target.value)}>
+              {Object.keys(stores).map((key) => (
+                <option key={key} value={key}>
+                  {stores[key].label} ({key})
+                </option>
+              ))}
             </select>
           </Field>
           <Field label="Status">
@@ -1908,9 +2151,243 @@ function ProductDialog({
   );
 }
 
+function StoreDialog({
+  storeKey,
+  store,
+  onCancel,
+  onSave,
+}: {
+  storeKey: string | null;
+  store: StorefrontNicheConfig | null;
+  onCancel: () => void;
+  onSave: (key: string, store: StorefrontNicheConfig) => void;
+}) {
+  const [key, setKey] = React.useState(storeKey || "");
+  const [form, setForm] = React.useState<StorefrontNicheConfig>(() =>
+    store
+      ? { ...store }
+      : {
+          label: "",
+          host: "",
+          eyebrow: "Early bird special",
+          headline: "Premium products curated for you.",
+          offer: "Free shipping over $25",
+          proof: "Handpicked premium products.",
+          accent: "#2563EB",
+          soft: "#EFF6FF",
+          heroImage: "https://images.unsplash.com/photo-1450778869180-41d0601e046e?auto=format&fit=crop&w=1600&q=80",
+          positioning: "Discover Products That Make Life Better",
+          primaryColor: "#0F172A",
+          secondaryColor: "#2563EB",
+          accentColor: "#2563EB",
+          backgroundColor: "#F8FAFC",
+          textColor: "#111827",
+          headingFont: "Manrope",
+          bodyFont: "Inter",
+          collections: ["Best Sellers", "New Arrivals"],
+          heroHeadline: "Discover Products That Make Life Better",
+          heroSubheadline: "We've done the research so you don't have to.",
+          ctaText: "Explore Categories",
+          logo: "./Logos/Product4thePeople_Logo.png",
+          status: "draft",
+        }
+  );
+
+  const setField = <Key extends keyof StorefrontNicheConfig>(keyName: Key, value: StorefrontNicheConfig[Key]) => {
+    setForm((current) => ({ ...current, [keyName]: value }));
+  };
+
+  React.useEffect(() => {
+    if (!storeKey) {
+      setField("host", key ? `${key.toLowerCase()}.products4thepeople.com` : "");
+    }
+  }, [key]);
+
+  return (
+    <div className="modal-backdrop" role="presentation">
+      <form
+        className="modal"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const finalKey = key.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");
+          if (form.label.trim() && finalKey) {
+            onSave(finalKey, {
+              ...form,
+              label: form.label.trim(),
+              host: form.host.trim() || `${finalKey}.products4thepeople.com`,
+            });
+          }
+        }}
+      >
+        <div className="modal-header">
+          <div>
+            <p>Store manager</p>
+            <h2>{storeKey ? `Edit Store: ${store?.label}` : "Add Store"}</h2>
+          </div>
+          <button type="button" onClick={onCancel}>
+            Close
+          </button>
+        </div>
+
+        <div className="form-grid" style={{ maxHeight: '70vh', overflowY: 'auto', padding: '4px' }}>
+          <Field label="Store Identifier / Subdomain (e.g. 'garden')">
+            <input
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              disabled={!!storeKey}
+              placeholder="e.g. garden"
+              required
+            />
+          </Field>
+
+          <Field label="Store Name (Label)">
+            <input
+              value={form.label}
+              onChange={(e) => setField("label", e.target.value)}
+              placeholder="e.g. GardenGrow"
+              required
+            />
+          </Field>
+
+          <Field label="Status">
+            <select
+              value={form.status || "draft"}
+              onChange={(e) => setField("status", e.target.value as any)}
+            >
+              <option value="draft">Draft (Admin only)</option>
+              <option value="review">Review (URL only)</option>
+              <option value="active">Active (Visible to everyone)</option>
+            </select>
+          </Field>
+
+          <Field label="Domain / Hostname">
+            <input
+              value={form.host}
+              onChange={(e) => setField("host", e.target.value)}
+              placeholder="e.g. garden.products4thepeople.com"
+              required
+            />
+          </Field>
+
+          <Field label="Accent Color">
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="color"
+                value={form.accentColor}
+                onChange={(e) => {
+                  setField("accentColor", e.target.value);
+                  setField("accent", e.target.value);
+                  setField("secondaryColor", e.target.value);
+                }}
+                style={{ width: '44px', height: '40px', padding: '0', border: '1px solid #d5dde2', borderRadius: '8px', cursor: 'pointer' }}
+              />
+              <input
+                type="text"
+                value={form.accentColor}
+                onChange={(e) => {
+                  setField("accentColor", e.target.value);
+                  setField("accent", e.target.value);
+                  setField("secondaryColor", e.target.value);
+                }}
+                placeholder="#2563EB"
+                style={{ flex: 1 }}
+              />
+            </div>
+          </Field>
+
+          <Field label="Background Color">
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="color"
+                value={form.backgroundColor}
+                onChange={(e) => setField("backgroundColor", e.target.value)}
+                style={{ width: '44px', height: '40px', padding: '0', border: '1px solid #d5dde2', borderRadius: '8px', cursor: 'pointer' }}
+              />
+              <input
+                type="text"
+                value={form.backgroundColor}
+                onChange={(e) => setField("backgroundColor", e.target.value)}
+                placeholder="#F8FAFC"
+                style={{ flex: 1 }}
+              />
+            </div>
+          </Field>
+
+          <Field label="Text Color">
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="color"
+                value={form.textColor}
+                onChange={(e) => setField("textColor", e.target.value)}
+                style={{ width: '44px', height: '40px', padding: '0', border: '1px solid #d5dde2', borderRadius: '8px', cursor: 'pointer' }}
+              />
+              <input
+                type="text"
+                value={form.textColor}
+                onChange={(e) => setField("textColor", e.target.value)}
+                placeholder="#111827"
+                style={{ flex: 1 }}
+              />
+            </div>
+          </Field>
+
+          <Field label="Heading Font">
+            <select value={form.headingFont} onChange={(e) => setField("headingFont", e.target.value)}>
+              <option value="Manrope">Manrope</option>
+              <option value="Playfair Display">Playfair Display</option>
+              <option value="Bebas Neue">Bebas Neue</option>
+              <option value="Oswald">Oswald</option>
+              <option value="Poppins">Poppins</option>
+              <option value="Inter">Inter</option>
+            </select>
+          </Field>
+
+          <Field label="Body Font">
+            <select value={form.bodyFont} onChange={(e) => setField("bodyFont", e.target.value)}>
+              <option value="Inter">Inter</option>
+              <option value="Poppins">Poppins</option>
+              <option value="Roboto">Roboto</option>
+            </select>
+          </Field>
+
+          <Field label="Headline">
+            <input value={form.headline} onChange={(e) => setField("headline", e.target.value)} />
+          </Field>
+
+          <Field label="Hero Image URL">
+            <input value={form.heroImage} onChange={(e) => setField("heroImage", e.target.value)} />
+          </Field>
+
+          <Field label="Eyebrow Text">
+            <input value={form.eyebrow} onChange={(e) => setField("eyebrow", e.target.value)} />
+          </Field>
+
+          <Field label="Offer Text">
+            <input value={form.offer} onChange={(e) => setField("offer", e.target.value)} />
+          </Field>
+
+          <Field label="Proof / Subtitle">
+            <input value={form.proof} onChange={(e) => setField("proof", e.target.value)} />
+          </Field>
+        </div>
+
+        <div className="modal-actions" style={{ marginTop: '16px' }}>
+          <button type="button" onClick={onCancel}>
+            Cancel
+          </button>
+          <button className="primary" type="submit">
+            Save Store
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 function Storefront({
   products,
   initialMode,
+  stores,
   onBackToAdmin,
   onPlaceOrder,
   onCaptureLead,
@@ -1918,6 +2395,7 @@ function Storefront({
 }: {
   products: Product[];
   initialMode: StorefrontMode;
+  stores: Record<string, StorefrontNicheConfig>;
   onBackToAdmin: () => void;
   onPlaceOrder: (order: OrderDraft) => Promise<string>;
   onCaptureLead: (lead: Omit<MarketingLead, "id" | "createdAt">) => void;
@@ -2043,7 +2521,7 @@ function Storefront({
   };
 
   const abandonedCartSignatureRef = React.useRef("");
-  const config = storefrontNiches[activeNiche];
+  const config = stores[activeNiche] || stores["general"];
 
   React.useEffect(() => {
     const syncStorefrontFromHash = () => {
@@ -2063,11 +2541,22 @@ function Storefront({
   }, [initialMode, products]);
 
   React.useEffect(() => {
+    const currentConfig = stores[activeNiche] || stores["general"];
     trackMarketingEvent("page_view", {
-      page_title: storefrontNiches[activeNiche].host,
+      page_title: currentConfig.host,
       niche: activeNiche,
     });
-  }, [activeNiche]);
+  }, [activeNiche, stores]);
+
+  // Enforce access rules/gates for Draft status
+  React.useEffect(() => {
+    const store = stores[activeNiche];
+    if (store && store.status === "draft" && !currentUser?.isAdmin) {
+      setActiveNiche("general");
+      window.location.hash = "#products4thepeople";
+      addToast(`Access Denied: "${store.label}" is currently in draft mode.`, "error");
+    }
+  }, [activeNiche, stores, currentUser, addToast]);
 
   // Load customer profile, saved preferences, cart, and historical orders on sign-in
   React.useEffect(() => {
@@ -2189,7 +2678,7 @@ function Storefront({
   React.useEffect(() => {
     if (!detailProductId) return;
     if (!products.some((product) => product.id === detailProductId)) {
-      window.location.hash = `#${modeToHash[activeNiche]}`;
+      window.location.hash = `#${getHashFromMode(activeNiche, stores)}`;
     }
   }, [activeNiche, detailProductId, products]);
 
@@ -2339,7 +2828,7 @@ function Storefront({
     setActiveNiche(mode);
     setActiveSubcategory("All");
     setConfirmation("");
-    window.location.hash = `#${modeToHash[mode]}`;
+    window.location.hash = `#${getHashFromMode(mode, stores)}`;
   };
 
   const openProduct = (product: Product) => {
@@ -2696,15 +3185,22 @@ function Storefront({
               >
                 Products4thePeople
               </button>
-              {(["beauty", "pets", "home", "fitness", "automotive"] as const).map((niche) => (
-                <button
-                  key={niche}
-                  type="button"
-                  onClick={() => { switchStorefront(niche); setIsMoreOpen(false); }}
-                >
-                  {storefrontNiches[niche].label}
-                </button>
-              ))}
+              {Object.keys(stores)
+                .filter((key) => key !== "general")
+                .filter((key) => currentUser?.isAdmin || stores[key].status === "active")
+                .map((niche) => {
+                  const s = stores[niche];
+                  const labelSuffix = currentUser?.isAdmin && s.status !== "active" ? ` (${titleCase(s.status || "draft")})` : "";
+                  return (
+                    <button
+                      key={niche}
+                      type="button"
+                      onClick={() => { switchStorefront(niche); setIsMoreOpen(false); }}
+                    >
+                      {s.label}{labelSuffix}
+                    </button>
+                  );
+                })}
             </div>
           </details>
 
@@ -2999,8 +3495,9 @@ function Storefront({
           product={detailProduct}
           products={products}
           quantity={productQuantities[detailProduct.id] || 1}
+          stores={stores}
           onBack={() => {
-            window.location.hash = `#${modeToHash[detailProduct.subdomain]}`;
+            window.location.hash = `#${getHashFromMode(detailProduct.subdomain, stores)}`;
           }}
           onOpenProduct={openProduct}
           onQuantityChange={(quantity) =>
@@ -3623,18 +4120,24 @@ function Storefront({
 
           <div className="footer-column">
             <h4>Explore Brands</h4>
-            {Object.keys(storefrontNiches).map((niche) => (
-              <button
-                key={niche}
-                type="button"
-                onClick={() => {
-                  switchStorefront(niche as StorefrontMode);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-              >
-                {storefrontNiches[niche as StorefrontMode].label}
-              </button>
-            ))}
+            {Object.keys(stores)
+              .filter((key) => currentUser?.isAdmin || stores[key].status === "active")
+              .map((niche) => {
+                const s = stores[niche];
+                const labelSuffix = currentUser?.isAdmin && s.status !== "active" ? ` (${titleCase(s.status || "draft")})` : "";
+                return (
+                  <button
+                    key={niche}
+                    type="button"
+                    onClick={() => {
+                      switchStorefront(niche);
+                      window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                  >
+                    {s.label}{labelSuffix}
+                  </button>
+                );
+              })}
           </div>
 
           <div className="footer-column" style={{ minWidth: '220px' }}>
@@ -3933,6 +4436,7 @@ function ProductDetailPage({
   product,
   products,
   quantity,
+  stores,
   onBack,
   onOpenProduct,
   onQuantityChange,
@@ -3943,6 +4447,7 @@ function ProductDetailPage({
   product: Product;
   products: Product[];
   quantity: number;
+  stores: Record<string, StorefrontNicheConfig>;
   onBack: () => void;
   onOpenProduct: (product: Product) => void;
   onQuantityChange: (quantity: number) => void;
@@ -3964,7 +4469,7 @@ function ProductDetailPage({
   return (
     <section className="product-detail-page" aria-labelledby="product-detail-title">
       <button className="detail-back" type="button" onClick={onBack}>
-        Back to {storefrontNiches[product.subdomain].label}
+        Back to {(stores[product.subdomain] || stores["general"]).label}
       </button>
 
       <div className="product-detail-grid">
@@ -4438,44 +4943,73 @@ function isStorefrontHash(hash: string) {
   return !isAdmin;
 }
 
-const modeToHash: Record<StorefrontMode, string> = {
-  general: "products4thepeople",
-  beauty: "glowtheory",
-  pets: "wagwell",
-  home: "nesttheory",
-  fitness: "recoverlab",
-  automotive: "drivecraft",
-};
+function loadStoresConfig(): Record<string, StorefrontNicheConfig> {
+  try {
+    const stored = localStorage.getItem("p4tp-stores-config");
+    if (stored) {
+      return JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error("Failed to parse stores config:", e);
+  }
+  return storefrontNiches;
+}
 
-const hashToMode: Record<string, StorefrontMode> = {
-  products4thepeople: "general",
-  glowtheory: "beauty",
-  wagwell: "pets",
-  nesttheory: "home",
-  recoverlab: "fitness",
-  drivecraft: "automotive",
-  general: "general",
-  beauty: "beauty",
-  pets: "pets",
-  home: "home",
-  fitness: "fitness",
-  automotive: "automotive",
-};
+function getHashFromMode(mode: string, storesList: Record<string, StorefrontNicheConfig>): string {
+  if (mode === "general") return "products4thepeople";
+  if (mode === "beauty") return "glowtheory";
+  if (mode === "pets") return "wagwell";
+  if (mode === "home") return "nesttheory";
+  if (mode === "fitness") return "recoverlab";
+  if (mode === "automotive") return "drivecraft";
+  return mode;
+}
+
+function getModeFromHash(hash: string, storesList: Record<string, StorefrontNicheConfig>): string {
+  const normalized = hash.toLowerCase();
+  if (normalized === "products4thepeople" || normalized === "general") return "general";
+  if (normalized === "glowtheory" || normalized === "beauty") return "beauty";
+  if (normalized === "wagwell" || normalized === "pets") return "pets";
+  if (normalized === "nesttheory" || normalized === "home") return "home";
+  if (normalized === "recoverlab" || normalized === "fitness") return "fitness";
+  if (normalized === "drivecraft" || normalized === "automotive") return "automotive";
+  
+  if (storesList[normalized]) return normalized;
+  
+  const foundKey = Object.keys(storesList).find(key => {
+    const store = storesList[key];
+    return key.toLowerCase() === normalized ||
+           store.label.toLowerCase().replace(/[^a-z0-9]/g, "") === normalized ||
+           store.host.split(".")[0] === normalized;
+  });
+  
+  return foundKey || "general";
+}
 
 function getStorefrontModeFromHostname(): StorefrontMode {
   const host = window.location.hostname.toLowerCase();
+  const stores = loadStoresConfig();
+  
+  const matchedKey = Object.keys(stores).find(key => {
+    const store = stores[key];
+    return host === store.host.toLowerCase() || host.startsWith(`${key.toLowerCase()}.`);
+  });
+  
+  if (matchedKey) return matchedKey;
+
   if (host.startsWith("beauty") || host.startsWith("glowtheory")) return "beauty";
   if (host.startsWith("pets") || host.startsWith("wagwell")) return "pets";
   if (host.startsWith("home") || host.startsWith("nesttheory")) return "home";
   if (host.startsWith("fitness") || host.startsWith("recoverlab")) return "fitness";
   if (host.startsWith("automotive") || host.startsWith("drivecraft")) return "automotive";
+  
   return "general";
 }
 
 function getStorefrontModeFromHash(): StorefrontMode {
   const normalized = window.location.hash.replace("#", "").toLowerCase();
-  if (hashToMode[normalized]) return hashToMode[normalized];
-  return getStorefrontModeFromHostname();
+  const stores = loadStoresConfig();
+  return getModeFromHash(normalized, stores);
 }
 
 function getProductIdFromHash() {
@@ -4488,7 +5022,7 @@ function toForm(product: Product): ProductForm {
   return form;
 }
 
-function countByNiche(products: Product[], niche: Niche) {
+function countByNiche(products: Product[], niche: string) {
   return products.filter((product) => product.subdomain === niche).length;
 }
 
@@ -4966,11 +5500,19 @@ function value(valueToRead: unknown) {
   return String(valueToRead ?? "").trim();
 }
 
-function normalizeSubdomain(valueToNormalize: string): Niche {
+function normalizeSubdomain(valueToNormalize: string): string {
   const normalized = slugify(valueToNormalize);
   if (normalized.includes("pet")) return "pets";
   if (normalized.includes("home")) return "home";
   if (normalized.includes("fit")) return "fitness";
+  if (normalized.includes("auto") || normalized.includes("car")) return "automotive";
+  
+  const stores = loadStoresConfig();
+  const matchedKey = Object.keys(stores).find(key => 
+    normalized.includes(key.toLowerCase()) || key.toLowerCase().includes(normalized)
+  );
+  if (matchedKey) return matchedKey;
+  
   return "beauty";
 }
 
