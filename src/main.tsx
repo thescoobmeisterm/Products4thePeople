@@ -169,6 +169,7 @@ type StorefrontNicheConfig = {
   heroSubheadline: string;
   ctaText: string;
   secondaryCtaText?: string;
+  logo?: string;
 };
 
 const medusaConfigKey = "p4tp-medusa-connection";
@@ -227,6 +228,7 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     heroSubheadline: "We've done the research so you don't have to.",
     ctaText: "Explore Categories",
     secondaryCtaText: "Shop Best Sellers",
+    logo: "/Logos/Product4thePeople_Logo.png",
   },
   beauty: {
     label: "GlowTheory",
@@ -252,6 +254,7 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     heroSubheadline: "Science-backed beauty tools designed to help you look refreshed, confident, and radiant from home.",
     ctaText: "Shop Collection",
     secondaryCtaText: "View Bundles",
+    logo: "/Logos/GlowTheory_Logo.png",
   },
   pets: {
     label: "Wagwell",
@@ -277,6 +280,7 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     heroSubheadline: "Practical products that help pets stay happy and owners stress less.",
     ctaText: "Explore Gear",
     secondaryCtaText: "View Wellness",
+    logo: "/Logos/WagWell_Logo.png",
   },
   home: {
     label: "NestTheory",
@@ -327,6 +331,7 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     heroSubheadline: "Recovery tools trusted by athletes, lifters, runners, and everyday performers.",
     ctaText: "Start Recovery",
     secondaryCtaText: "View Bundles",
+    logo: "/Logos/RecoverLab_Logo.png",
   },
   automotive: {
     label: "DriveCraft",
@@ -352,6 +357,7 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     heroSubheadline: "Premium detailing products and accessories trusted by enthusiasts.",
     ctaText: "Shop DriveCraft",
     secondaryCtaText: "View Detail Kits",
+    logo: "/Logos/DriveCraft_Logo.png",
   },
 };
 
@@ -2607,8 +2613,18 @@ function Storefront({
           type="button"
           onClick={() => switchStorefront("general")}
         >
-          <Store size={24} />
-          <span>{config.label}</span>
+          {config.logo ? (
+            <img 
+              src={config.logo} 
+              alt={config.label} 
+              style={{ height: "30px", width: "auto", objectFit: "contain", display: "block" }} 
+            />
+          ) : (
+            <>
+              <Store size={24} />
+              <span>{config.label}</span>
+            </>
+          )}
         </button>
         <div className="storefront-search">
           <Search size={15} />
