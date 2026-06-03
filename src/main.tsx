@@ -207,7 +207,7 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     label: "General Store",
     host: "products4thepeople.com",
     eyebrow: "Products for everyday people",
-    headline: "Practical products people actually use, tested niche by niche.",
+    headline: "Practical products people actually use, tested brand by brand.",
     offer: "Free shipping over $25 across the whole store",
     proof: "Beauty and pet best-sellers are ready now. Home and fitness collections are queued for launch testing.",
     accent: "#2563EB",
@@ -288,7 +288,7 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     eyebrow: "Home upgrades",
     headline: "Small home upgrades with everyday utility and easy gift appeal.",
     offer: "Home storefront ready for product testing",
-    proof: "This niche is staged for the next product wave once active home listings are approved.",
+    proof: "This storefront is staged for the next product wave once active NestTheory listings are approved.",
     accent: "#8B7355",
     soft: "#F9F7F2",
     heroImage:
@@ -313,7 +313,7 @@ const storefrontNiches: Record<StorefrontMode, StorefrontNicheConfig> = {
     eyebrow: "Fitness helpers",
     headline: "Fitness helpers for stretching, recovery, hydration, and home workouts.",
     offer: "Fitness storefront ready for product testing",
-    proof: "This niche is staged for the next product wave once active fitness listings are approved.",
+    proof: "This storefront is staged for the next product wave once active RecoverLab listings are approved.",
     accent: "#2563EB",
     soft: "#111827",
     heroImage:
@@ -3588,12 +3588,12 @@ function Storefront({
       <footer className="storefront-footer">
         <div className="footer-grid">
           <div className="footer-column">
-            <h4>Products4thePeople</h4>
+            <h4>{config.label}</h4>
             <p style={{ fontSize: '0.84rem', margin: '8px 0 16px', color: '#8c9ba5' }}>
-              Premium hyper-niche direct-to-consumer store network. Curated quality products at your fingertips.
+              {config.positioning}
             </p>
             <p style={{ fontSize: '0.78rem', color: '#5a6b74' }}>
-              &copy; {new Date().getFullYear()} Products4thePeople. All rights reserved.
+              &copy; {new Date().getFullYear()} {config.label}. All rights reserved.
             </p>
           </div>
 
@@ -3615,7 +3615,7 @@ function Storefront({
           </div>
 
           <div className="footer-column">
-            <h4>Curated Niches</h4>
+            <h4>Explore Brands</h4>
             {Object.keys(storefrontNiches).map((niche) => (
               <button
                 key={niche}
