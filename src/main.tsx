@@ -35,6 +35,10 @@ import {
   User,
   Users,
   X,
+  MessageSquare,
+  Play,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import {
   listMedusaOrders,
@@ -946,6 +950,7 @@ function App() {
         products={products.filter((product) => product.status === "Active")}
         initialMode={getStorefrontModeFromHash()}
         stores={stores}
+        orders={orders}
         onBackToAdmin={() => {
           setIsAdminAuthed(loadAdminSession());
           window.location.hash = "#dashboard";
@@ -2392,10 +2397,65 @@ function StoreDialog({
   );
 }
 
+type ProductReview = {
+  id: string;
+  author: string;
+  rating: number;
+  date: string;
+  text: string;
+  verified: boolean;
+};
+
+function getDefaultReviews(product: Product): ProductReview[] {
+  const isBeauty = product.subdomain === "beauty" || product.subdomain === "glowtheory";
+  const isPets = product.subdomain === "pets" || product.subdomain === "wagwell";
+  const isHome = product.subdomain === "home" || product.subdomain === "nesttheory";
+  const isFitness = product.subdomain === "fitness" || product.subdomain === "recoverlab";
+  const isAuto = product.subdomain === "automotive" || product.subdomain === "drivecraft";
+
+  if (isBeauty) {
+    return [
+      { id: "rev_b1", author: "Sarah M.", rating: 5, date: "May 12, 2026", text: `Absolutely love this ${product.name}! It has become a key part of my daily self-care routine. The quality is top notch.`, verified: true },
+      { id: "rev_b2", author: "Jessica K.", rating: 5, date: "April 28, 2026", text: `Seen so much difference after using this. Shipping was super fast too. Highly recommend to anyone on the fence!`, verified: true },
+      { id: "rev_b3", author: "Elena R.", rating: 4, date: "April 15, 2026", text: `Works exactly as described. Very premium feel. It took a few days to arrive but the customer service was very helpful.`, verified: true },
+    ];
+  } else if (isPets) {
+    return [
+      { id: "rev_p1", author: "David T.", rating: 5, date: "May 20, 2026", text: `My dog is absolutely obsessed with this! Very durable and makes our routine so much easier.`, verified: true },
+      { id: "rev_p2", author: "Megan L.", rating: 5, date: "May 05, 2026", text: `Best purchase I've made for my pet this year. Highly recommended by Wagwell community for a reason.`, verified: true },
+      { id: "rev_p3", author: "Robert H.", rating: 4, date: "April 22, 2026", text: `Good quality construction and feels sturdy. My cat was a bit skeptical at first but now loves it.`, verified: true },
+    ];
+  } else if (isFitness) {
+    return [
+      { id: "rev_f1", author: "Marcus G.", rating: 5, date: "May 25, 2026", text: `Essential recovery gear! The ${product.name} has significantly cut down my soreness after heavy leg days.`, verified: true },
+      { id: "rev_f2", author: "Chloe S.", rating: 5, date: "May 14, 2026", text: `Professional grade results right from my living room. Fits perfectly in my gym bag.`, verified: true },
+      { id: "rev_f3", author: "Alex P.", rating: 4, date: "May 01, 2026", text: `Sturdy build and powerful performance. The battery life is amazing. A must-have for runners.`, verified: true },
+    ];
+  } else if (isHome) {
+    return [
+      { id: "rev_h1", author: "Linda W.", rating: 5, date: "May 18, 2026", text: `Makes organizing my space so satisfying! The design is clean, minimalist, and functions perfectly.`, verified: true },
+      { id: "rev_h2", author: "Daniel B.", rating: 5, date: "May 10, 2026", text: `Brings so much calm and order to the clutter. Will be buying a second set for the guest room!`, verified: true },
+      { id: "rev_h3", author: "Rachel S.", rating: 4, date: "April 30, 2026", text: `Very nice neutral aesthetic. Durable material. Helps keep everything neat and accessible.`, verified: true },
+    ];
+  } else if (isAuto) {
+    return [
+      { id: "rev_a1", author: "Jason C.", rating: 5, date: "May 22, 2026", text: `Incredible detailing results! My paint looks completely showroom ready. Extremely easy to use.`, verified: true },
+      { id: "rev_a2", author: "Brian F.", rating: 5, date: "May 11, 2026", text: `Enthusiast approved! Sturdy bottle, professional quality compound. Makes cleaning a breeze.`, verified: true },
+      { id: "rev_a3", author: "Tom E.", rating: 4, date: "May 03, 2026", text: `Leaves a brilliant shine and nice slick coating. Very satisfied with the DriveCraft collection.`, verified: true },
+    ];
+  }
+  return [
+    { id: "rev_g1", author: "Chris M.", rating: 5, date: "May 15, 2026", text: `Great product, high quality, and fast shipping. Fully satisfied.`, verified: true },
+    { id: "rev_g2", author: "Anna J.", rating: 5, date: "April 29, 2026", text: `Amazing value. Exactly what I was looking for.`, verified: true },
+    { id: "rev_g3", author: "John D.", rating: 4, date: "April 20, 2026", text: `Solid construction, works well. Recommended.`, verified: true },
+  ];
+}
+
 function Storefront({
   products,
   initialMode,
   stores,
+  orders,
   onBackToAdmin,
   onPlaceOrder,
   onCaptureLead,
@@ -2404,6 +2464,7 @@ function Storefront({
   products: Product[];
   initialMode: StorefrontMode;
   stores: Record<string, StorefrontNicheConfig>;
+  orders: Order[];
   onBackToAdmin: () => void;
   onPlaceOrder: (order: OrderDraft) => Promise<string>;
   onCaptureLead: (lead: Omit<MarketingLead, "id" | "createdAt">) => void;
@@ -2498,6 +2559,53 @@ function Storefront({
       addToast(isAdding ? `${product.name} added to wishlist` : `${product.name} removed from wishlist`, "info");
     }
   };
+
+  // Reviews state and helpers for dynamic submission
+  const [customReviews, setCustomReviews] = React.useState<Record<string, ProductReview[]>>(() => {
+    try {
+      const stored = localStorage.getItem("p4tp_custom_reviews");
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  React.useEffect(() => {
+    localStorage.setItem("p4tp_custom_reviews", JSON.stringify(customReviews));
+  }, [customReviews]);
+
+  const getProductReviewsList = React.useCallback((product: Product) => {
+    const defaults = getDefaultReviews(product);
+    const customs = customReviews[product.id] || [];
+    return [...customs, ...defaults];
+  }, [customReviews]);
+
+  const getProductAverageRating = React.useCallback((product: Product) => {
+    const list = getProductReviewsList(product);
+    if (list.length === 0) return 5.0;
+    const sum = list.reduce((acc, r) => acc + r.rating, 0);
+    return Math.round((sum / list.length) * 10) / 10;
+  }, [getProductReviewsList]);
+
+  // Calculate dynamic sales count for best sellers
+  const getProductSalesCount = React.useCallback((productId: string) => {
+    let count = orders
+      ? orders
+          .flatMap(o => o.items || [])
+          .filter(i => i.productId === productId)
+          .reduce((sum, item) => sum + (item.quantity || 0), 0)
+      : 0;
+
+    if (count === 0) {
+      // Seed a realistic deterministic count based on product ID name hash
+      let hash = 0;
+      for (let i = 0; i < productId.length; i++) {
+        hash = productId.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      count = Math.abs(hash % 38) + 4; // Between 4 and 41 sales
+    }
+    return count;
+  }, [orders]);
 
   const wheelSegments = [
     { label: "10% OFF", code: "WHEEL10" },
@@ -3252,6 +3360,38 @@ function Storefront({
         </div>
       </section>
 
+      {/* Trust Bar Component */}
+      <section className="trust-bar" aria-label="Customer trust indicators">
+        <div className="trust-item">
+          <ShieldCheck size={24} />
+          <div className="trust-text">
+            <strong>Secure Checkout</strong>
+            <span>SSL encrypted payments</span>
+          </div>
+        </div>
+        <div className="trust-item">
+          <RotateCcw size={24} />
+          <div className="trust-text">
+            <strong>30-Day Guarantee</strong>
+            <span>100% money back refund</span>
+          </div>
+        </div>
+        <div className="trust-item">
+          <Truck size={24} />
+          <div className="trust-text">
+            <strong>Fast Shipping</strong>
+            <span>Free delivery over $25</span>
+          </div>
+        </div>
+        <div className="trust-item">
+          <MessageSquare size={24} />
+          <div className="trust-text">
+            <strong>Responsive Support</strong>
+            <span>24/7 dedicated help desk</span>
+          </div>
+        </div>
+      </section>
+
       <section className="email-capture-band" aria-label="Email offers">
         <div>
           <p>Test offer list</p>
@@ -3279,7 +3419,211 @@ function Storefront({
       {confirmation && <div className="store-notice">{confirmation}</div>}
 
       {!detailProduct && (
-      <section className="store-layout" id="shop">
+        <>
+          {/* Shop By Category Section (General store only) */}
+          {activeNiche === "general" && activeSubcategory === "All" && !searchQuery && (
+            <section className="category-section" aria-label="Shop by category">
+              <h2>Shop By Category</h2>
+              <p className="subtitle">Curated collections vetted for quality and value</p>
+              <div className="category-grid">
+                <button className="category-card" onClick={() => switchStorefront("beauty")} type="button">
+                  <img src="https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=600&q=80" alt="GlowTheory Beauty" />
+                  <div className="category-card-overlay">
+                    <span>GlowTheory</span>
+                    <h3>Beauty & Self-Care</h3>
+                  </div>
+                </button>
+                <button className="category-card" onClick={() => switchStorefront("pets")} type="button">
+                  <img src="https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=600&q=80" alt="Wagwell Pets" />
+                  <div className="category-card-overlay">
+                    <span>Wagwell</span>
+                    <h3>Pet Supplies</h3>
+                  </div>
+                </button>
+                <button className="category-card" onClick={() => switchStorefront("home")} type="button">
+                  <img src="https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=600&q=80" alt="NestTheory Home" />
+                  <div className="category-card-overlay">
+                    <span>NestTheory</span>
+                    <h3>Home Organization</h3>
+                  </div>
+                </button>
+                <button className="category-card" onClick={() => switchStorefront("fitness")} type="button">
+                  <img src="https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80" alt="RecoverLab Fitness" />
+                  <div className="category-card-overlay">
+                    <span>RecoverLab</span>
+                    <h3>Fitness & Recovery</h3>
+                  </div>
+                </button>
+                <button className="category-card" onClick={() => switchStorefront("automotive")} type="button">
+                  <img src="https://images.unsplash.com/photo-1605558202076-1682209015d4?auto=format&fit=crop&w=600&q=80" alt="DriveCraft Automotive" />
+                  <div className="category-card-overlay">
+                    <span>DriveCraft</span>
+                    <h3>Automotive Detailing</h3>
+                  </div>
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* Best Sellers Section */}
+          {activeSubcategory === "All" && !searchQuery && storefrontProducts.length > 0 && (
+            <section className="category-section" aria-label="Trending best sellers" style={{ borderTop: '1px solid var(--store-border, #e5eaee)', paddingTop: '40px' }}>
+              <h2>Trending Best Sellers</h2>
+              <p className="subtitle">Our most popular, customer-favorite products</p>
+              <div className="shop-grid">
+                {storefrontProducts
+                  .slice()
+                  .sort((a, b) => {
+                    if (a.priority === 1 && b.priority !== 1) return -1;
+                    if (b.priority === 1 && a.priority !== 1) return 1;
+                    return getProductSalesCount(b.id) - getProductSalesCount(a.id);
+                  })
+                  .slice(0, 4)
+                  .map((product) => (
+                    <article className="shop-card" key={`best-${product.id}`} style={{ position: 'relative' }}>
+                      <span className="card-badge badge-best-seller">
+                        🔥 {getProductSalesCount(product.id)} Sold
+                      </span>
+                      <button className="product-image product-image-button" type="button" onClick={() => openProduct(product)}>
+                        <img src={getProductImages(product)[0]} alt="" />
+                      </button>
+                      <button
+                        className={`wishlist-btn${wishlist.includes(product.id) ? " wishlisted" : ""}`}
+                        type="button"
+                        onClick={() => toggleWishlist(product.id)}
+                        aria-label={wishlist.includes(product.id) ? "Remove from wishlist" : "Add to wishlist"}
+                      >
+                        <Heart size={16} />
+                      </button>
+                      <div className="shop-card-body">
+                        <span>{product.niche}</span>
+                        <h3>
+                          <button type="button" onClick={() => openProduct(product)}>
+                            {product.name}
+                          </button>
+                        </h3>
+                        <p>{getConsumerCopy(product)}</p>
+                        <div className="shop-price">
+                          <strong>{money(product.retailMin)}</strong>
+                          <small>{product.inventory} in stock</small>
+                        </div>
+                        <div className="shop-actions">
+                          <button type="button" onClick={() => setSelectedProduct(product)}>
+                            Quick view
+                          </button>
+                          <button
+                            className={`primary${addedProductId === product.id ? " added" : ""}`}
+                            type="button"
+                            onClick={() => addToCart(product.id)}
+                          >
+                            {addedProductId === product.id ? (
+                              <><CheckCircle2 size={17} /> Added</>  
+                            ) : (
+                              <><ShoppingCart size={17} /> Add</>  
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))
+                }
+              </div>
+            </section>
+          )}
+
+          {/* UGC Video Simulator Carousel */}
+          {activeSubcategory === "All" && !searchQuery && (
+            <section className="ugc-section" aria-label="Customer product demonstrations">
+              <div className="ugc-section-container">
+                <h2>See It In Action</h2>
+                <p className="subtitle">Real customers, real results. Tap to shop featured gear.</p>
+                <div className="ugc-carousel">
+                  {[
+                    {
+                      id: "ugc_1",
+                      handle: "@glow_beauty_routine",
+                      caption: "Honestly this LED neck lifter is key to my morning routine! ✨",
+                      image: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=400&q=80",
+                      productName: "LED Neck Lift Massager",
+                      tag: "Beauty"
+                    },
+                    {
+                      id: "ugc_2",
+                      handle: "@pup_adventure_life",
+                      caption: "The portable feeding bottle is a lifesaver for roadtrips! 🐶🎒",
+                      image: "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=400&q=80",
+                      productName: "Portable Pet Water Bottle",
+                      tag: "Pets"
+                    },
+                    {
+                      id: "ugc_3",
+                      handle: "@recover_athlete_lab",
+                      caption: "Soreness gone in minutes. Highly recommend this massage roller! 🏋️‍♂️💪",
+                      image: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=400&q=80",
+                      productName: "Medusa Smart Massage Roller",
+                      tag: "Recovery"
+                    },
+                    {
+                      id: "ugc_4",
+                      handle: "@organized_home_nest",
+                      caption: "Finally organized my kitchen drawers! So satisfying 🍳✨",
+                      image: "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=400&q=80",
+                      productName: "Drawer Organizer",
+                      tag: "Kitchen"
+                    },
+                    {
+                      id: "ugc_5",
+                      handle: "@detailing_car_craft",
+                      caption: "Showroom finish using the microfiber spray wash! 🧼🏎️",
+                      image: "https://images.unsplash.com/photo-1507136566006-cfc505b114fc?auto=format&fit=crop&w=400&q=80",
+                      productName: "Microfiber Detailing Spray Wash",
+                      tag: "Garage"
+                    }
+                  ].map((ugc) => {
+                    const matchedProd = products.find(p => p.name.toLowerCase().includes(ugc.productName.toLowerCase()) || ugc.productName.toLowerCase().includes(p.name.toLowerCase()));
+                    return (
+                      <button
+                        key={ugc.id}
+                        className="ugc-card"
+                        type="button"
+                        onClick={() => {
+                          if (matchedProd) {
+                            openProduct(matchedProd);
+                          } else {
+                            addToast(`Opening ${ugc.productName} catalog page`, "info");
+                          }
+                        }}
+                      >
+                        <span className="ugc-tag">{ugc.tag}</span>
+                        <img src={ugc.image} alt="" />
+                        <div className="ugc-play-overlay">
+                          <div className="ugc-play-btn">
+                            <Play size={18} fill="#11191d" style={{ marginLeft: '2px' }} />
+                          </div>
+                        </div>
+                        <div className="ugc-info">
+                          <span className="ugc-handle">{ugc.handle}</span>
+                          <span className="ugc-caption">{ugc.caption}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Brand Mission Section */}
+          {activeSubcategory === "All" && !searchQuery && (
+            <section className="mission-section" aria-label="Our brand mission">
+              <h2>Vetted for Quality. Built for Living.</h2>
+              <p>
+                At {config.label}, we believe in curation over clutter. We source, test, and vet every single product in our catalog to ensure it delivers on construction, durability, and practical utility. When you shop with us, you're shopping products that have been approved by experts and everyday families alike.
+              </p>
+            </section>
+          )}
+
+          <section className="store-layout" id="shop">
         <div>
           <div className="store-section-head">
             <div>
@@ -3321,29 +3665,37 @@ function Storefront({
               </div>
             ) : visibleProducts.map((product) => (
               <article className="shop-card" key={product.id}>
-                {product.priority === 1 && (
-                  <span className="best-seller-badge" style={{
-                    position: 'absolute',
-                    top: '12px',
-                    left: '12px',
-                    zIndex: 3,
-                    background: 'linear-gradient(135deg, #f39c12, #e67e22)',
-                    color: '#fff',
-                    fontSize: '0.68rem',
-                    fontWeight: 800,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    padding: '4px 8px',
-                    borderRadius: '4px',
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    pointerEvents: 'none'
-                  }}>
-                    🔥 Best Seller
-                  </span>
-                )}
+                {(() => {
+                  if (product.inventory > 0 && product.inventory < 20) {
+                    return (
+                      <span className="card-badge badge-limited">
+                        ⚠️ Only {product.inventory} Left
+                      </span>
+                    );
+                  }
+                  if (product.priority === 1) {
+                    return (
+                      <span className="card-badge badge-best-seller">
+                        🔥 Best Seller
+                      </span>
+                    );
+                  }
+                  if (product.priority === 2 || getProductSalesCount(product.id) > 15) {
+                    return (
+                      <span className="card-badge badge-trending">
+                        ⚡ Trending
+                      </span>
+                    );
+                  }
+                  if (product.source === "medusa" || product.id.charCodeAt(product.id.length - 1) % 2 === 0) {
+                    return (
+                      <span className="card-badge badge-new">
+                        ✨ New
+                      </span>
+                    );
+                  }
+                  return null;
+                })()}
                 <button className="product-image product-image-button" type="button" onClick={() => openProduct(product)}>
                   <img src={getProductImages(product)[0]} alt="" />
                 </button>
@@ -3481,8 +3833,23 @@ function Storefront({
             <span>Estimated tax <strong>{money(tax)}</strong></span>
             <span>Total <strong>{money(total)}</strong></span>
           </div>
-          {cartItems.length > 0 && subtotal < 25 && (
-            <p className="checkout-progress">{money(25 - subtotal)} away from free shipping.</p>
+          {cartItems.length > 0 && (
+            <div className="shipping-progress-container" style={{ margin: '12px 0 6px' }}>
+              <div className="shipping-progress-text">
+                {subtotal >= 25 ? (
+                  <span>🎉 <strong>Free Shipping Unlocked!</strong></span>
+                ) : (
+                  <span>Add <strong>{money(25 - subtotal)}</strong> for free shipping</span>
+                )}
+                <span>{Math.min(100, Math.round((subtotal / 25) * 100))}%</span>
+              </div>
+              <div className="shipping-progress-bar-bg">
+                <div 
+                  className="shipping-progress-bar-fill" 
+                  style={{ width: `${Math.min(100, (subtotal / 25) * 100)}%` }} 
+                />
+              </div>
+            </div>
           )}
 
           <form className="checkout-form" onSubmit={submitOrder}>
@@ -3496,6 +3863,7 @@ function Storefront({
         </aside>
         )}
       </section>
+      </>
       )}
 
       {detailProduct && (
@@ -3516,6 +3884,15 @@ function Storefront({
           }}
           isWishlisted={wishlist.includes(detailProduct.id)}
           onToggleWishlist={() => toggleWishlist(detailProduct.id)}
+          getReviewsList={getProductReviewsList}
+          getAverageRating={getProductAverageRating}
+          onAddReview={(productId, review) => {
+            setCustomReviews(current => ({
+              ...current,
+              [productId]: [review, ...(current[productId] || [])]
+            }));
+            addToast("Review submitted successfully! Thank you.", "success");
+          }}
         />
       )}
 
@@ -4199,6 +4576,24 @@ function Storefront({
             </div>
             
             <div className="cart-drawer-body">
+              {cartItems.length > 0 && (
+                <div className="shipping-progress-container">
+                  <div className="shipping-progress-text">
+                    {subtotal >= 25 ? (
+                      <span>🎉 <strong>Congratulations!</strong> You've unlocked Free Shipping!</span>
+                    ) : (
+                      <span>Spend <strong>{money(25 - subtotal)}</strong> more for <strong>FREE SHIPPING</strong></span>
+                    )}
+                    <span>{Math.min(100, Math.round((subtotal / 25) * 100))}%</span>
+                  </div>
+                  <div className="shipping-progress-bar-bg">
+                    <div 
+                      className="shipping-progress-bar-fill" 
+                      style={{ width: `${Math.min(100, (subtotal / 25) * 100)}%` }} 
+                    />
+                  </div>
+                </div>
+              )}
               {cartItems.length === 0 ? (
                 <div className="checkout-empty" style={{ padding: '40px 20px', textAlign: 'center' }}>
                   <ShoppingBag size={32} style={{ marginBottom: '12px', color: '#8c9ba5' }} />
@@ -4312,11 +4707,7 @@ function Storefront({
                   </div>
                 </div>
 
-                {subtotal < 25 && (
-                  <p className="checkout-progress" style={{ fontSize: '0.8rem', color: '#52636a', marginBottom: '12px', textAlign: 'center' }}>
-                    {money(25 - subtotal)} away from free shipping.
-                  </p>
-                )}
+
 
                 <form className="checkout-form" onSubmit={(e) => {
                   submitOrder(e);
@@ -4451,6 +4842,9 @@ function ProductDetailPage({
   onAddToCart,
   isWishlisted,
   onToggleWishlist,
+  getReviewsList,
+  getAverageRating,
+  onAddReview,
 }: {
   product: Product;
   products: Product[];
@@ -4462,17 +4856,84 @@ function ProductDetailPage({
   onAddToCart: (quantity: number) => void;
   isWishlisted: boolean;
   onToggleWishlist: () => void;
+  getReviewsList: (product: Product) => ProductReview[];
+  getAverageRating: (product: Product) => number;
+  onAddReview: (productId: string, review: ProductReview) => void;
 }) {
   const [activeImage, setActiveImage] = React.useState(0);
+  const [activeAccordion, setActiveAccordion] = React.useState<"benefits" | "reviews" | "faq" | null>("benefits");
+  const [showSticky, setShowSticky] = React.useState(false);
+
+  // Review form states
+  const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const [formRating, setFormRating] = React.useState(5);
+  const [formAuthor, setFormAuthor] = React.useState("");
+  const [formText, setFormText] = React.useState("");
+
   const images = getProductImages(product);
   const subcategory = getProductSubcategory(product);
   const relatedProducts = products
     .filter((item) => item.id !== product.id && item.status === "Active" && getProductSubcategory(item) === subcategory)
     .slice(0, 4);
 
+  const reviewsList = getReviewsList(product);
+  const averageRating = getAverageRating(product);
+
   React.useEffect(() => {
     setActiveImage(0);
   }, [product.id]);
+
+  React.useEffect(() => {
+    const handleScroll = () => {
+      // Toggle sticky bar when scrolled past 320px on mobile viewports
+      if (window.scrollY > 320 && window.innerWidth <= 768) {
+        setShowSticky(true);
+      } else {
+        setShowSticky(false);
+      }
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const toggleAccordion = (section: "benefits" | "reviews" | "faq") => {
+    setActiveAccordion(prev => prev === section ? null : section);
+  };
+
+  const handleReviewSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formAuthor.trim() || !formText.trim()) return;
+
+    const newReview: ProductReview = {
+      id: `rev_custom_${Date.now()}`,
+      author: formAuthor.trim(),
+      rating: formRating,
+      date: "Today",
+      text: formText.trim(),
+      verified: true
+    };
+
+    onAddReview(product.id, newReview);
+    
+    // Reset form
+    setFormAuthor("");
+    setFormText("");
+    setFormRating(5);
+    setIsFormOpen(false);
+    
+    // Automatically open reviews tab to show the new review
+    setActiveAccordion("reviews");
+  };
+
+  // Calculate review percentages for bar graphs
+  const totalReviewsCount = reviewsList.length;
+  const ratingDistribution = [0, 0, 0, 0, 0]; // Index 0 represents 5 stars, index 4 represents 1 star
+  reviewsList.forEach(r => {
+    const starIndex = 5 - Math.round(r.rating);
+    if (starIndex >= 0 && starIndex < 5) {
+      ratingDistribution[starIndex]++;
+    }
+  });
 
   return (
     <section className="product-detail-page" aria-labelledby="product-detail-title">
@@ -4503,22 +4964,34 @@ function ProductDetailPage({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>{subcategory}</span>
             {product.priority === 1 && (
-              <span style={{
-                background: 'linear-gradient(135deg, #f39c12, #e67e22)',
-                color: '#fff',
-                fontSize: '0.62rem',
-                fontWeight: 800,
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                display: 'inline-block'
-              }}>
+              <span className="card-badge badge-best-seller" style={{ position: 'relative', top: 'auto', left: 'auto', display: 'inline-flex', padding: '2px 6px', fontSize: '0.62rem' }}>
                 🔥 Best Seller
               </span>
             )}
           </div>
           <h2 id="product-detail-title">{product.name}</h2>
+          
+          {/* Visual Rating Ticker */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '4px 0 12px' }}>
+            <div className="review-stars" style={{ fontSize: '0.9rem' }}>
+              {Array.from({ length: 5 }).map((_, i) => (
+                <span key={i} style={{ color: i < Math.round(averageRating) ? '#f39c12' : '#ccc' }}>★</span>
+              ))}
+            </div>
+            <button 
+              type="button" 
+              onClick={() => {
+                setActiveAccordion("reviews");
+                setTimeout(() => {
+                  document.querySelector(".accordion-container")?.scrollIntoView({ behavior: 'smooth' });
+                }, 100);
+              }}
+              style={{ fontSize: '0.8rem', color: '#52636a', border: 'none', background: 'none', cursor: 'pointer', textDecoration: 'underline', fontWeight: 600 }}
+            >
+              {averageRating} ({totalReviewsCount} Review{totalReviewsCount !== 1 ? 's' : ''})
+            </button>
+          </div>
+
           <p>{getConsumerCopy(product)}</p>
 
           <div className="detail-price-row">
@@ -4560,12 +5033,193 @@ function ProductDetailPage({
           </button>
 
           <div className="detail-notes">
-            {getProductBenefits(product).map((benefit) => (
-              <span key={benefit}>{benefit}</span>
+            {getProductBenefits(product).slice(0, 2).map((benefit) => (
+              <span key={benefit}>✓ {benefit}</span>
             ))}
-            <span>Free shipping over $25</span>
-            <span>Category: {product.niche}</span>
+            <span>✓ Secure Checkout</span>
           </div>
+
+          {/* Expandable Accordion Tabs Section */}
+          <div className="accordion-container">
+            {/* 1. Key Benefits */}
+            <div className="accordion-item">
+              <button className="accordion-header" onClick={() => toggleAccordion("benefits")} type="button">
+                <span>📋 Product Highlights & Benefits</span>
+                {activeAccordion === "benefits" ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+              {activeAccordion === "benefits" && (
+                <div className="accordion-content">
+                  <ul style={{ paddingLeft: '16px', margin: '0 0 10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {getProductBenefits(product).map((benefit, i) => (
+                      <li key={i} style={{ color: '#52636a' }}>
+                        <strong>{benefit}</strong>: Engineered for professional-grade performance and daily reliability.
+                      </li>
+                    ))}
+                    <li>
+                      <strong>Free Shipping</strong>: Automatically qualifies for free shipping (minimum $25 checkout).
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* 2. Customer Reviews */}
+            <div className="accordion-item">
+              <button className="accordion-header" onClick={() => toggleAccordion("reviews")} type="button">
+                <span>⭐ Verified Reviews ({totalReviewsCount})</span>
+                {activeAccordion === "reviews" ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+              {activeAccordion === "reviews" && (
+                <div className="accordion-content">
+                  {/* Reviews Summary Dashboard */}
+                  <div className="reviews-summary">
+                    <div className="rating-score">
+                      <h3>{averageRating}</h3>
+                      <div className="stars">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <span key={i} style={{ color: i < Math.round(averageRating) ? '#f39c12' : '#ccc' }}>★</span>
+                        ))}
+                      </div>
+                      <span>Based on {totalReviewsCount} reviews</span>
+                    </div>
+
+                    <div className="rating-bars">
+                      {[5, 4, 3, 2, 1].map((stars) => {
+                        const count = ratingDistribution[5 - stars];
+                        const percentage = totalReviewsCount > 0 ? Math.round((count / totalReviewsCount) * 100) : 0;
+                        return (
+                          <div className="rating-bar-row" key={stars}>
+                            <span className="label">{stars} star</span>
+                            <div className="rating-bar-bg">
+                              <div className="rating-bar-fill" style={{ width: `${percentage}%` }} />
+                            </div>
+                            <span className="percentage">{percentage}%</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Review writing trigger */}
+                  {!isFormOpen ? (
+                    <button className="write-review-btn" onClick={() => setIsFormOpen(true)} type="button">
+                      ✍️ Write A Product Review
+                    </button>
+                  ) : (
+                    <form className="review-form" onSubmit={handleReviewSubmit}>
+                      <label>Your Overall Rating</label>
+                      <div className="review-star-picker">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button 
+                            key={star} 
+                            type="button" 
+                            className={star <= formRating ? "active" : ""}
+                            onClick={() => setFormRating(star)}
+                            aria-label={`Rate ${star} star`}
+                          >
+                            <span style={{ fontSize: '1.4rem' }}>★</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      <label htmlFor="reviewAuthor">Your Name</label>
+                      <input 
+                        id="reviewAuthor"
+                        value={formAuthor} 
+                        onChange={(e) => setFormAuthor(e.target.value)} 
+                        placeholder="e.g. Alex M." 
+                        required 
+                      />
+
+                      <label htmlFor="reviewText">Review Comments</label>
+                      <textarea 
+                        id="reviewText"
+                        value={formText} 
+                        onChange={(e) => setFormText(e.target.value)} 
+                        placeholder="What did you like or dislike? How is the quality?" 
+                        rows={3} 
+                        required 
+                      />
+
+                      <div className="review-form-actions">
+                        <button className="cancel" type="button" onClick={() => setIsFormOpen(false)}>
+                          Cancel
+                        </button>
+                        <button className="submit" type="submit">
+                          Submit Review
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Reviews List */}
+                  <div className="review-list" style={{ marginTop: '20px' }}>
+                    {reviewsList.map((review) => (
+                      <div className="review-item" key={review.id}>
+                        <div className="review-item-header">
+                          <div className="review-author-info">
+                            <span className="review-author-name">
+                              {review.author}
+                              {review.verified && <span className="verified-badge">✓ Verified Buyer</span>}
+                            </span>
+                            <span className="review-date">{review.date}</span>
+                          </div>
+                          <div className="review-stars">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <span key={i} style={{ color: i < review.rating ? '#f39c12' : '#ccc' }}>★</span>
+                            ))}
+                          </div>
+                        </div>
+                        <p className="review-text">{review.text}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 3. FAQ & Shipping */}
+            <div className="accordion-item">
+              <button className="accordion-header" onClick={() => toggleAccordion("faq")} type="button">
+                <span>🚚 Shipping Policies & Product FAQs</span>
+                {activeAccordion === "faq" ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+              </button>
+              {activeAccordion === "faq" && (
+                <div className="accordion-content" style={{ display: 'flex', flexDirection: 'column', gap: '10px', textAlign: 'left' }}>
+                  <div>
+                    <strong style={{ display: 'block', color: '#11191d', marginBottom: '2px' }}>When will my order ship?</strong>
+                    <span style={{ fontSize: '0.82rem' }}>All orders are processed and shipped from our fulfillment center within 24-48 hours. Shipping usually takes 3 to 7 business days.</span>
+                  </div>
+                  <div>
+                    <strong style={{ display: 'block', color: '#11191d', marginBottom: '2px' }}>How do I track my delivery?</strong>
+                    <span style={{ fontSize: '0.82rem' }}>Once shipped, you will receive a tracking reference code. You can paste this code into the Order Tracking tab in the menu to track milestones in real-time.</span>
+                  </div>
+                  <div>
+                    <strong style={{ display: 'block', color: '#11191d', marginBottom: '2px' }}>What is your return policy?</strong>
+                    <span style={{ fontSize: '0.82rem' }}>We offer a 30-day money-back guarantee. If you are not fully satisfied, return your item in original packaging for a full, hassle-free refund.</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      {/* Mobile Sticky Add-to-Cart Bar */}
+      <div className={`sticky-cart-bar${showSticky ? " visible" : ""}`}>
+        <div className="sticky-cart-info">
+          <img src={images[0]} alt="" />
+          <div className="sticky-cart-text">
+            <strong>{product.name}</strong>
+            <span>{money(product.retailMin)}</span>
+          </div>
+        </div>
+        <div className="sticky-cart-action">
+          <button type="button" onClick={() => onAddToCart(quantity)}>
+            <ShoppingCart size={15} />
+            <span>Add</span>
+          </button>
         </div>
       </div>
 

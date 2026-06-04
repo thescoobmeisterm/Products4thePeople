@@ -3398,3 +3398,760 @@ tr:last-child td {
   border-color: color-mix(in srgb, var(--store-accent) 65%, black 35%);
   transform: translateY(-1px);
 }
+
+/* ==========================================================================
+   Conversion Optimization - Trust Bar
+   ========================================================================== */
+.trust-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  background: var(--store-soft, #f8fafb);
+  border-bottom: 1px solid var(--store-border, #e5eaee);
+  padding: 18px 24px;
+  margin-bottom: 12px;
+}
+
+.trust-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+}
+
+.trust-item svg {
+  color: var(--store-accent, #176c61);
+  flex-shrink: 0;
+}
+
+.trust-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.trust-text strong {
+  font-size: 0.85rem;
+  color: var(--store-card-text, #11191d);
+  font-weight: 700;
+}
+
+.trust-text span {
+  font-size: 0.72rem;
+  color: #52636a;
+}
+
+@media (max-width: 768px) {
+  .trust-bar {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    gap: 12px;
+    padding: 14px 16px;
+    justify-content: flex-start;
+    margin-bottom: 16px;
+  }
+  .trust-item {
+    flex: 0 0 240px;
+    scroll-snap-align: start;
+    background: #fff;
+    border: 1px solid var(--store-border, #e5eaee);
+    padding: 12px 14px;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+}
+
+/* ==========================================================================
+   Conversion Optimization - Shop By Category
+   ========================================================================== */
+.category-section {
+  padding: 40px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.category-section h2 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--store-card-text, #11191d);
+  margin-bottom: 4px;
+  font-family: var(--store-font-heading, inherit);
+}
+
+.category-section p.subtitle {
+  color: #52636a;
+  font-size: 0.92rem;
+  margin-bottom: 20px;
+}
+
+.category-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.category-card {
+  position: relative;
+  height: 220px;
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: pointer;
+  border: none;
+  background: #000;
+  padding: 0;
+  text-align: left;
+}
+
+.category-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.65;
+  transition: transform 0.4s ease, opacity 0.4s ease;
+}
+
+.category-card:hover img {
+  transform: scale(1.04);
+  opacity: 0.75;
+}
+
+.category-card-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.1) 80%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 16px;
+  color: #fff;
+  z-index: 2;
+}
+
+.category-card-overlay h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0 0 2px;
+  color: #fff;
+}
+
+.category-card-overlay span {
+  font-size: 0.75rem;
+  opacity: 0.85;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ==========================================================================
+   Conversion Optimization - UGC Video Carousel
+   ========================================================================== */
+.ugc-section {
+  padding: 40px 24px;
+  background: var(--store-soft, #f8fafb);
+  border-top: 1px solid var(--store-border, #e5eaee);
+  border-bottom: 1px solid var(--store-border, #e5eaee);
+  overflow: hidden;
+}
+
+.ugc-section-container {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.ugc-section h2 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: var(--store-card-text, #11191d);
+  margin-bottom: 4px;
+  font-family: var(--store-font-heading, inherit);
+}
+
+.ugc-section p.subtitle {
+  color: #52636a;
+  font-size: 0.92rem;
+  margin-bottom: 20px;
+}
+
+.ugc-carousel {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding: 10px 4px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.ugc-card {
+  flex: 0 0 170px;
+  height: 280px;
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.06);
+  scroll-snap-align: start;
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  background: #000;
+}
+
+.ugc-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.8;
+  transition: transform 0.3s ease;
+}
+
+.ugc-card:hover img {
+  transform: scale(1.03);
+}
+
+.ugc-play-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+.ugc-play-btn {
+  width: 40px;
+  height: 40px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+  color: #11191d;
+  transition: transform 0.2s ease;
+}
+
+.ugc-card:hover .ugc-play-btn {
+  transform: scale(1.1);
+  background: #fff;
+}
+
+.ugc-info {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 10px;
+  background: linear-gradient(to top, rgba(0,0,0,0.85) 0%, transparent 100%);
+  color: #fff;
+  text-align: left;
+  z-index: 3;
+}
+
+.ugc-handle {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 2px;
+  display: block;
+}
+
+.ugc-caption {
+  font-size: 0.68rem;
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+.ugc-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: var(--store-accent, #176c61);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  z-index: 3;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ==========================================================================
+   Conversion Optimization - Brand Mission
+   ========================================================================== */
+.mission-section {
+  padding: 56px 24px;
+  text-align: center;
+  max-width: 760px;
+  margin: 0 auto;
+  border-bottom: 1px solid var(--store-border, #e5eaee);
+}
+
+.mission-section h2 {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--store-card-text, #11191d);
+  margin-bottom: 10px;
+  font-family: var(--store-font-heading, inherit);
+}
+
+.mission-section p {
+  font-size: 0.98rem;
+  line-height: 1.6;
+  color: #52636a;
+}
+
+/* ==========================================================================
+   Conversion Optimization - Product Details, Tabs, Reviews
+   ========================================================================== */
+.accordion-container {
+  margin-top: 24px;
+  border-top: 1px solid var(--store-border, #e5eaee);
+}
+
+.accordion-item {
+  border-bottom: 1px solid var(--store-border, #e5eaee);
+}
+
+.accordion-header {
+  width: 100%;
+  background: none;
+  border: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 4px;
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--store-card-text, #11191d);
+  cursor: pointer;
+  text-align: left;
+}
+
+.accordion-header:hover {
+  color: var(--store-accent, #176c61);
+}
+
+.accordion-content {
+  padding: 0 4px 14px;
+  font-size: 0.86rem;
+  color: #52636a;
+  line-height: 1.5;
+}
+
+/* Rating Summary Dashboard */
+.reviews-summary {
+  display: flex;
+  gap: 24px;
+  padding: 8px 0 20px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--store-border, #f0f3f5);
+  margin-bottom: 16px;
+}
+
+.rating-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 110px;
+  background: var(--store-soft, #f8fafb);
+  border-radius: 8px;
+  padding: 14px;
+  border: 1px solid var(--store-border, #e5eaee);
+}
+
+.rating-score h3 {
+  font-size: 2.6rem;
+  font-weight: 800;
+  margin: 0;
+  color: var(--store-card-text, #11191d);
+  line-height: 1;
+}
+
+.rating-score .stars {
+  margin: 4px 0;
+  color: #f39c12;
+  display: flex;
+  gap: 2px;
+}
+
+.rating-score span {
+  font-size: 0.74rem;
+  color: #8c9ba5;
+}
+
+.rating-bars {
+  flex: 1;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  justify-content: center;
+}
+
+.rating-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: #52636a;
+}
+
+.rating-bar-row span.label {
+  width: 42px;
+  text-align: right;
+}
+
+.rating-bar-bg {
+  flex: 1;
+  height: 8px;
+  background: #eef1f4;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.rating-bar-fill {
+  height: 100%;
+  background: #f39c12;
+  border-radius: 4px;
+}
+
+.rating-bar-row span.percentage {
+  width: 32px;
+  text-align: left;
+  color: #8c9ba5;
+}
+
+/* Reviews List */
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.review-item {
+  padding: 14px;
+  background: var(--store-soft, #f8fafb);
+  border-radius: 8px;
+  border: 1px solid var(--store-border, #e5eaee);
+  text-align: left;
+}
+
+.review-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+
+.review-author-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.review-author-name {
+  font-weight: 700;
+  font-size: 0.84rem;
+  color: var(--store-card-text, #11191d);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.verified-badge {
+  background: #2ecc71;
+  color: #fff;
+  font-size: 0.58rem;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+
+.review-date {
+  font-size: 0.7rem;
+  color: #8c9ba5;
+}
+
+.review-stars {
+  color: #f39c12;
+  display: flex;
+  gap: 1px;
+}
+
+.review-text {
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #52636a;
+  margin: 4px 0 0;
+}
+
+/* Review Forms */
+.write-review-btn {
+  width: 100%;
+  background: none;
+  border: 1px dashed var(--store-accent, #176c61);
+  color: var(--store-accent, #176c61);
+  padding: 8px;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 10px;
+  font-size: 0.82rem;
+  transition: all 0.2s;
+}
+
+.write-review-btn:hover {
+  background: color-mix(in srgb, var(--store-accent) 6%, transparent);
+}
+
+.review-form {
+  margin-top: 12px;
+  padding: 14px;
+  background: #fff;
+  border: 1px solid var(--store-border, #e5eaee);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+.review-form label {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--store-card-text, #11191d);
+}
+
+.review-form input, .review-form textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--store-border, #e5eaee);
+  border-radius: 6px;
+  font-size: 0.82rem;
+  outline: none;
+  font-family: inherit;
+}
+
+.review-form input:focus, .review-form textarea:focus {
+  border-color: var(--store-accent, #176c61);
+}
+
+.review-star-picker {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.review-star-picker button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #ccc;
+  padding: 2px;
+}
+
+.review-star-picker button.active {
+  color: #f39c12;
+}
+
+.review-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+.review-form-actions button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.review-form-actions button.cancel {
+  background: #f7f9fa;
+  border: 1px solid var(--store-border, #e5eaee);
+  color: #8c9ba5;
+}
+
+.review-form-actions button.submit {
+  background: var(--store-accent, #176c61);
+  color: #fff;
+  border: none;
+}
+
+/* ==========================================================================
+   Conversion Optimization - Mobile Sticky Cart Bar
+   ========================================================================== */
+.sticky-cart-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #fff;
+  border-top: 1px solid var(--store-border, #e5eaee);
+  box-shadow: 0 -3px 12px rgba(0,0,0,0.06);
+  padding: 10px 16px;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  transform: translateY(100%);
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.sticky-cart-bar.visible {
+  transform: translateY(0);
+}
+
+.sticky-cart-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sticky-cart-info img {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #f7f9fa;
+  flex-shrink: 0;
+}
+
+.sticky-cart-text {
+  min-width: 0;
+  text-align: left;
+}
+
+.sticky-cart-text strong {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--store-card-text, #11191d);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sticky-cart-text span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--store-accent, #176c61);
+}
+
+.sticky-cart-action {
+  flex-shrink: 0;
+}
+
+.sticky-cart-action button {
+  background: var(--store-accent, #176c61);
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.sticky-cart-action button:hover {
+  filter: brightness(1.08);
+}
+
+@media (min-width: 769px) {
+  .sticky-cart-bar {
+    display: none !important;
+  }
+}
+
+/* ==========================================================================
+   Conversion Optimization - Shipping Progress Bar
+   ========================================================================== */
+.shipping-progress-container {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--store-border, #f0f3f5);
+  margin-bottom: 10px;
+  text-align: left;
+}
+
+.shipping-progress-text {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #52636a;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.shipping-progress-text strong {
+  color: var(--store-accent, #176c61);
+}
+
+.shipping-progress-bar-bg {
+  width: 100%;
+  height: 6px;
+  background: #eef1f4;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.shipping-progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #f39c12, var(--store-accent, #176c61));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+  width: 0%;
+}
+
+/* ==========================================================================
+   Conversion Optimization - Dynamic Badges
+   ========================================================================== */
+.card-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.badge-best-seller {
+  background: linear-gradient(135deg, #f39c12, #d35400);
+}
+
+.badge-trending {
+  background: linear-gradient(135deg, #00c6ff, #0072ff);
+}
+
+.badge-limited {
+  background: linear-gradient(135deg, #ff416c, #ff4b2b);
+}
+
+.badge-new {
+  background: linear-gradient(135deg, #11998e, #38ef7d);
+}
+
