@@ -39,6 +39,12 @@ import {
   Play,
   ChevronDown,
   ChevronUp,
+  Star,
+  TrendingUp,
+  Gauge,
+  BookOpen,
+  AlertTriangle,
+  Eye,
 } from "lucide-react";
 import {
   listMedusaOrders,
@@ -62,7 +68,21 @@ import {
   updateProductStatus,
   importAliexpress,
   getContacts,
+  getOpportunities,
+  createOpportunity,
+  getOpportunityDetails,
+  updateOpportunity,
+  runGapAnalysis,
+  runDemandResearch,
+  runCompetitorResearch,
+  searchAliExpress,
+  importSupplierProduct,
+  setWatchlistStatus,
+  generateContentForOpportunity,
   type ApiOrder,
+  type ResearchOpportunity,
+  type CompetitorProduct,
+  type SupplierProduct,
 } from "./lib/api";
 import "./styles.css";
 
@@ -403,6 +423,7 @@ const navItems = [
   ["Dashboard", LayoutDashboard],
   ["Stores", Store],
   ["Products", Package],
+  ["Research", Search],
   ["Imports", Import],
   ["Orders", ClipboardList],
   ["Customers", Users],
@@ -1280,6 +1301,10 @@ function App() {
               </table>
             </div>
           </article>
+        )}
+
+        {adminTab === "research" && (
+          <ResearchWorkspace products={products} setProducts={setProducts} setNotice={setNotice} />
         )}
 
         {adminTab === "imports" && (
@@ -6182,6 +6207,1308 @@ function titleCase(text: string) {
   return text
     .toLowerCase()
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+// ==========================================
+// Phase 0: Product Research Tool UI Components
+// ==========================================
+
+interface ResearchWorkspaceProps {
+  products: any[];
+  setProducts: React.Dispatch<React.SetStateAction<any[]>>;
+  setNotice: (notice: string) => void;
+}
+
+function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspaceProps) {
+  const [activeSubTab, setActiveSubTab] = React.useState<"opportunities" | "gaps" | "demand" | "competitors" | "aliexpress">("opportunities");
+  const [opportunities, setOpportunities] = React.useState<ResearchOpportunity[]>([]);
+  const [loadingOpps, setLoadingOpps] = React.useState(false);
+  const [searchQuery, setSearchQuery] = React.useState("");
+  const [nicheFilter, setNicheFilter] = React.useState("all");
+  const [statusFilter, setStatusFilter] = React.useState("all");
+  const [selectedOppId, setSelectedOppId] = React.useState<string | null>(null);
+
+  // AliExpress search states
+  const [aliexpressQuery, setAliexpressQuery] = React.useState("");
+  const [aliexpressResults, setAliexpressResults] = React.useState<SupplierProduct[]>([]);
+  const [searchingAliExpress, setSearchingAliExpress] = React.useState(false);
+  const [importingSupplierId, setImportingSupplierId] = React.useState<string | null>(null);
+  const [importStep, setImportStep] = React.useState(0);
+  const [importingOpportunityId, setImportingOpportunityId] = React.useState<string | undefined>(undefined);
+
+  // Demand states
+  const [manualTrendKeyword, setManualTrendKeyword] = React.useState("");
+  const [manualTrendUrl, setManualTrendUrl] = React.useState("");
+  const [manualTrendNiche, setManualTrendNiche] = React.useState("Beauty");
+
+  // Competitor states
+  const [competitorStoreName, setCompetitorStoreName] = React.useState("");
+  const [competitorProductUrl, setCompetitorProductUrl] = React.useState("");
+  const [competitorPrice, setCompetitorPrice] = React.useState("");
+  const [competitorNiche, setCompetitorNiche] = React.useState("Beauty");
+  const [competitorsList, setCompetitorsList] = React.useState<any[]>([
+    { id: "c1", competitor_name: "GlowSpa Boutique", competitor_url: "https://glowspa.com", niche: "Beauty", product_title: "LED Facial Sculptor", price: 49.99, sales_signal: "High" },
+    { id: "c2", competitor_name: "Pawsitive & Co", competitor_url: "https://pawsitive.com", niche: "Pets", product_title: "Pet Anxiety Water Bowl", price: 24.99, sales_signal: "Moderate" },
+    { id: "c3", competitor_name: "Aesthetic Habitat", competitor_url: "https://aesthetichabitat.com", niche: "Home", product_title: "Sunset Projector Lamp", price: 29.99, sales_signal: "High" }
+  ]);
+
+  const loadOpps = async () => {
+    setLoadingOpps(true);
+    try {
+      const res = await getOpportunities();
+      setOpportunities(res.opportunities || []);
+    } catch (e) {
+      setNotice(e instanceof Error ? `Failed to load opportunities: ${e.message}` : "Failed to load opportunities");
+    } finally {
+      setLoadingOpps(false);
+    }
+  };
+
+  React.useEffect(() => {
+    void loadOpps();
+  }, []);
+
+  const handleGapAnalysis = async () => {
+    setLoadingOpps(true);
+    try {
+      const res = await runGapAnalysis();
+      setNotice(res.message);
+      void loadOpps();
+    } catch (e) {
+      setNotice(e instanceof Error ? `Gap analysis failed: ${e.message}` : "Gap analysis failed");
+    } finally {
+      setLoadingOpps(false);
+    }
+  };
+
+  const handleToggleWatchlist = async (id: string, currentStatus: string) => {
+    try {
+      const isWatched = currentStatus !== "watchlist";
+      await setWatchlistStatus(id, isWatched);
+      setOpportunities(prev => 
+        prev.map(opp => opp.id === id ? { ...opp, status: isWatched ? "watchlist" : "discovered" } : opp)
+      );
+      setNotice(isWatched ? "Added opportunity to watchlist" : "Removed opportunity from watchlist");
+    } catch (e) {
+      setNotice(e instanceof Error ? `Failed to update watchlist: ${e.message}` : "Watchlist update failed");
+    }
+  };
+
+  const handleStatusChange = async (id: string, newStatus: any) => {
+    try {
+      await updateOpportunity(id, { status: newStatus });
+      setOpportunities(prev => 
+        prev.map(opp => opp.id === id ? { ...opp, status: newStatus } : opp)
+      );
+      setNotice(`Opportunity status updated to ${newStatus}`);
+    } catch (e) {
+      setNotice(e instanceof Error ? `Failed to update status: ${e.message}` : "Status update failed");
+    }
+  };
+
+  const handleAliExpressSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!aliexpressQuery.trim()) return;
+    setSearchingAliExpress(true);
+    try {
+      const res = await searchAliExpress(aliexpressQuery);
+      setAliexpressResults(res.suppliers || []);
+      setNotice(`Found ${res.suppliers?.length || 0} AliExpress listings matching "${aliexpressQuery}"`);
+    } catch (e) {
+      setNotice(e instanceof Error ? `Search failed: ${e.message}` : "AliExpress search failed");
+    } finally {
+      setSearchingAliExpress(false);
+    }
+  };
+
+  const triggerImportFlow = async (supplierProductId: string, oppId?: string) => {
+    setImportingSupplierId(supplierProductId);
+    setImportingOpportunityId(oppId);
+    setImportStep(1);
+
+    // Simulate step-by-step intake progress bar
+    const totalSteps = 15;
+    for (let step = 1; step <= totalSteps; step++) {
+      await new Promise(resolve => setTimeout(resolve, 180));
+      setImportStep(step);
+    }
+
+    try {
+      const res = await importSupplierProduct(supplierProductId, oppId);
+      setNotice(res.message);
+      
+      // Update local catalog products list
+      const productRes = await fetch("/api/products");
+      if (productRes.ok) {
+        const prodData = await productRes.json();
+        setProducts(prodData.products || []);
+      }
+
+      // Reload opportunities to sync status
+      void loadOpps();
+      setSelectedOppId(null);
+    } catch (e) {
+      setNotice(e instanceof Error ? `Import workflow failed: ${e.message}` : "Import failed");
+    } finally {
+      setImportingSupplierId(null);
+      setImportingOpportunityId(undefined);
+      setImportStep(0);
+    }
+  };
+
+  const handleAddManualTrend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!manualTrendKeyword.trim()) return;
+
+    try {
+      const nicheMap: Record<string, string> = {
+        "Beauty": "beauty",
+        "Pets": "pets",
+        "Home": "home",
+        "Fitness": "fitness"
+      };
+      
+      await createOpportunity({
+        name: manualTrendKeyword,
+        niche: manualTrendNiche,
+        subdomain: nicheMap[manualTrendNiche] || "beauty",
+        category: "Manual Entry",
+        source: "logged_trend",
+        source_url: manualTrendUrl || `https://trends.google.com/trends/explore?q=${encodeURIComponent(manualTrendKeyword)}`,
+        opportunity_score: 70,
+        demand_score: 75,
+        margin_score: 75,
+        supplier_score: 65,
+        competition_score: 60,
+        brand_fit_score: 80,
+        content_score: 75,
+        risk_score: 10,
+        risk_notes: "Logged manually by administrator"
+      });
+
+      setManualTrendKeyword("");
+      setManualTrendUrl("");
+      setNotice(`Manually logged "${manualTrendKeyword}" as a discovered research opportunity.`);
+      void loadOpps();
+    } catch (e) {
+      setNotice(e instanceof Error ? `Failed to log opportunity: ${e.message}` : "Failed to log opportunity");
+    }
+  };
+
+  const handleAddCompetitor = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!competitorStoreName.trim()) return;
+
+    const newComp = {
+      id: crypto.randomUUID(),
+      competitor_name: competitorStoreName,
+      competitor_url: competitorProductUrl,
+      niche: competitorNiche,
+      product_title: `Competitor product - ${competitorStoreName}`,
+      price: Number(competitorPrice) || 29.99,
+      sales_signal: "Moderate"
+    };
+
+    setCompetitorsList([newComp, ...competitorsList]);
+    setCompetitorStoreName("");
+    setCompetitorProductUrl("");
+    setCompetitorPrice("");
+    setNotice(`Registered competitor store: ${competitorStoreName}`);
+  };
+
+  // Filter opportunities list
+  const filteredOpps = opportunities.filter(opp => {
+    const matchesSearch = opp.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                          (opp.category || "").toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesNiche = nicheFilter === "all" || opp.niche.toLowerCase() === nicheFilter.toLowerCase();
+    const matchesStatus = statusFilter === "all" || opp.status === statusFilter;
+    return matchesSearch && matchesNiche && matchesStatus;
+  });
+
+  // Score badge color helper
+  const getScoreBadgeClass = (score: number) => {
+    if (score >= 75) return "status active"; // Green-ish
+    if (score >= 55) return "status review"; // Yellow-ish
+    return "status draft"; // Grey-ish
+  };
+
+  // Status mapping UI class
+  const getStatusClass = (status: string) => {
+    if (status === "watchlist") return "status review";
+    if (status === "imported_draft") return "status active";
+    if (status === "researching") return "status active";
+    return "status draft";
+  };
+
+  const opportunityMetrics = {
+    total: opportunities.length,
+    watchlist: opportunities.filter(o => o.status === "watchlist").length,
+    gaps: opportunities.filter(o => o.status !== "imported_draft").length,
+    imported: opportunities.filter(o => o.status === "imported_draft").length
+  };
+
+  return (
+    <div style={{ display: 'grid', gap: '20px' }}>
+      {/* Tab Selector Segmented Controls */}
+      <div className="segmented" style={{ marginBottom: '0px' }}>
+        <button className={activeSubTab === "opportunities" ? "active" : ""} onClick={() => setActiveSubTab("opportunities")} type="button">
+          <Gauge size={16} style={{ marginRight: '6px' }} />
+          Opportunity Dashboard
+        </button>
+        <button className={activeSubTab === "gaps" ? "active" : ""} onClick={() => setActiveSubTab("gaps")} type="button">
+          <Layers size={16} style={{ marginRight: '6px' }} />
+          Catalog Gap Finder
+        </button>
+        <button className={activeSubTab === "demand" ? "active" : ""} onClick={() => setActiveSubTab("demand")} type="button">
+          <TrendingUp size={16} style={{ marginRight: '6px' }} />
+          Demand Research
+        </button>
+        <button className={activeSubTab === "competitors" ? "active" : ""} onClick={() => setActiveSubTab("competitors")} type="button">
+          <Users size={16} style={{ marginRight: '6px' }} />
+          Competitor Registry
+        </button>
+        <button className={activeSubTab === "aliexpress" ? "active" : ""} onClick={() => setActiveSubTab("aliexpress")} type="button">
+          <Search size={16} style={{ marginRight: '6px' }} />
+          AliExpress Finder
+        </button>
+      </div>
+
+      {/* ========================================== */}
+      {/* 1. OPPORTUNITY DASHBOARD SUB-TAB */}
+      {/* ========================================== */}
+      {activeSubTab === "opportunities" && (
+        <>
+          <section className="metrics-grid">
+            <Metric icon={Search} label="Opportunities Discovered" value={opportunityMetrics.total.toString()} trend="Continuous evaluations" />
+            <Metric icon={Star} label="Watchlisted Gaps" value={opportunityMetrics.watchlist.toString()} trend="High priority review" />
+            <Metric icon={AlertTriangle} label="Open Catalog Gaps" value={opportunityMetrics.gaps.toString()} trend="Missing niche listings" />
+            <Metric icon={CheckCircle2} label="Imported Drafts" value={opportunityMetrics.imported.toString()} trend="Waiting in catalog review" />
+          </section>
+
+          <article className="panel wide">
+            <div className="panel-header">
+              <div>
+                <p>Catalog Intake Queue</p>
+                <h2>Profitable Product Recommendations</h2>
+              </div>
+              <div className="toolbar">
+                <label className="search">
+                  <Search size={17} />
+                  <input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search gap opportunities"
+                  />
+                </label>
+                <button type="button" onClick={handleGapAnalysis} disabled={loadingOpps} style={{ backgroundColor: '#f3f4f6' }}>
+                  <RotateCcw size={17} />
+                  Run Gap Analysis
+                </button>
+              </div>
+            </div>
+
+            <div className="segmented" style={{ width: '100%', display: 'flex', gap: '8px', padding: '0px', background: 'transparent', border: '0' }}>
+              <select 
+                value={nicheFilter} 
+                onChange={(e) => setNicheFilter(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #dce3e7', borderRadius: '8px', background: '#fff', fontSize: '0.9rem' }}
+              >
+                <option value="all">All Niches</option>
+                <option value="Beauty">Beauty</option>
+                <option value="Pets">Pets</option>
+                <option value="Home">Home</option>
+                <option value="Fitness">Fitness</option>
+              </select>
+              <select 
+                value={statusFilter} 
+                onChange={(e) => setStatusFilter(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #dce3e7', borderRadius: '8px', background: '#fff', fontSize: '0.9rem' }}
+              >
+                <option value="all">All Statuses</option>
+                <option value="discovered">Discovered</option>
+                <option value="watchlist">Watchlist</option>
+                <option value="researching">Researching</option>
+                <option value="imported_draft">Imported Draft</option>
+              </select>
+            </div>
+
+            <div className="table-wrap" style={{ marginTop: '14px' }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Product</th>
+                    <th>Niche / Category</th>
+                    <th>Source Signal</th>
+                    <th>Opp Score</th>
+                    <th>Intake Pipeline Status</th>
+                    <th>Action Plan</th>
+                    <th>Execution</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loadingOpps ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '24px' }}>Loading evaluated product opportunities...</td>
+                    </tr>
+                  ) : filteredOpps.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} style={{ textAlign: 'center', padding: '24px' }}>
+                        No research opportunities found. Click "Run Gap Analysis" to parse missing catalog listings!
+                      </td>
+                    </tr>
+                  ) : filteredOpps.map((opp) => (
+                    <tr key={opp.id}>
+                      <td>
+                        <strong>{opp.name}</strong>
+                        <span>Discovered {new Date(opp.created_at).toLocaleDateString()}</span>
+                      </td>
+                      <td>
+                        <strong>{opp.niche}</strong>
+                        <span>{opp.category || "General"}</span>
+                      </td>
+                      <td>
+                        <a href={opp.source_url} target="_blank" rel="noopener noreferrer" style={{ display: 'inline-flex', alignItems: 'center', color: '#176c61', gap: '4px' }}>
+                          <Globe2 size={14} />
+                          {opp.source === "gap_analysis" ? "Catalog Gap Logs" : (opp.source === "logged_trend" ? "Manual Review" : opp.source || "External")}
+                        </a>
+                      </td>
+                      <td>
+                        <span className={getScoreBadgeClass(opp.opportunity_score)} style={{ width: 'max-content', padding: '4px 10px', fontSize: '0.82rem', fontWeight: 'bold' }}>
+                          {opp.opportunity_score} / 100
+                        </span>
+                      </td>
+                      <td>
+                        <select 
+                          className={`status-select ${opp.status}`}
+                          value={opp.status}
+                          onChange={(e) => handleStatusChange(opp.id, e.target.value)}
+                        >
+                          <option value="discovered">Discovered</option>
+                          <option value="watchlist">Watchlist</option>
+                          <option value="researching">Researching</option>
+                          <option value="imported_draft">Imported Draft</option>
+                        </select>
+                      </td>
+                      <td>
+                        <strong style={{ fontSize: '0.85rem' }}>
+                          {opp.status === "imported_draft" ? "Complete Draft Review" : "Research & import"}
+                        </strong>
+                        <span style={{ fontSize: '0.75rem', marginTop: '2px' }}>
+                          {opp.status === "imported_draft" ? "Available in draft products" : "Analyze suppliers & margins"}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="row-actions">
+                          <button 
+                            type="button" 
+                            onClick={() => handleToggleWatchlist(opp.id, opp.status)} 
+                            title={opp.status === "watchlist" ? "Remove from Watchlist" : "Add to Watchlist"}
+                            style={{ padding: '0 8px', color: opp.status === "watchlist" ? "#eab308" : "#9ca3af" }}
+                          >
+                            <Star size={17} fill={opp.status === "watchlist" ? "#eab308" : "none"} />
+                          </button>
+                          <button 
+                            type="button" 
+                            onClick={() => setSelectedOppId(opp.id)}
+                            style={{ background: '#f3f4f6', border: '1px solid #d1d5db' }}
+                          >
+                            <Eye size={15} style={{ marginRight: '4px' }} />
+                            Details
+                          </button>
+                          {opp.status !== "imported_draft" && (
+                            <button 
+                              className="primary" 
+                              type="button"
+                              onClick={() => {
+                                setAliexpressQuery(opp.name);
+                                setActiveSubTab("aliexpress");
+                                void searchAliExpress(opp.name).then(res => {
+                                  setAliexpressResults(res.suppliers || []);
+                                });
+                              }}
+                            >
+                              Find Suppliers
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+        </>
+      )}
+
+      {/* ========================================== */}
+      {/* 2. CATALOG GAP FINDER SUB-TAB */}
+      {/* ========================================== */}
+      {activeSubTab === "gaps" && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+          <article className="panel">
+            <div className="panel-header">
+              <div>
+                <p>Niche Analysis</p>
+                <h2>Current Catalog Coverage</h2>
+              </div>
+              <Layers size={22} />
+            </div>
+            
+            <div style={{ display: 'grid', gap: '16px' }}>
+              {["Beauty", "Pets", "Home", "Fitness"].map(niche => {
+                const nicheProducts = products.filter(p => p.niche.toLowerCase() === niche.toLowerCase() || p.subdomain?.toLowerCase() === niche.toLowerCase());
+                return (
+                  <div key={niche} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', padding: '14px', borderRadius: '10px' }}>
+                    <div style={{ display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <strong style={{ fontSize: '1rem', color: '#111827' }}>{niche} Storefront</strong>
+                      <span className="status active" style={{ fontSize: '0.75rem' }}>{nicheProducts.length} Active Items</span>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {nicheProducts.length === 0 ? (
+                        <span style={{ fontSize: '0.85rem', color: '#6b7280', italic: 'true' } as any}>No products in catalog yet.</span>
+                      ) : nicheProducts.map(p => (
+                        <span key={p.id} style={{ background: '#fff', border: '1px solid #d1d5db', padding: '4px 10px', borderRadius: '6px', fontSize: '0.8rem', color: '#374151' }}>
+                          {p.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </article>
+
+          <article className="panel">
+            <div className="panel-header">
+              <div>
+                <p>Target Gap Recommendations</p>
+                <h2>Missing Products By Niche</h2>
+              </div>
+              <Plus size={22} />
+            </div>
+
+            <p style={{ fontSize: '0.88rem', color: '#52636a', lineHeight: '1.45', marginBottom: '14px' }}>
+              The following gap items are recommended for dropship test launches. Click <strong>Add to Research</strong> to seed them into the Opportunity Dashboard.
+            </p>
+
+            <div style={{ display: 'grid', gap: '12px' }}>
+              {[
+                { name: "Gua Sha Set", niche: "Beauty", reason: "Entry-level low shipping cost impulse buy" },
+                { name: "Slow Feeder Bowl", niche: "Pets", reason: "High-margin solution-based design" },
+                { name: "Cable Organizers", niche: "Home", reason: "Viral TikTok/Reels home office essential" },
+                { name: "Foam Roller", niche: "Fitness", reason: "Evergreen muscle recovery hero product" },
+                { name: "Pet Camera", niche: "Pets", reason: "Premium high-AOV smart monitoring gear" },
+                { name: "Facial Steamer", niche: "Beauty", reason: "Premium facial skin prep bundle element" },
+                { name: "Sunset Lamp", niche: "Home", reason: "Classic viral bedroom decoration" }
+              ].map(gap => {
+                const oppExists = opportunities.some(o => o.name.toLowerCase() === gap.name.toLowerCase());
+                return (
+                  <div key={gap.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f3f4f6', paddingBottom: '10px' }}>
+                    <div>
+                      <strong style={{ display: 'block', fontSize: '0.92rem', color: '#111827' }}>
+                        {gap.name} <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'normal' }}>({gap.niche})</span>
+                      </strong>
+                      <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{gap.reason}</span>
+                    </div>
+                    
+                    <button 
+                      className={oppExists ? "" : "primary"}
+                      type="button"
+                      disabled={oppExists}
+                      onClick={async () => {
+                        const nicheMap: Record<string, string> = { "Beauty": "beauty", "Pets": "pets", "Home": "home", "Fitness": "fitness" };
+                        await createOpportunity({
+                          name: gap.name,
+                          niche: gap.niche,
+                          subdomain: nicheMap[gap.niche] || "beauty",
+                          category: "Skin Refresh",
+                          source: "gap_finder",
+                          source_url: `https://trends.google.com/trends/explore?q=${encodeURIComponent(gap.name)}`,
+                          opportunity_score: 75,
+                          demand_score: 80,
+                          margin_score: 80,
+                          supplier_score: 70,
+                          competition_score: 65,
+                          brand_fit_score: 85,
+                          content_score: 80,
+                          risk_score: 10,
+                          risk_notes: "Low risk standard gap suggestion."
+                        });
+                        setNotice(`Added "${gap.name}" to Opportunity Dashboard`);
+                        void loadOpps();
+                      }}
+                      style={{ minHeight: '34px', fontSize: '0.82rem' }}
+                    >
+                      {oppExists ? "Research Seeding" : "Add to Research"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </article>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* 3. DEMAND RESEARCH SUB-TAB */}
+      {/* ========================================== */}
+      {activeSubTab === "demand" && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '20px', alignItems: 'start' }}>
+          <article className="panel">
+            <div className="panel-header">
+              <div>
+                <p>Demand Analytics Logs</p>
+                <h2>Simulated Customer Intent Tracking</h2>
+              </div>
+              <TrendingUp size={22} />
+            </div>
+
+            <p style={{ fontSize: '0.88rem', color: '#52636a', lineHeight: '1.45', marginBottom: '14px' }}>
+              We capture search volume queries from the store index storefronts. Search keywords that have zero catalog hits are flagged here.
+            </p>
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Search Query</th>
+                    <th>Weekly Searches</th>
+                    <th>Niche Target</th>
+                    <th>Trend Signal</th>
+                    <th>Catalog Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    { query: "heatless curls hair band", count: 1840, niche: "Beauty", trend: "+45% Rising", status: "Missing (Catalog Gap)" },
+                    { query: "calming dog bed large", count: 1220, niche: "Pets", trend: "+12% Steady", status: "Covered" },
+                    { query: "aesthetic desk drawer inserts", count: 950, niche: "Home", trend: "+28% Rising", status: "Missing (Catalog Gap)" },
+                    { query: "resistance bands with handles", count: 830, niche: "Fitness", trend: "-5% Declining", status: "Covered" },
+                    { query: "led acne treatment spot tool", count: 710, niche: "Beauty", trend: "+60% Hyper-growth", status: "Missing (Catalog Gap)" }
+                  ].map(term => (
+                    <tr key={term.query}>
+                      <td><strong>{term.query}</strong></td>
+                      <td>{term.count.toLocaleString()} queries</td>
+                      <td>{term.niche}</td>
+                      <td style={{ color: term.trend.includes("+") ? '#16a34a' : '#dc2626', fontWeight: 'bold' }}>{term.trend}</td>
+                      <td>
+                        <span className={term.status.includes("Missing") ? "status review" : "status active"}>
+                          {term.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article className="panel">
+            <div className="panel-header">
+              <div>
+                <p>Trend Registry</p>
+                <h2>Manual Social Signal Capture</h2>
+              </div>
+              <BookOpen size={20} />
+            </div>
+
+            <form onSubmit={handleAddManualTrend} className="import-stack">
+              <label className="field">
+                <span>Trend Product Keyword</span>
+                <input 
+                  value={manualTrendKeyword} 
+                  onChange={(e) => setManualTrendKeyword(e.target.value)} 
+                  placeholder="e.g. Microcurrent face device"
+                  required
+                />
+              </label>
+
+              <label className="field">
+                <span>TikTok / Instagram Target URL</span>
+                <input 
+                  value={manualTrendUrl} 
+                  onChange={(e) => setManualTrendUrl(e.target.value)} 
+                  placeholder="https://tiktok.com/@creator/video/..."
+                />
+              </label>
+
+              <label className="field">
+                <span>Assigned Store Niche</span>
+                <select value={manualTrendNiche} onChange={(e) => setManualTrendNiche(e.target.value)}>
+                  <option>Beauty</option>
+                  <option>Pets</option>
+                  <option>Home</option>
+                  <option>Fitness</option>
+                </select>
+              </label>
+
+              <button className="primary full" type="submit">
+                Log Social Trend to Research
+              </button>
+            </form>
+          </article>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* 4. COMPETITOR BENCHMARKING SUB-TAB */}
+      {/* ========================================== */}
+      {activeSubTab === "competitors" && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr', gap: '20px', alignItems: 'start' }}>
+          <article className="panel">
+            <div className="panel-header">
+              <div>
+                <p>Competitor Intelligence</p>
+                <h2>Tracked Competitor Listings</h2>
+              </div>
+              <Users size={22} />
+            </div>
+
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Store Name</th>
+                    <th>Niche / Domain</th>
+                    <th>Product Title</th>
+                    <th>Retail Price</th>
+                    <th>Sales Signal</th>
+                    <th>Actionable Strategy</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {competitorsList.map(comp => (
+                    <tr key={comp.id}>
+                      <td>
+                        <strong>{comp.competitor_name}</strong>
+                        <a href={comp.competitor_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.78rem', color: '#176c61' }}>
+                          Visit Store
+                        </a>
+                      </td>
+                      <td>{comp.niche}</td>
+                      <td>{comp.product_title}</td>
+                      <td><strong>${comp.price}</strong></td>
+                      <td>
+                        <span className={comp.sales_signal === "High" ? "status active" : "status review"}>
+                          {comp.sales_signal} Sales
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ fontSize: '0.82rem', color: '#4b5563' }}>
+                          Offer bundle discount or 2-day delivery promise to differentiate.
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article className="panel">
+            <div className="panel-header">
+              <div>
+                <p>Registry Panel</p>
+                <h2>Register Competitor Store</h2>
+              </div>
+              <Plus size={20} />
+            </div>
+
+            <form onSubmit={handleAddCompetitor} className="import-stack">
+              <label className="field">
+                <span>Competitor Store Name</span>
+                <input 
+                  value={competitorStoreName} 
+                  onChange={(e) => setCompetitorStoreName(e.target.value)} 
+                  placeholder="e.g. SkinLuxury Inc"
+                  required
+                />
+              </label>
+
+              <label className="field">
+                <span>Product Page URL</span>
+                <input 
+                  value={competitorProductUrl} 
+                  onChange={(e) => setCompetitorProductUrl(e.target.value)} 
+                  placeholder="https://competitor.com/products/led-mask"
+                />
+              </label>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <label className="field">
+                  <span>Price Point ($)</span>
+                  <input 
+                    type="number" 
+                    value={competitorPrice} 
+                    onChange={(e) => setCompetitorPrice(e.target.value)} 
+                    placeholder="29.99"
+                  />
+                </label>
+
+                <label className="field">
+                  <span>Niche Store</span>
+                  <select value={competitorNiche} onChange={(e) => setCompetitorNiche(e.target.value)}>
+                    <option>Beauty</option>
+                    <option>Pets</option>
+                    <option>Home</option>
+                    <option>Fitness</option>
+                  </select>
+                </label>
+              </div>
+
+              <button className="primary full" type="submit">
+                Register Competitor
+              </button>
+            </form>
+          </article>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* 5. ALIEXPRESS PRODUCT FINDER SUB-TAB */}
+      {/* ========================================== */}
+      {activeSubTab === "aliexpress" && (
+        <article className="panel wide">
+          <div className="panel-header">
+            <div>
+              <p>Supplier Adapter Database</p>
+              <h2>Search AliExpress Wholesale Directory</h2>
+            </div>
+            <Search size={22} />
+          </div>
+
+          <form onSubmit={handleAliExpressSearch} className="toolbar" style={{ marginBottom: '20px' }}>
+            <label className="search" style={{ width: '100%', maxWidth: '500px' }}>
+              <Search size={17} />
+              <input
+                value={aliexpressQuery}
+                onChange={(e) => setAliexpressQuery(e.target.value)}
+                placeholder="Type query to scan AliExpress (e.g. Gua Sha Set, Dog Harness)"
+              />
+            </label>
+            <button className="primary" type="submit" disabled={searchingAliExpress || !aliexpressQuery.trim()}>
+              {searchingAliExpress ? "Searching Directory..." : "Search AliExpress"}
+            </button>
+          </form>
+
+          {searchingAliExpress ? (
+            <div style={{ textAlign: 'center', padding: '40px' }}>Loading wholesale suppliers and computing scores...</div>
+          ) : aliexpressResults.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px', background: '#f9fafb', borderRadius: '8px', color: '#68777d' }}>
+              Enter search query to scan AliExpress product adapters and view land costs, shipping options, and margins.
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+              {aliexpressResults.map((sup) => {
+                const variants = typeof sup.variants === 'string' ? JSON.parse(sup.variants) : sup.variants;
+                return (
+                  <div key={sup.id} style={{ background: '#fff', border: '1px solid #dce3e7', borderRadius: '10px', display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 4px 6px rgba(0,0,0,0.02)' }}>
+                    <div style={{ height: '180px', background: '#f3f4f6', position: 'relative' }}>
+                      <img 
+                        src={(typeof sup.images === 'string' ? JSON.parse(sup.images) : sup.images)?.[0] || "https://images.unsplash.com/photo-1607083206968-13611e3d76db"} 
+                        alt="Product visual representation"
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      />
+                      <span className="status active" style={{ position: 'absolute', top: '10px', right: '10px', background: '#176c61', color: '#fff', fontWeight: 'bold' }}>
+                        Supplier Score: {sup.supplier_score}
+                      </span>
+                    </div>
+
+                    <div style={{ padding: '16px', flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      <strong style={{ fontSize: '1rem', color: '#111827', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', height: '2.4em', lineHeight: '1.2' } as any}>
+                        {sup.title}
+                      </strong>
+                      
+                      <div style={{ fontSize: '0.85rem', color: '#4b5563' }}>
+                        <strong>Platform store:</strong> {sup.supplier_name}
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.84rem', marginTop: '4px' }}>
+                        <div><strong>Wholesale cost:</strong> ${sup.price_min} - ${sup.price_max}</div>
+                        <div><strong>Shipping:</strong> ${sup.shipping_cost === 0 ? "FREE" : sup.shipping_cost}</div>
+                        <div><strong>Rating:</strong> ⭐ {sup.rating} ({sup.review_count} reviews)</div>
+                        <div><strong>Delivers:</strong> ~{sup.estimated_delivery_days} days</div>
+                      </div>
+
+                      <div style={{ borderTop: '1px solid #f3f4f6', paddingTop: '10px', marginTop: '6px' }}>
+                        <span style={{ display: 'block', fontSize: '0.78rem', textTransform: 'uppercase', color: '#9ca3af', fontWeight: 'bold', marginBottom: '4px' }}>
+                          Available Variants:
+                        </span>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                          {variants?.map((v: any, index: number) => (
+                            <span key={index} style={{ fontSize: '0.75rem', background: '#f3f4f6', padding: '2px 6px', borderRadius: '4px', border: '1px solid #e5e7eb' }}>
+                              {v.color || v.size || v.model || "Default"} (${v.cost})
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div style={{ marginTop: 'auto', paddingTop: '12px' }}>
+                        <button 
+                          className="primary full" 
+                          type="button"
+                          disabled={importingSupplierId === sup.id}
+                          onClick={() => triggerImportFlow(sup.id)}
+                        >
+                          {importingSupplierId === sup.id ? "Intaking Catalog..." : "Import Product Draft"}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </article>
+      )}
+
+      {/* ========================================== */}
+      {/* PRODUCT IMPORT INTAKE PROGRESS BAR CHECKS OVERLAY */}
+      {/* ========================================== */}
+      {importingSupplierId && (
+        <div className="modal-backdrop">
+          <div className="modal" style={{ maxWidth: '480px', padding: '24px', textAlign: 'center' }}>
+            <Sparkles size={36} style={{ color: '#176c61', marginBottom: '14px' }} />
+            <h3>Processing One-Click Import Pipeline</h3>
+            <p style={{ fontSize: '0.88rem', color: '#68777d', marginBottom: '20px' }}>
+              Building product draft and creating supplier adapter mapping.
+            </p>
+
+            <div style={{ height: '8px', width: '100%', background: '#e5e7eb', borderRadius: '999px', overflow: 'hidden', marginBottom: '16px' }}>
+              <div 
+                style={{ 
+                  height: '100%', 
+                  width: `${(importStep / 15) * 100}%`, 
+                  background: '#176c61', 
+                  borderRadius: '999px', 
+                  transition: 'width 0.15s ease-out' 
+                }} 
+              />
+            </div>
+
+            <div style={{ textAlign: 'left', background: '#f9fafb', border: '1px solid #e5e7eb', padding: '12px 16px', borderRadius: '8px', fontSize: '0.84rem', maxHeight: '140px', overflowY: 'auto' }}>
+              <div style={{ fontWeight: 'bold', color: '#176c61', marginBottom: '6px' }}>Pipeline execution:</div>
+              <div style={{ color: importStep >= 1 ? '#111827' : '#9ca3af' }}>{importStep >= 1 ? "✓" : "○"} 1. Fetching AliExpress details...</div>
+              <div style={{ color: importStep >= 3 ? '#111827' : '#9ca3af' }}>{importStep >= 3 ? "✓" : "○"} 2. Saving supplier platform adapter...</div>
+              <div style={{ color: importStep >= 6 ? '#111827' : '#9ca3af' }}>{importStep >= 6 ? "✓" : "○"} 3. Auto-generating SEO titles & descriptions...</div>
+              <div style={{ color: importStep >= 9 ? '#111827' : '#9ca3af' }}>{importStep >= 9 ? "✓" : "○"} 4. Simulating ad copy & UGC scripts hooks...</div>
+              <div style={{ color: importStep >= 12 ? '#111827' : '#9ca3af' }}>{importStep >= 12 ? "✓" : "○"} 5. Computing target retail margins...</div>
+              <div style={{ color: importStep >= 15 ? '#111827' : '#9ca3af' }}>{importStep >= 15 ? "✓" : "○"} 6. Adding draft product into storefronts...</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* DETAILED OPPORTUNITY MODAL VIEW */}
+      {/* ========================================== */}
+      {selectedOppId && (
+        <OpportunityDetailModal 
+          id={selectedOppId} 
+          onClose={() => setSelectedOppId(null)} 
+          onImport={triggerImportFlow} 
+        />
+      )}
+    </div>
+  );
+}
+
+interface DetailModalProps {
+  id: string;
+  onClose: () => void;
+  onImport: (supplierProductId: string, oppId: string) => Promise<void>;
+}
+
+function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
+  const [opportunity, setOpportunity] = React.useState<ResearchOpportunity | null>(null);
+  const [competitors, setCompetitors] = React.useState<CompetitorProduct[]>([]);
+  const [suppliers, setSuppliers] = React.useState<SupplierProduct[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [activeModalTab, setActiveModalTab] = React.useState<"scores" | "copy" | "pricing" | "suppliers">("scores");
+  const [aiContent, setAiContent] = React.useState<any | null>(null);
+  const [generatingAi, setGeneratingAi] = React.useState(false);
+
+  // Editable Margin Calculator values
+  const [calcCost, setCalcCost] = React.useState("5.99");
+  const [calcShipping, setCalcShipping] = React.useState("2.99");
+  const [calcRetail, setCalcRetail] = React.useState("29.99");
+  const [calcCompare, setCalcCompare] = React.useState("49.99");
+
+  const loadDetails = async () => {
+    setLoading(true);
+    try {
+      const res = await getOpportunityDetails(id);
+      setOpportunity(res.opportunity);
+      setCompetitors(res.competitors || []);
+      setSuppliers(res.suppliers || []);
+
+      if (res.suppliers?.length > 0) {
+        const s = res.suppliers[0];
+        setCalcCost(String(s.price_min || "5.99"));
+        setCalcShipping(String(s.shipping_cost || "2.99"));
+      }
+      
+      // Auto-recalculate retail recommendation
+      if (res.opportunity) {
+        const baseCost = res.suppliers?.[0]?.price_min || 6;
+        const baseShip = res.suppliers?.[0]?.shipping_cost || 3;
+        setCalcRetail(String(Math.round((baseCost + baseShip) * 3)));
+        setCalcCompare(String(Math.round((baseCost + baseShip) * 4.5)));
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    void loadDetails();
+  }, [id]);
+
+  const handleGenerateCopy = async () => {
+    setGeneratingAi(true);
+    try {
+      const res = await generateContentForOpportunity(id);
+      setAiContent(res.content);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setGeneratingAi(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="modal-backdrop">
+        <div className="modal" style={{ maxWidth: '500px', padding: '40px', textAlign: 'center' }}>
+          Intaking opportunity matrix configurations...
+        </div>
+      </div>
+    );
+  }
+
+  if (!opportunity) return null;
+
+  // Compute margins
+  const costVal = Number(calcCost) || 0;
+  const shipVal = Number(calcShipping) || 0;
+  const retailVal = Number(calcRetail) || 0;
+  const totalLanded = costVal + shipVal;
+  const profitVal = retailVal - totalLanded;
+  const marginPct = retailVal > 0 ? Math.round((profitVal / retailVal) * 100) : 0;
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: '850px', display: 'flex', flexDirection: 'column', gap: '0px', padding: '0px', overflow: 'hidden' }}>
+        
+        {/* Modal Header */}
+        <div style={{ padding: '20px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <span style={{ fontSize: '0.78rem', textTransform: 'uppercase', color: '#176c61', fontWeight: 'bold' }}>
+              Catalog Research details
+            </span>
+            <h2 style={{ fontSize: '1.4rem', marginTop: '2px' }}>{opportunity.name}</h2>
+          </div>
+          <button 
+            type="button" 
+            onClick={onClose} 
+            style={{ minHeight: '34px', width: '34px', borderRadius: '50%', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Tab Selector */}
+        <div style={{ borderBottom: '1px solid #e5e7eb', display: 'flex', gap: '16px', padding: '0 20px', background: '#fff' }}>
+          <button 
+            type="button" 
+            className={activeModalTab === "scores" ? "primary" : ""}
+            onClick={() => setActiveModalTab("scores")}
+            style={{ border: '0', borderBottom: activeModalTab === "scores" ? '2px solid #176c61' : 'none', minHeight: '44px', borderRadius: '0', background: 'transparent', color: activeModalTab === "scores" ? '#176c61' : '#4b5563', padding: '0 4px' }}
+          >
+            Opportunity Score Breakdown
+          </button>
+          <button 
+            type="button" 
+            className={activeModalTab === "pricing" ? "primary" : ""}
+            onClick={() => setActiveModalTab("pricing")}
+            style={{ border: '0', borderBottom: activeModalTab === "pricing" ? '2px solid #176c61' : 'none', minHeight: '44px', borderRadius: '0', background: 'transparent', color: activeModalTab === "pricing" ? '#176c61' : '#4b5563', padding: '0 4px' }}
+          >
+            Margin Calculator & Competitors
+          </button>
+          <button 
+            type="button" 
+            className={activeModalTab === "copy" ? "primary" : ""}
+            onClick={() => setActiveModalTab("copy")}
+            style={{ border: '0', borderBottom: activeModalTab === "copy" ? '2px solid #176c61' : 'none', minHeight: '44px', borderRadius: '0', background: 'transparent', color: activeModalTab === "copy" ? '#176c61' : '#4b5563', padding: '0 4px' }}
+          >
+            AI Content Previews
+          </button>
+          <button 
+            type="button" 
+            className={activeModalTab === "suppliers" ? "primary" : ""}
+            onClick={() => setActiveModalTab("suppliers")}
+            style={{ border: '0', borderBottom: activeModalTab === "suppliers" ? '2px solid #176c61' : 'none', minHeight: '44px', borderRadius: '0', background: 'transparent', color: activeModalTab === "suppliers" ? '#176c61' : '#4b5563', padding: '0 4px' }}
+          >
+            Wholesale Suppliers
+          </button>
+        </div>
+
+        {/* Modal Content Area */}
+        <div style={{ padding: '24px', overflowY: 'auto', maxHeight: '500px', flex: 1 }}>
+          
+          {/* TAB 1: SCORES BREAKDOWN */}
+          {activeModalTab === "scores" && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', marginBottom: '8px' }}>Research Recommendation Summary</h3>
+                <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '14px', borderRadius: '8px', color: '#166534', fontSize: '0.9rem', lineHeight: '1.5', marginBottom: '16px' }}>
+                  {opportunity.recommendation_summary || "This catalog gap demonstrates highly profitable margins and strong social UGC conversion hooks potential."}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                  {[
+                    { label: "Demand Validation Score", val: opportunity.demand_score },
+                    { label: "Supplier Capacity Score", val: opportunity.supplier_score },
+                    { label: "Gross Margin Profile Score", val: opportunity.margin_score },
+                    { label: "Competition Strength Score", val: opportunity.competition_score },
+                    { label: "Store Brand Fit Score", val: opportunity.brand_fit_score },
+                    { label: "UGC Video Content Score", val: opportunity.content_score }
+                  ].map(sc => (
+                    <div key={sc.label} style={{ border: '1px solid #e5e7eb', padding: '10px 12px', borderRadius: '8px', display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#68777d' }}>{sc.label}</span>
+                      <strong style={{ color: '#111827', fontSize: '1.1rem' }}>{sc.val} / 100</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', padding: '16px', borderRadius: '10px', height: '100%', display: 'flex', flexDirection: 'column', justifyBetween: 'space-between', justifyContent: 'space-between' }}>
+                  <div>
+                    <h3 style={{ fontSize: '1rem', color: '#111827', marginBottom: '8px' }}>Opportunity Score Evaluation</h3>
+                    <div style={{ fontSize: '3rem', fontWeight: 'bold', color: '#176c61', textAlign: 'center', margin: '20px 0' }}>
+                      {opportunity.opportunity_score} <span style={{ fontSize: '1rem', color: '#6b7280', fontWeight: 'normal' }}>/ 100</span>
+                    </div>
+                    <p style={{ fontSize: '0.82rem', color: '#4b5563', textAlign: 'center', lineHeight: '1.4' }}>
+                      Formula evaluates Demand (25%), Margin (20%), Suppliers (15%), Competition (15%), Brand Fit (10%), and Content Potential (10%) with a Risk Penalty.
+                    </p>
+                  </div>
+
+                  <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                    <AlertTriangle size={18} style={{ color: '#ea580c', flex: '0 0 auto', marginTop: '2px' }} />
+                    <div>
+                      <strong style={{ fontSize: '0.85rem', color: '#ea580c', display: 'block' }}>Compliance & Risk Flags</strong>
+                      <span style={{ fontSize: '0.78rem', color: '#4b5563' }}>
+                        {opportunity.risk_notes || "Low risk. Verified standard dropship safety standards."}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: PRICING & MARGINS */}
+          {activeModalTab === "pricing" && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+              <div>
+                <h3 style={{ fontSize: '1.1rem', marginBottom: '12px' }}>Gross Margin Modeler</h3>
+                
+                <div className="import-stack">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <label className="field">
+                      <span>Supplier Cost ($)</span>
+                      <input type="number" step="0.01" value={calcCost} onChange={(e) => setCalcCost(e.target.value)} />
+                    </label>
+                    <label className="field">
+                      <span>Shipping Rate ($)</span>
+                      <input type="number" step="0.01" value={calcShipping} onChange={(e) => setCalcShipping(e.target.value)} />
+                    </label>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <label className="field">
+                      <span>Retail Price ($)</span>
+                      <input type="number" step="0.01" value={calcRetail} onChange={(e) => setCalcRetail(e.target.value)} />
+                    </label>
+                    <label className="field">
+                      <span>Compare-at Price ($)</span>
+                      <input type="number" step="0.01" value={calcCompare} onChange={(e) => setCalcCompare(e.target.value)} />
+                    </label>
+                  </div>
+
+                  <div style={{ background: '#f9fafb', border: '1px solid #dce3e7', borderRadius: '10px', padding: '14px', marginTop: '8px' }}>
+                    <div style={{ display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#68777d' }}>Total Landed Cost:</span>
+                      <strong>${totalLanded.toFixed(2)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', marginBottom: '6px' }}>
+                      <span style={{ fontSize: '0.85rem', color: '#68777d' }}>Estimated Profit:</span>
+                      <strong>${profitVal.toFixed(2)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', borderTop: '1px solid #e5e7eb', paddingTop: '6px', fontWeight: 'bold' }}>
+                      <span style={{ color: '#111827' }}>Gross Markup Margin:</span>
+                      <span style={{ color: marginPct >= 60 ? '#16a34a' : '#d97706' }}>
+                        {marginPct}% {marginPct >= 60 ? "✓ High Profit" : "!"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 style={{ fontSize: '1.1rem', marginBottom: '12px' }}>Competitor Analysis Pages</h3>
+                
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {competitors.length === 0 ? (
+                    <div style={{ background: '#f9fafb', padding: '12px', borderRadius: '8px', border: '1px dashed #c3cbd0', textAlign: 'center', fontSize: '0.85rem', color: '#6b7280' }}>
+                      No competitor listings synced yet. Scan signals above.
+                    </div>
+                  ) : competitors.map(comp => (
+                    <div key={comp.id} style={{ border: '1px solid #e5e7eb', padding: '10px 14px', borderRadius: '8px' }}>
+                      <div style={{ display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <strong style={{ fontSize: '0.9rem' }}>{comp.competitor_name}</strong>
+                        <strong style={{ color: '#176c61' }}>${comp.price}</strong>
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: '#6b7280', marginTop: '2px' }}>{comp.product_title}</div>
+                      <div style={{ fontSize: '0.76rem', color: '#4b5563', marginTop: '4px', italic: 'true' } as any}>
+                        <strong>Competitor offer:</strong> {comp.offer_notes || "None listed"}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: AI CONTENT PREVIEWS */}
+          {activeModalTab === "copy" && (
+            <div>
+              {!aiContent && !generatingAi ? (
+                <div style={{ textAlign: 'center', padding: '24px' }}>
+                  <p style={{ fontSize: '0.9rem', color: '#4b5563', marginBottom: '12px' }}>
+                    Generate optimized marketing copies, title options, benefit bullets lists, and short-form UGC video hooks.
+                  </p>
+                  <button className="primary" type="button" onClick={handleGenerateCopy}>
+                    Generate AI Copywrite Kit
+                  </button>
+                </div>
+              ) : generatingAi ? (
+                <div style={{ textAlign: 'center', padding: '24px' }}>Drafting and formatting AI marketing assets...</div>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  <div>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#111827', margin: '0 0 6px' }}>Store Page Copy</h4>
+                    <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '12px', background: '#f9fafb', fontSize: '0.84rem', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div><strong>Suggested Title:</strong> {aiContent.title}</div>
+                      <hr style={{ border: '0', borderTop: '1px solid #e5e7eb', margin: '6px 0' }} />
+                      <div><strong>Benefit Bullets:</strong></div>
+                      <ul style={{ margin: '0', paddingLeft: '20px', listStyleType: 'disc' }}>
+                        {aiContent.bullets?.map((b: string, i: number) => (
+                          <li key={i} style={{ marginBottom: '4px' }}>{b}</li>
+                        ))}
+                      </ul>
+                      <hr style={{ border: '0', borderTop: '1px solid #e5e7eb', margin: '6px 0' }} />
+                      <div><strong>Short Description:</strong> {aiContent.shortDescription}</div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 'bold', color: '#111827', margin: '0 0 6px' }}>UGC Viral Hooks Scenario</h4>
+                    <div style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '12px', background: '#f9fafb', fontSize: '0.84rem' }}>
+                      <ol style={{ margin: '0', paddingLeft: '20px', display: 'grid', gap: '6px' }}>
+                        {aiContent.hooks?.map((h: string, i: number) => (
+                          <li key={i}>{h}</li>
+                        ))}
+                      </ol>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB 4: WHOLESALE SUPPLIERS */}
+          {activeModalTab === "suppliers" && (
+            <div>
+              <h3 style={{ fontSize: '1.1rem', marginBottom: '12px' }}>AliExpress Wholesale Options</h3>
+              
+              <div style={{ display: 'grid', gap: '14px' }}>
+                {suppliers.length === 0 ? (
+                  <div style={{ background: '#f9fafb', padding: '24px', borderRadius: '8px', border: '1px dashed #c3cbd0', textAlign: 'center', fontSize: '0.88rem', color: '#6b7280' }}>
+                    No AliExpress listings linked to this opportunity. Click "Search AliExpress" in the main workspace directory.
+                  </div>
+                ) : suppliers.map(sup => (
+                  <div key={sup.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '14px', display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb' }}>
+                    <div style={{ maxWidth: '70%' }}>
+                      <strong style={{ fontSize: '0.94rem', color: '#111827', display: 'block' }}>{sup.title}</strong>
+                      <div style={{ fontSize: '0.8rem', color: '#4b5563', marginTop: '4px' }}>
+                        Supplier: {sup.supplier_name} | Rating: ⭐ {sup.rating} | Shipping Cost: ${sup.shipping_cost}
+                      </div>
+                    </div>
+                    
+                    <button 
+                      className="primary"
+                      type="button"
+                      onClick={() => onImport(sup.id, opportunity.id)}
+                      style={{ minHeight: '34px', fontSize: '0.82rem' }}
+                    >
+                      Import this Supplier Option
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+        </div>
+
+        {/* Modal Footer Actions */}
+        <div style={{ padding: '20px', borderTop: '1px solid #e5e7eb', background: '#f9fafb', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+          <button type="button" onClick={onClose} style={{ minHeight: '38px' }}>
+            Close Review
+          </button>
+          {suppliers.length > 0 && opportunity.status !== "imported_draft" && (
+            <button 
+              className="primary" 
+              type="button" 
+              onClick={() => onImport(suppliers[0].id, opportunity.id)}
+              style={{ minHeight: '38px' }}
+            >
+              One-Click Import (Draft product)
+            </button>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+function Metric({
+  icon: Icon,
+  label,
+  value,
+  trend,
+}: {
+  icon: React.ComponentType<any>;
+  label: string;
+  value: string;
+  trend?: string;
+}) {
+  return (
+    <div className="metric-card">
+      <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
+        <span>{label}</span>
+        <Icon size={18} />
+      </div>
+      <strong>{value}</strong>
+      {trend && <small>{trend}</small>}
+    </div>
+  );
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

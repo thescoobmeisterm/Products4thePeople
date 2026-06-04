@@ -47,6 +47,70 @@ export type ApiOrder = ApiOrderInput & {
   createdAt: string;
 };
 
+export type ResearchOpportunity = {
+  id: string;
+  name: string;
+  niche: string;
+  subdomain?: string;
+  category?: string;
+  source?: string;
+  source_url?: string;
+  status: "discovered" | "researching" | "watchlist" | "recommended" | "imported_draft" | "approved" | "published" | "testing" | "winner" | "loser" | "archived" | "blocked";
+  opportunity_score: number;
+  recommendation_summary?: string;
+  demand_score: number;
+  margin_score: number;
+  supplier_score: number;
+  competition_score: number;
+  brand_fit_score: number;
+  content_score: number;
+  risk_score: number;
+  risk_notes?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type CompetitorProduct = {
+  id: string;
+  opportunity_id: string;
+  competitor_name?: string;
+  competitor_url?: string;
+  product_title?: string;
+  price: number;
+  compare_at_price?: number;
+  rating?: number;
+  review_count?: number;
+  sales_signal?: string;
+  offer_notes?: string;
+  positioning_notes?: string;
+  images?: string[];
+  captured_at: string;
+};
+
+export type SupplierProduct = {
+  id: string;
+  opportunity_id: string;
+  supplier_platform: string;
+  supplier_name?: string;
+  supplier_url?: string;
+  product_url: string;
+  title?: string;
+  price_min?: number;
+  price_max?: number;
+  shipping_cost?: number;
+  rating?: number;
+  review_count?: number;
+  orders_count?: number;
+  estimated_delivery_days?: number;
+  variants?: Array<{ color?: string; size?: string; model?: string; cost: number }>;
+  images?: string[];
+  description_raw?: string;
+  supplier_score?: number;
+  import_status: "not_imported" | "imported" | "failed" | "needs_review";
+  created_at: string;
+  updated_at: string;
+};
+
 const apiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
 const adminHeaders = {
   "x-admin-email": import.meta.env.VITE_ADMIN_EMAIL || "admin@products4thepeople.com",
@@ -131,6 +195,76 @@ export async function testApi() {
   const healthUrl = apiBaseUrl === "/api" ? "/health" : `${apiBaseUrl.replace(/\/api$/, "")}/health`;
   const response = await fetch(healthUrl);
   if (!response.ok) throw new Error(`API health check returned ${response.status}`);
+}
+
+export async function getOpportunities() {
+  return apiFetch<{ opportunities: ResearchOpportunity[] }>("/admin/product-research/opportunities");
+}
+
+export async function createOpportunity(opp: Omit<ResearchOpportunity, "id" | "status" | "created_at" | "updated_at">) {
+  return apiFetch<{ opportunity: ResearchOpportunity }>("/admin/product-research/opportunities", {
+    method: "POST",
+    body: JSON.stringify(opp),
+  });
+}
+
+export async function getOpportunityDetails(id: string) {
+  return apiFetch<{ opportunity: ResearchOpportunity; competitors: CompetitorProduct[]; suppliers: SupplierProduct[] }>(`/admin/product-research/opportunities/${encodeURIComponent(id)}`);
+}
+
+export async function updateOpportunity(id: string, updates: Partial<ResearchOpportunity>) {
+  return apiFetch<{ opportunity: ResearchOpportunity }>(`/admin/product-research/opportunities/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function runGapAnalysis() {
+  return apiFetch<{ message: string; count: number; opportunities: ResearchOpportunity[] }>("/admin/product-research/run-gap-analysis", {
+    method: "POST",
+  });
+}
+
+export async function runDemandResearch(id: string) {
+  return apiFetch<{ message: string; opportunity: ResearchOpportunity }>("/admin/product-research/run-demand-research", {
+    method: "POST",
+    body: JSON.stringify({ id }),
+  });
+}
+
+export async function runCompetitorResearch(id: string) {
+  return apiFetch<{ message: string; competitors: CompetitorProduct[]; opportunity: ResearchOpportunity }>("/admin/product-research/run-competitor-research", {
+    method: "POST",
+    body: JSON.stringify({ id }),
+  });
+}
+
+export async function searchAliExpress(query: string, opportunityId?: string) {
+  return apiFetch<{ message: string; suppliers: SupplierProduct[] }>("/admin/product-research/search-aliexpress", {
+    method: "POST",
+    body: JSON.stringify({ query, opportunityId }),
+  });
+}
+
+export async function importSupplierProduct(supplierProductId: string, opportunityId?: string) {
+  return apiFetch<{ message: string; product: ApiProduct; jobId: string }>("/admin/product-research/import-aliexpress", {
+    method: "POST",
+    body: JSON.stringify({ supplierProductId, opportunityId }),
+  });
+}
+
+export async function setWatchlistStatus(id: string, isWatched: boolean) {
+  return apiFetch<{ message: string; opportunity: ResearchOpportunity }>("/admin/product-research/watchlist", {
+    method: "POST",
+    body: JSON.stringify({ id, isWatched }),
+  });
+}
+
+export async function generateContentForOpportunity(id: string) {
+  return apiFetch<{ content: any }>("/admin/product-research/generate-content", {
+    method: "POST",
+    body: JSON.stringify({ id }),
+  });
 }
 
 async function apiFetch<T>(path: string, options: RequestInit = {}) {

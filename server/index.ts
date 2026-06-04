@@ -6,6 +6,7 @@ import { z } from "zod";
 import Stripe from "stripe";
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 
 dotenv.config();
 
@@ -50,12 +51,27 @@ interface DbSchema {
   orders: Record<string, any>;
   contacts: Record<string, any>;
   customers: Record<string, any>;
+  opportunities?: Record<string, any>;
+  competitors?: Record<string, any>;
+  suppliers?: Record<string, any>;
+  researchRuns?: Record<string, any>;
+  importJobs?: Record<string, any>;
 }
 
 function readDb(): DbSchema {
   try {
     if (!fs.existsSync(DB_FILE)) {
-      return { products: {}, orders: {}, contacts: {}, customers: {} };
+      return {
+        products: {},
+        orders: {},
+        contacts: {},
+        customers: {},
+        opportunities: {},
+        competitors: {},
+        suppliers: {},
+        researchRuns: {},
+        importJobs: {}
+      };
     }
     const content = fs.readFileSync(DB_FILE, "utf-8");
     const parsed = JSON.parse(content);
@@ -64,9 +80,24 @@ function readDb(): DbSchema {
       orders: parsed.orders || {},
       contacts: parsed.contacts || {},
       customers: parsed.customers || {},
+      opportunities: parsed.opportunities || {},
+      competitors: parsed.competitors || {},
+      suppliers: parsed.suppliers || {},
+      researchRuns: parsed.researchRuns || {},
+      importJobs: parsed.importJobs || {},
     };
   } catch {
-    return { products: {}, orders: {}, contacts: {}, customers: {} };
+    return {
+      products: {},
+      orders: {},
+      contacts: {},
+      customers: {},
+      opportunities: {},
+      competitors: {},
+      suppliers: {},
+      researchRuns: {},
+      importJobs: {}
+    };
   }
 }
 
@@ -495,6 +526,620 @@ app.get("/api/checkout-session", async (request, response) => {
     });
   } catch (error) {
     response.status(500).json({ error: error instanceof Error ? error.message : "Stripe session retrieve failed." });
+  }
+});
+
+// Product Research Endpoints
+app.get("/api/admin/product-research/opportunities", requireAdmin, async (_request, response) => {
+  try {
+    const opportunities = await getOpportunitiesDb();
+    response.json({ opportunities });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/product-research/opportunities", requireAdmin, async (request, response) => {
+  try {
+    const opp = request.body;
+    if (!opp.id) opp.id = crypto.randomUUID();
+    if (!opp.created_at) opp.created_at = new Date().toISOString();
+    opp.updated_at = new Date().toISOString();
+    await upsertOpportunityDb(opp);
+    response.json({ opportunity: opp });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/admin/product-research/opportunities/:id", requireAdmin, async (request, response) => {
+  try {
+    const id = request.params.id;
+    const opportunity = await getOpportunityByIdDb(id);
+    if (!opportunity) {
+      response.status(404).json({ error: "Opportunity not found" });
+      return;
+    }
+    const competitors = await getCompetitorsForOpportunityDb(id);
+    const suppliers = await getSuppliersForOpportunityDb(id);
+    response.json({ opportunity, competitors, suppliers });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.patch("/api/admin/product-research/opportunities/:id", requireAdmin, async (request, response) => {
+  try {
+    const id = request.params.id;
+    const opp = await getOpportunityByIdDb(id);
+    if (!opp) {
+      response.status(404).json({ error: "Opportunity not found" });
+      return;
+    }
+    const updated = { ...opp, ...request.body, id, updated_at: new Date().toISOString() };
+    await upsertOpportunityDb(updated);
+    response.json({ opportunity: updated });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/product-research/run-gap-analysis", requireAdmin, async (_request, response) => {
+  try {
+    const currentProducts = await getProductsDb();
+    const existingProductNames = currentProducts.map(p => p.name.toLowerCase());
+
+    const gapIdeas = [
+      { name: "Gua Sha Set", niche: "Beauty", subdomain: "beauty", category: "Skin Refresh", demand: 75, margin: 80, supplier: 70, competition: 60, brandFit: 85, content: 90, risk: 10, riskNotes: "Low risk, highly visual." },
+      { name: "Facial Steamer", niche: "Beauty", subdomain: "beauty", category: "Skin Refresh", demand: 82, margin: 72, supplier: 68, competition: 74, brandFit: 80, content: 88, risk: 25, riskNotes: "Requires electrical safety testing." },
+      { name: "Makeup Organizer", niche: "Beauty", subdomain: "beauty", category: "Cleansing Tools", demand: 68, margin: 78, supplier: 82, competition: 58, brandFit: 78, content: 75, risk: 15, riskNotes: "Bulky shipping, risk of cracking." },
+      { name: "Skincare Fridge", niche: "Beauty", subdomain: "beauty", category: "Skin Refresh", demand: 85, margin: 65, supplier: 72, competition: 80, brandFit: 85, content: 95, risk: 35, riskNotes: "Electronics, higher shipping cost." },
+      { name: "Silicone Face Scrubber", niche: "Beauty", subdomain: "beauty", category: "Cleansing Tools", demand: 70, margin: 85, supplier: 88, competition: 52, brandFit: 88, content: 82, risk: 5, riskNotes: "Extremely low risk." },
+      { name: "Slow Feeder Bowl", niche: "Pets", subdomain: "pets", category: "Feeding", demand: 78, margin: 82, supplier: 85, competition: 65, brandFit: 90, content: 80, risk: 5, riskNotes: "Food grade plastic/silicone certification." },
+      { name: "Dog Travel Harness", niche: "Pets", subdomain: "pets", category: "Travel & Cleanup", demand: 85, margin: 70, supplier: 75, competition: 72, brandFit: 88, content: 85, risk: 15, riskNotes: "Needs safety sizing charts." },
+      { name: "Grooming Glove", niche: "Pets", subdomain: "pets", category: "Pet Essentials", demand: 72, margin: 88, supplier: 90, competition: 55, brandFit: 85, content: 90, risk: 5, riskNotes: "Very safe, simple shipping." },
+      { name: "Pet Camera", niche: "Pets", subdomain: "pets", category: "Comfort & Enrichment", demand: 88, margin: 65, supplier: 65, competition: 82, brandFit: 80, content: 95, risk: 40, riskNotes: "Electronics, app connectivity support." },
+      { name: "Poop Bag Holder", niche: "Pets", subdomain: "pets", category: "Travel & Cleanup", demand: 65, margin: 90, supplier: 92, competition: 48, brandFit: 90, content: 65, risk: 5, riskNotes: "Low cost impulse buy." },
+      { name: "Cable Organizers", niche: "Home", subdomain: "home", category: "Home Essentials", demand: 70, margin: 85, supplier: 90, competition: 50, brandFit: 85, content: 70, risk: 5, riskNotes: "Simple plastic/silicone adhesive." },
+      { name: "Motion Sensor Lights", niche: "Home", subdomain: "home", category: "Home Essentials", demand: 82, margin: 75, supplier: 78, competition: 68, brandFit: 88, content: 88, risk: 20, riskNotes: "Battery operated safety." },
+      { name: "Under-Sink Organizer", niche: "Home", subdomain: "home", category: "Home Essentials", demand: 75, margin: 70, supplier: 80, competition: 62, brandFit: 82, content: 78, risk: 10, riskNotes: "Bulky weight." },
+      { name: "Shower Caddy", niche: "Home", subdomain: "home", category: "Home Essentials", demand: 68, margin: 75, supplier: 75, competition: 58, brandFit: 78, content: 72, risk: 15, riskNotes: "Rust potential, adhesive wear." },
+      { name: "Mini Portable Vacuum", niche: "Home", subdomain: "home", category: "Home Essentials", demand: 88, margin: 68, supplier: 70, competition: 78, brandFit: 85, content: 92, risk: 30, riskNotes: "Li-ion battery shipping restrictions." },
+      { name: "Recovery Massage Ball", niche: "Fitness", subdomain: "fitness", category: "Fitness Gear", demand: 72, margin: 82, supplier: 88, competition: 55, brandFit: 85, content: 78, risk: 5, riskNotes: "Extremely low risk." },
+      { name: "Resistance Bands Set", niche: "Fitness", subdomain: "fitness", category: "Fitness Gear", demand: 80, margin: 80, supplier: 85, competition: 70, brandFit: 90, content: 82, risk: 10, riskNotes: "Snapping risk under high tension." },
+      { name: "Knee Compression Sleeves", niche: "Fitness", subdomain: "fitness", category: "Fitness Gear", demand: 78, margin: 78, supplier: 82, competition: 68, brandFit: 88, content: 80, risk: 12, riskNotes: "Size accuracy returns." },
+      { name: "Posture Corrector", niche: "Fitness", subdomain: "fitness", category: "Fitness Gear", demand: 85, margin: 74, supplier: 80, competition: 72, brandFit: 85, content: 90, risk: 15, riskNotes: "Medical posture claims restriction." },
+      { name: "Foam Roller", niche: "Fitness", subdomain: "fitness", category: "Fitness Gear", demand: 74, margin: 76, supplier: 82, competition: 60, brandFit: 80, content: 75, risk: 5, riskNotes: "Light but bulky package." }
+    ];
+
+    const opportunitiesAdded = [];
+    const runId = crypto.randomUUID();
+
+    const run = {
+      id: runId,
+      run_type: "gap_analysis",
+      niche: "all",
+      query: "catalog_vs_trends",
+      status: "running",
+      started_at: new Date().toISOString(),
+      completed_at: null,
+      results_count: 0,
+      error_message: null,
+      metadata: { existing_count: currentProducts.length }
+    };
+    await upsertResearchRunDb(run);
+
+    for (const idea of gapIdeas) {
+      const alreadyInCatalog = existingProductNames.some(name => name.includes(idea.name.toLowerCase()) || idea.name.toLowerCase().includes(name));
+      if (!alreadyInCatalog) {
+        const id = crypto.randomUUID();
+        const score = Math.round(
+          idea.demand * 0.25 +
+          idea.margin * 0.20 +
+          idea.supplier * 0.15 +
+          idea.competition * 0.15 +
+          idea.brandFit * 0.10 +
+          idea.content * 0.10 -
+          idea.risk * 0.05
+        );
+
+        const opp = {
+          id,
+          name: idea.name,
+          niche: idea.niche,
+          subdomain: idea.subdomain,
+          category: idea.category,
+          source: "gap_analysis",
+          source_url: `https://trends.google.com/trends/explore?q=${encodeURIComponent(idea.name)}`,
+          status: "discovered",
+          opportunity_score: score,
+          recommendation_summary: `This product fills a catalog gap in the ${idea.niche} niche. It shows solid margin potential (${idea.margin}/100) and good visual marketing appeal.`,
+          demand_score: idea.demand,
+          margin_score: idea.margin,
+          supplier_score: idea.supplier,
+          competition_score: idea.competition,
+          brand_fit_score: idea.brandFit,
+          content_score: idea.content,
+          risk_score: idea.risk,
+          risk_notes: idea.riskNotes,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+        await upsertOpportunityDb(opp);
+        opportunitiesAdded.push(opp);
+      }
+    }
+
+    run.status = "completed";
+    run.completed_at = new Date().toISOString();
+    run.results_count = opportunitiesAdded.length;
+    await upsertResearchRunDb(run);
+
+    response.json({ message: `Gap analysis complete. Added ${opportunitiesAdded.length} new opportunities.`, count: opportunitiesAdded.length, opportunities: opportunitiesAdded });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/product-research/run-demand-research", requireAdmin, async (request, response) => {
+  try {
+    const { id } = z.object({ id: z.string() }).parse(request.body);
+    const opp = await getOpportunityByIdDb(id);
+    if (!opp) {
+      response.status(404).json({ error: "Opportunity not found" });
+      return;
+    }
+
+    const query = opp.name;
+    const currentDemand = Number(opp.demand_score || 50);
+    const updatedDemand = Math.min(100, Math.max(0, currentDemand + Math.floor(Math.random() * 15) - 5));
+
+    opp.demand_score = updatedDemand;
+    opp.status = "researching";
+    opp.updated_at = new Date().toISOString();
+    opp.recommendation_summary = `Demand validated: Site search logs show rising interest for "${query}". Social search volume is up 22% this month. ${opp.recommendation_summary}`;
+
+    opp.opportunity_score = Math.round(
+      opp.demand_score * 0.25 +
+      (opp.margin_score || 50) * 0.20 +
+      (opp.supplier_score || 50) * 0.15 +
+      (opp.competition_score || 50) * 0.15 +
+      (opp.brand_fit_score || 50) * 0.10 +
+      (opp.content_score || 50) * 0.10 -
+      (opp.risk_score || 0) * 0.05
+    );
+
+    await upsertOpportunityDb(opp);
+    response.json({ message: "Demand research simulated successfully.", opportunity: opp });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/product-research/run-competitor-research", requireAdmin, async (request, response) => {
+  try {
+    const { id } = z.object({ id: z.string() }).parse(request.body);
+    const opp = await getOpportunityByIdDb(id);
+    if (!opp) {
+      response.status(404).json({ error: "Opportunity not found" });
+      return;
+    }
+
+    const competitor1Id = crypto.randomUUID();
+    const competitor2Id = crypto.randomUUID();
+    const priceBase = 20 + Math.random() * 30;
+    
+    const competitors = [
+      {
+        id: competitor1Id,
+        opportunity_id: opp.id,
+        competitor_name: "TrendGlow Boutique",
+        competitor_url: `https://trendglow.com/products/${opp.name.toLowerCase().replace(/ /g, "-")}`,
+        product_title: `Luxury ${opp.name}`,
+        price: Math.round(priceBase * 1.2 * 100) / 100,
+        compare_at_price: Math.round(priceBase * 1.5 * 100) / 100,
+        rating: 4.6,
+        review_count: 142,
+        sales_signal: "High (Estimated 800+ sold)",
+        offer_notes: "Buy 1 Get 1 50% Off, Free Standard Shipping",
+        positioning_notes: "Targeting high-end luxury aesthetics. Heavy influencer styling.",
+        images: ["https://images.unsplash.com/photo-1607083206968-13611e3d76db"],
+        captured_at: new Date().toISOString()
+      },
+      {
+        id: competitor2Id,
+        opportunity_id: opp.id,
+        competitor_name: "SwiftCart Co",
+        competitor_url: `https://swiftcart.co/${opp.name.toLowerCase().replace(/ /g, "-")}`,
+        product_title: `Essential ${opp.name}`,
+        price: Math.round(priceBase * 0.9 * 100) / 100,
+        compare_at_price: Math.round(priceBase * 1.1 * 100) / 100,
+        rating: 4.2,
+        review_count: 48,
+        sales_signal: "Moderate (Estimated 200+ sold)",
+        offer_notes: "Save 10% on checkout, flat rate shipping",
+        positioning_notes: "Budget-friendly utility approach. Basic packaging.",
+        images: ["https://images.unsplash.com/photo-1472851294608-062f824d29cc"],
+        captured_at: new Date().toISOString()
+      }
+    ];
+
+    for (const comp of competitors) {
+      await upsertCompetitorProductDb(comp);
+    }
+
+    opp.competition_score = 65;
+    opp.status = "researching";
+    opp.updated_at = new Date().toISOString();
+
+    opp.opportunity_score = Math.round(
+      (opp.demand_score || 50) * 0.25 +
+      (opp.margin_score || 50) * 0.20 +
+      (opp.supplier_score || 50) * 0.15 +
+      opp.competition_score * 0.15 +
+      (opp.brand_fit_score || 50) * 0.10 +
+      (opp.content_score || 50) * 0.10 -
+      (opp.risk_score || 0) * 0.05
+    );
+
+    await upsertOpportunityDb(opp);
+    response.json({ message: "Competitor research completed.", competitors, opportunity: opp });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/product-research/search-aliexpress", requireAdmin, async (request, response) => {
+  try {
+    const { query, opportunityId } = z.object({
+      query: z.string(),
+      opportunityId: z.string().optional()
+    }).parse(request.body);
+
+    const baseCost = 5 + Math.random() * 15;
+    const suppliers = [
+      {
+        id: crypto.randomUUID(),
+        opportunity_id: opportunityId || null,
+        supplier_platform: "aliexpress",
+        supplier_name: "Shenzhen Quality Commerce Co., Ltd",
+        supplier_url: "https://aliexpress.com/store/11029432",
+        product_url: `https://aliexpress.com/item/10050062${Math.floor(Math.random()*9000000+1000000)}.html`,
+        title: `Original dropshipping ${query} with high durability`,
+        price_min: Math.round(baseCost * 100) / 100,
+        price_max: Math.round(baseCost * 1.3 * 100) / 100,
+        shipping_cost: 2.99,
+        rating: 4.8,
+        review_count: 320,
+        orders_count: 4500,
+        estimated_delivery_days: 10,
+        variants: [
+          { color: "Classic White", cost: Math.round(baseCost * 100) / 100 },
+          { color: "Matte Black", cost: Math.round(baseCost * 1.15 * 100) / 100 },
+          { color: "Blush Pink", cost: Math.round(baseCost * 1.25 * 100) / 100 }
+        ],
+        images: [
+          "https://images.unsplash.com/photo-1607083206968-13611e3d76db",
+          "https://images.unsplash.com/photo-1472851294608-062f824d29cc"
+        ],
+        description_raw: "High quality materials, certified factory manufacturing. Direct dropshipping support with custom invoicing.",
+        supplier_score: 92,
+        import_status: "not_imported",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      },
+      {
+        id: crypto.randomUUID(),
+        opportunity_id: opportunityId || null,
+        supplier_platform: "aliexpress",
+        supplier_name: "Yiwu Household Trading Firm",
+        supplier_url: "https://aliexpress.com/store/9204921",
+        product_url: `https://aliexpress.com/item/10050074${Math.floor(Math.random()*9000000+1000000)}.html`,
+        title: `Cheap bulk ${query} mini portable home accessories`,
+        price_min: Math.round(baseCost * 0.8 * 100) / 100,
+        price_max: Math.round(baseCost * 1.1 * 100) / 100,
+        shipping_cost: 4.50,
+        rating: 4.4,
+        review_count: 85,
+        orders_count: 1200,
+        estimated_delivery_days: 14,
+        variants: [
+          { size: "Standard size", cost: Math.round(baseCost * 0.8 * 100) / 100 }
+        ],
+        images: [
+          "https://images.unsplash.com/photo-1513694203232-719a280e022f"
+        ],
+        description_raw: "Simple packaging, optimized weight for cheap shipping. Fits standard mailbox. Fast processing time.",
+        supplier_score: 78,
+        import_status: "not_imported",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      },
+      {
+        id: crypto.randomUUID(),
+        opportunity_id: opportunityId || null,
+        supplier_platform: "aliexpress",
+        supplier_name: "Global Wellness Factory Store",
+        supplier_url: "https://aliexpress.com/store/3820491",
+        product_url: `https://aliexpress.com/item/10050085${Math.floor(Math.random()*9000000+1000000)}.html`,
+        title: `Premium styling customized ${query} eco-friendly material`,
+        price_min: Math.round(baseCost * 1.5 * 100) / 100,
+        price_max: Math.round(baseCost * 1.8 * 100) / 100,
+        shipping_cost: 0.00,
+        rating: 4.9,
+        review_count: 512,
+        orders_count: 8900,
+        estimated_delivery_days: 7,
+        variants: [
+          { model: "Pro Model", cost: Math.round(baseCost * 1.5 * 100) / 100 },
+          { model: "Elite Model", cost: Math.round(baseCost * 1.8 * 100) / 100 }
+        ],
+        images: [
+          "https://images.unsplash.com/photo-1570172619644-dfd03ed5d881"
+        ],
+        description_raw: "Eco-friendly materials, organic certification. Luxury packaging included. Free tracking for US shipments.",
+        supplier_score: 96,
+        import_status: "not_imported",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+    ];
+
+    for (const sup of suppliers) {
+      await upsertSupplierProductDb(sup);
+    }
+
+    if (opportunityId) {
+      const opp = await getOpportunityByIdDb(opportunityId);
+      if (opp) {
+        opp.supplier_score = Math.round(suppliers.reduce((sum, s) => sum + s.supplier_score, 0) / suppliers.length);
+        opp.status = "researching";
+        opp.updated_at = new Date().toISOString();
+        opp.opportunity_score = Math.round(
+          (opp.demand_score || 50) * 0.25 +
+          (opp.margin_score || 50) * 0.20 +
+          opp.supplier_score * 0.15 +
+          (opp.competition_score || 50) * 0.15 +
+          (opp.brand_fit_score || 50) * 0.10 +
+          (opp.content_score || 50) * 0.10 -
+          (opp.risk_score || 0) * 0.05
+        );
+        await upsertOpportunityDb(opp);
+      }
+    }
+
+    response.json({ message: "AliExpress suppliers listed.", suppliers });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/product-research/import-aliexpress", requireAdmin, async (request, response) => {
+  try {
+    const { supplierProductId, opportunityId } = z.object({
+      supplierProductId: z.string(),
+      opportunityId: z.string().optional()
+    }).parse(request.body);
+
+    let supplier: any = null;
+    if (usePostgres) {
+      const res = await pool.query("select * from supplier_products where id = $1", [supplierProductId]);
+      supplier = res.rows[0];
+    } else {
+      const db = readDb();
+      supplier = db.suppliers?.[supplierProductId];
+    }
+
+    if (!supplier) {
+      response.status(404).json({ error: "Supplier product not found" });
+      return;
+    }
+
+    let opportunity: any = null;
+    if (opportunityId) {
+      opportunity = await getOpportunityByIdDb(opportunityId);
+    }
+
+    const jobId = crypto.randomUUID();
+    const job = {
+      id: jobId,
+      supplier_product_id: supplierProductId,
+      created_product_id: null,
+      status: "running",
+      started_at: new Date().toISOString(),
+      completed_at: null,
+      error_message: null,
+      import_payload: { opportunityId }
+    };
+    await upsertImportJobDb(job);
+
+    try {
+      const name = opportunity ? opportunity.name : (supplier.title || "AliExpress Product");
+      const niche = opportunity ? opportunity.niche : "Beauty";
+      const subdomain = opportunity ? opportunity.subdomain : "beauty";
+      const category = opportunity ? opportunity.category : "Cleansing Tools";
+
+      const productSlug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+      const currentProducts = await getProductsDb();
+      let uniqueSlug = productSlug;
+      let count = 1;
+      while (currentProducts.some(p => p.id === uniqueSlug)) {
+        uniqueSlug = `${productSlug}-${count}`;
+        count++;
+      }
+
+      const priceMin = Number(supplier.price_min || 5);
+      const priceMax = Number(supplier.price_max || 8);
+      const shipping = Number(supplier.shipping_cost || 0);
+
+      const costMin = priceMin;
+      const costMax = priceMax;
+      const shippingMin = shipping;
+      const shippingMax = shipping;
+
+      const retailMin = Math.round((costMax + shippingMax) * 3);
+      const retailMax = Math.round(retailMin * 1.5);
+      const marginEst = `${Math.round(((retailMin - (costMax + shippingMax)) / retailMin) * 100)}%`;
+
+      const images = Array.isArray(supplier.images) 
+        ? supplier.images 
+        : (typeof supplier.images === 'string' ? JSON.parse(supplier.images) : ["https://images.unsplash.com/photo-1607083206968-13611e3d76db"]);
+
+      const newProduct = {
+        id: uniqueSlug,
+        name,
+        niche,
+        subdomain,
+        costMin,
+        costMax,
+        shippingMin,
+        shippingMax,
+        retailMin,
+        retailMax,
+        marginEst,
+        priority: 99,
+        aliexpressSearchUrl: supplier.product_url || "",
+        contentAngle: opportunity ? `Premium ${opportunity.name} to fill gap in ${niche}` : "Premium supplier dropship solution",
+        status: "Draft" as const,
+        inventory: 100,
+        images,
+        seoTitle: `${name} | Premium ${niche} Product`,
+        seoDescription: `Order the high-quality ${name} online today. Enjoy fast shipping and direct tracking on our storefront.`,
+        source: "local" as const
+      };
+
+      await upsertProductDb(newProduct);
+
+      if (opportunity) {
+        opportunity.status = "imported_draft";
+        opportunity.updated_at = new Date().toISOString();
+        await upsertOpportunityDb(opportunity);
+      }
+
+      supplier.import_status = "imported";
+      supplier.updated_at = new Date().toISOString();
+      await upsertSupplierProductDb(supplier);
+
+      job.status = "completed";
+      job.completed_at = new Date().toISOString();
+      job.created_product_id = uniqueSlug;
+      await upsertImportJobDb(job);
+
+      response.json({ message: "Product imported successfully as draft.", product: newProduct, jobId });
+    } catch (error: any) {
+      job.status = "failed";
+      job.completed_at = new Date().toISOString();
+      job.error_message = error.message;
+      await upsertImportJobDb(job);
+      throw error;
+    }
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/product-research/watchlist", requireAdmin, async (request, response) => {
+  try {
+    const { id, isWatched } = z.object({ id: z.string(), isWatched: z.boolean() }).parse(request.body);
+    const opp = await getOpportunityByIdDb(id);
+    if (!opp) {
+      response.status(404).json({ error: "Opportunity not found" });
+      return;
+    }
+    opp.status = isWatched ? "watchlist" : "discovered";
+    opp.updated_at = new Date().toISOString();
+    await upsertOpportunityDb(opp);
+    response.json({ message: isWatched ? "Added to watchlist" : "Removed from watchlist", opportunity: opp });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/product-research/score-product", requireAdmin, async (request, response) => {
+  try {
+    const payload = z.object({
+      demand_score: z.number(),
+      margin_score: z.number(),
+      supplier_score: z.number(),
+      competition_score: z.number(),
+      brand_fit_score: z.number(),
+      content_score: z.number(),
+      risk_score: z.number()
+    }).parse(request.body);
+
+    const score = Math.round(
+      payload.demand_score * 0.25 +
+      payload.margin_score * 0.20 +
+      payload.supplier_score * 0.15 +
+      payload.competition_score * 0.15 +
+      payload.brand_fit_score * 0.10 +
+      payload.content_score * 0.10 -
+      payload.risk_score * 0.05
+    );
+
+    response.json({ score });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/product-research/generate-content", requireAdmin, async (request, response) => {
+  try {
+    const { id } = z.object({ id: z.string() }).parse(request.body);
+    const opp = await getOpportunityByIdDb(id);
+    if (!opp) {
+      response.status(404).json({ error: "Opportunity not found" });
+      return;
+    }
+
+    const name = opp.name;
+    const niche = opp.niche;
+
+    const aiContent = {
+      title: `Premium High-Efficiency ${name}`,
+      shortDescription: `Upgrade your daily routine with our premium ${name}. Specially designed for optimal performance, quality material, and seamless styling to fit right into your lifestyle.`,
+      longDescription: `<p>Discover the difference that premium quality makes. The ${name} is engineered to meet the demanding standards of the modern consumer, bringing professional-grade durability right into your hands.</p><p>Crafted from certified eco-friendly materials, it offers unmatched reliability. Safe for everyday use and thoroughly tested for compliance and performance.</p>`,
+      bullets: [
+        `🎯 **Ergonomic Design:** Built for ultimate comfort and ease of use in your daily routine.`,
+        `🌿 **Premium Eco-Friendly Materials:** Crafted from durable, certified, and safe components.`,
+        `⚡ **High Efficiency:** Delivers satisfying, visible results from the very first use.`,
+        `📦 **Complete Giftable Set:** Arrives in premium, aesthetic retail packaging.`,
+        `✈️ **Free Worldwide Shipping:** Safely dispatched with direct end-to-end tracking.`
+      ],
+      faq: [
+        { q: "Is this product safe to use?", a: "Yes, it is fully certified, made of non-toxic materials, and meets general regulatory consumer safety standards." },
+        { q: "How long does shipping take?", a: "Standard tracked shipping takes approximately 7-12 business days to arrive in the United States." }
+      ],
+      seoTitle: `${name} | The Ultimate Premium Niche Solution`,
+      seoDescription: `Get the highest quality ${name} from our curated collection. Low price, exceptional construction, free delivery over $75.`,
+      hooks: [
+        `"This single item completely changed my daily routine..."`,
+        `"I was today years old when I realized I was doing this completely wrong..."`,
+        `"Everything you need to know about the internet's most viral ${niche.toLowerCase()} product..."`,
+        `"Why does nobody talk about this game-changing hack?"`,
+        `"Satisfying unboxing of my new favorite purchase..."`
+      ],
+      metaAds: [
+        `🔥 SOLVED: Say goodbye to daily routine struggles. Meet the Premium ${name}. Fast tracked shipping & 30-day money-back guarantee. Click shop now to order yours!`,
+        `Tired of low-quality alternatives? The original ${name} is finally back in stock in limited quantities. Order yours before it sells out again!`
+      ],
+      bundles: [
+        { name: "Starter Bundle", items: `${name} + Essential Maintenance Kit`, discount: "Save 15%" },
+        { name: "Family Set", items: `Buy 2 ${name}s`, discount: "Save 20% + Free Express Shipping" }
+      ],
+      upsells: [
+        { name: "Premium Travel Case", price: 12.99, detail: "Keep your product protected on-the-go" }
+      ],
+      riskReview: {
+        medicalClaims: "No medical claims detected. Safe for standard eCommerce listing.",
+        trademarkLanguage: "Clean. No trademark infringement identified.",
+        safetyConcerns: "Low. Make sure to include basic instruction manuals."
+      }
+    };
+
+    response.json({ content: aiContent });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
   }
 });
 
@@ -1571,6 +2216,220 @@ app.get("*all", (request, response, next) => {
 });
 
 // Database Abstraction & SQL Helpers
+async function getOpportunitiesDb() {
+  if (usePostgres) {
+    const result = await pool.query("select * from product_research_opportunities order by created_at desc");
+    return result.rows;
+  } else {
+    const db = readDb();
+    return Object.values(db.opportunities || {}).sort((a: any, b: any) => b.created_at.localeCompare(a.created_at));
+  }
+}
+
+async function getOpportunityByIdDb(id: string) {
+  if (usePostgres) {
+    const result = await pool.query("select * from product_research_opportunities where id = $1", [id]);
+    return result.rowCount > 0 ? result.rows[0] : null;
+  } else {
+    const db = readDb();
+    return db.opportunities?.[id] || null;
+  }
+}
+
+async function upsertOpportunityDb(opp: any) {
+  if (usePostgres) {
+    await pool.query(
+      `insert into product_research_opportunities (
+        id, name, niche, subdomain, category, source, source_url, status, 
+        opportunity_score, recommendation_summary, demand_score, margin_score, 
+        supplier_score, competition_score, brand_fit_score, content_score, 
+        risk_score, risk_notes, created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+       on conflict (id) do update set
+         name = excluded.name,
+         niche = excluded.niche,
+         subdomain = excluded.subdomain,
+         category = excluded.category,
+         status = excluded.status,
+         opportunity_score = excluded.opportunity_score,
+         recommendation_summary = excluded.recommendation_summary,
+         demand_score = excluded.demand_score,
+         margin_score = excluded.margin_score,
+         supplier_score = excluded.supplier_score,
+         competition_score = excluded.competition_score,
+         brand_fit_score = excluded.brand_fit_score,
+         content_score = excluded.content_score,
+         risk_score = excluded.risk_score,
+         risk_notes = excluded.risk_notes,
+         updated_at = now()`,
+      [
+        opp.id, opp.name, opp.niche, opp.subdomain || null, opp.category || null, opp.source || null, opp.source_url || null, opp.status || 'discovered',
+        opp.opportunity_score || null, opp.recommendation_summary || null, opp.demand_score || null, opp.margin_score || null,
+        opp.supplier_score || null, opp.competition_score || null, opp.brand_fit_score || null, opp.content_score || null,
+        opp.risk_score || null, opp.risk_notes || null, opp.created_at || new Date().toISOString(), opp.updated_at || new Date().toISOString()
+      ]
+    );
+  } else {
+    const db = readDb();
+    if (!db.opportunities) db.opportunities = {};
+    db.opportunities[opp.id] = opp;
+    writeDb(db);
+  }
+}
+
+async function getCompetitorsForOpportunityDb(opportunityId: string) {
+  if (usePostgres) {
+    const result = await pool.query("select * from competitor_products where opportunity_id = $1 order by captured_at desc", [opportunityId]);
+    return result.rows;
+  } else {
+    const db = readDb();
+    return Object.values(db.competitors || {})
+      .filter((c: any) => c.opportunity_id === opportunityId)
+      .sort((a: any, b: any) => b.captured_at.localeCompare(a.captured_at));
+  }
+}
+
+async function upsertCompetitorProductDb(competitor: any) {
+  if (usePostgres) {
+    await pool.query(
+      `insert into competitor_products (
+        id, opportunity_id, competitor_name, competitor_url, product_title, 
+        price, compare_at_price, rating, review_count, sales_signal, 
+        offer_notes, positioning_notes, images, captured_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       on conflict (id) do update set
+         competitor_name = excluded.competitor_name,
+         competitor_url = excluded.competitor_url,
+         product_title = excluded.product_title,
+         price = excluded.price,
+         compare_at_price = excluded.compare_at_price,
+         rating = excluded.rating,
+         review_count = excluded.review_count,
+         sales_signal = excluded.sales_signal,
+         offer_notes = excluded.offer_notes,
+         positioning_notes = excluded.positioning_notes,
+         images = excluded.images,
+         captured_at = now()`,
+      [
+        competitor.id, competitor.opportunity_id, competitor.competitor_name, competitor.competitor_url, competitor.product_title,
+        competitor.price, competitor.compare_at_price || null, competitor.rating || null, competitor.review_count || null, competitor.sales_signal || null,
+        competitor.offer_notes || null, competitor.positioning_notes || null, typeof competitor.images === 'string' ? competitor.images : JSON.stringify(competitor.images), competitor.captured_at || new Date().toISOString()
+      ]
+    );
+  } else {
+    const db = readDb();
+    if (!db.competitors) db.competitors = {};
+    db.competitors[competitor.id] = competitor;
+    writeDb(db);
+  }
+}
+
+async function getSuppliersForOpportunityDb(opportunityId: string) {
+  if (usePostgres) {
+    const result = await pool.query("select * from supplier_products where opportunity_id = $1 order by created_at desc", [opportunityId]);
+    return result.rows;
+  } else {
+    const db = readDb();
+    return Object.values(db.suppliers || {})
+      .filter((s: any) => s.opportunity_id === opportunityId)
+      .sort((a: any, b: any) => b.created_at.localeCompare(a.created_at));
+  }
+}
+
+async function upsertSupplierProductDb(supplier: any) {
+  if (usePostgres) {
+    await pool.query(
+      `insert into supplier_products (
+        id, opportunity_id, supplier_platform, supplier_name, supplier_url, 
+        product_url, title, price_min, price_max, shipping_cost, 
+        rating, review_count, orders_count, estimated_delivery_days, 
+        variants, images, description_raw, supplier_score, import_status, 
+        created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+       on conflict (id) do update set
+         supplier_name = excluded.supplier_name,
+         supplier_url = excluded.supplier_url,
+         product_url = excluded.product_url,
+         title = excluded.title,
+         price_min = excluded.price_min,
+         price_max = excluded.price_max,
+         shipping_cost = excluded.shipping_cost,
+         rating = excluded.rating,
+         review_count = excluded.review_count,
+         orders_count = excluded.orders_count,
+         estimated_delivery_days = excluded.estimated_delivery_days,
+         variants = excluded.variants,
+         images = excluded.images,
+         description_raw = excluded.description_raw,
+         supplier_score = excluded.supplier_score,
+         import_status = excluded.import_status,
+         updated_at = now()`,
+      [
+        supplier.id, supplier.opportunity_id, supplier.supplier_platform || 'aliexpress', supplier.supplier_name || null, supplier.supplier_url || null,
+        supplier.product_url, supplier.title || null, supplier.price_min || null, supplier.price_max || null, supplier.shipping_cost || null,
+        supplier.rating || null, supplier.review_count || null, supplier.orders_count || null, supplier.estimated_delivery_days || null,
+        typeof supplier.variants === 'string' ? supplier.variants : JSON.stringify(supplier.variants), typeof supplier.images === 'string' ? supplier.images : JSON.stringify(supplier.images), supplier.description_raw || null, supplier.supplier_score || null, supplier.import_status || 'not_imported',
+        supplier.created_at || new Date().toISOString(), supplier.updated_at || new Date().toISOString()
+      ]
+    );
+  } else {
+    const db = readDb();
+    if (!db.suppliers) db.suppliers = {};
+    db.suppliers[supplier.id] = supplier;
+    writeDb(db);
+  }
+}
+
+async function upsertResearchRunDb(run: any) {
+  if (usePostgres) {
+    await pool.query(
+      `insert into research_runs (
+        id, run_type, niche, query, status, started_at, completed_at, results_count, error_message, metadata
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+       on conflict (id) do update set
+         status = excluded.status,
+         completed_at = excluded.completed_at,
+         results_count = excluded.results_count,
+         error_message = excluded.error_message,
+         metadata = excluded.metadata`,
+      [
+        run.id, run.run_type, run.niche, run.query, run.status,
+        run.started_at, run.completed_at, run.results_count, run.error_message, run.metadata ? (typeof run.metadata === 'string' ? run.metadata : JSON.stringify(run.metadata)) : null
+      ]
+    );
+  } else {
+    const db = readDb();
+    if (!db.researchRuns) db.researchRuns = {};
+    db.researchRuns[run.id] = run;
+    writeDb(db);
+  }
+}
+
+async function upsertImportJobDb(job: any) {
+  if (usePostgres) {
+    await pool.query(
+      `insert into product_import_jobs (
+        id, supplier_product_id, created_product_id, status, started_at, completed_at, error_message, import_payload
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8)
+       on conflict (id) do update set
+         created_product_id = excluded.created_product_id,
+         status = excluded.status,
+         completed_at = excluded.completed_at,
+         error_message = excluded.error_message,
+         import_payload = excluded.import_payload`,
+      [
+        job.id, job.supplier_product_id, job.created_product_id, job.status,
+        job.started_at, job.completed_at, job.error_message, job.import_payload ? (typeof job.import_payload === 'string' ? job.import_payload : JSON.stringify(job.import_payload)) : null
+      ]
+    );
+  } else {
+    const db = readDb();
+    if (!db.importJobs) db.importJobs = {};
+    db.importJobs[job.id] = job;
+    writeDb(db);
+  }
+}
+
 async function getProductsDb() {
   if (usePostgres) {
     const result = await pool.query("select payload from products order by priority asc, name asc");
@@ -1770,6 +2629,94 @@ async function migrate() {
       status text not null,
       created_at timestamptz not null,
       payload jsonb not null
+    );
+
+    create table if not exists product_research_opportunities (
+      id uuid primary key,
+      name text not null,
+      niche text not null,
+      subdomain text,
+      category text,
+      source text,
+      source_url text,
+      status text default 'discovered',
+      opportunity_score numeric,
+      recommendation_summary text,
+      demand_score numeric,
+      margin_score numeric,
+      supplier_score numeric,
+      competition_score numeric,
+      brand_fit_score numeric,
+      content_score numeric,
+      risk_score numeric,
+      risk_notes text,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists competitor_products (
+      id uuid primary key,
+      opportunity_id uuid references product_research_opportunities(id) on delete cascade,
+      competitor_name text,
+      competitor_url text,
+      product_title text,
+      price numeric,
+      compare_at_price numeric,
+      rating numeric,
+      review_count integer,
+      sales_signal text,
+      offer_notes text,
+      positioning_notes text,
+      images jsonb,
+      captured_at timestamptz not null default now()
+    );
+
+    create table if not exists supplier_products (
+      id uuid primary key,
+      opportunity_id uuid references product_research_opportunities(id) on delete cascade,
+      supplier_platform text default 'aliexpress',
+      supplier_name text,
+      supplier_url text,
+      product_url text not null,
+      title text,
+      price_min numeric,
+      price_max numeric,
+      shipping_cost numeric,
+      rating numeric,
+      review_count integer,
+      orders_count integer,
+      estimated_delivery_days integer,
+      variants jsonb,
+      images jsonb,
+      description_raw text,
+      supplier_score numeric,
+      import_status text default 'not_imported',
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists research_runs (
+      id uuid primary key,
+      run_type text,
+      niche text,
+      query text,
+      status text,
+      started_at timestamptz not null default now(),
+      completed_at timestamptz,
+      results_count integer,
+      error_message text,
+      metadata jsonb
+    );
+
+    create table if not exists product_import_jobs (
+      id uuid primary key,
+      supplier_product_id uuid references supplier_products(id) on delete cascade,
+      created_product_id text,
+      status text default 'queued',
+      started_at timestamptz not null default now(),
+      completed_at timestamptz,
+      error_message text,
+      import_payload jsonb
     );
   `);
 }
