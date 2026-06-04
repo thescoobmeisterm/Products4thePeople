@@ -45,6 +45,7 @@ import {
   BookOpen,
   AlertTriangle,
   Eye,
+  Layers,
 } from "lucide-react";
 import {
   listMedusaOrders,
@@ -6479,10 +6480,10 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
       {activeSubTab === "opportunities" && (
         <>
           <section className="metrics-grid">
-            <Metric icon={Search} label="Opportunities Discovered" value={opportunityMetrics.total.toString()} trend="Continuous evaluations" />
-            <Metric icon={Star} label="Watchlisted Gaps" value={opportunityMetrics.watchlist.toString()} trend="High priority review" />
-            <Metric icon={AlertTriangle} label="Open Catalog Gaps" value={opportunityMetrics.gaps.toString()} trend="Missing niche listings" />
-            <Metric icon={CheckCircle2} label="Imported Drafts" value={opportunityMetrics.imported.toString()} trend="Waiting in catalog review" />
+            <ResearchMetric icon={Search} label="Opportunities Discovered" value={opportunityMetrics.total.toString()} trend="Continuous evaluations" />
+            <ResearchMetric icon={Star} label="Watchlisted Gaps" value={opportunityMetrics.watchlist.toString()} trend="High priority review" />
+            <ResearchMetric icon={AlertTriangle} label="Open Catalog Gaps" value={opportunityMetrics.gaps.toString()} trend="Missing niche listings" />
+            <ResearchMetric icon={CheckCircle2} label="Imported Drafts" value={opportunityMetrics.imported.toString()} trend="Waiting in catalog review" />
           </section>
 
           <article className="panel wide">
@@ -6660,7 +6661,7 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                 const nicheProducts = products.filter(p => p.niche.toLowerCase() === niche.toLowerCase() || p.subdomain?.toLowerCase() === niche.toLowerCase());
                 return (
                   <div key={niche} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', padding: '14px', borderRadius: '10px' }}>
-                    <div style={{ display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                       <strong style={{ fontSize: '1rem', color: '#111827' }}>{niche} Storefront</strong>
                       <span className="status active" style={{ fontSize: '0.75rem' }}>{nicheProducts.length} Active Items</span>
                     </div>
@@ -7204,7 +7205,7 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
       <div className="modal" style={{ maxWidth: '850px', display: 'flex', flexDirection: 'column', gap: '0px', padding: '0px', overflow: 'hidden' }}>
         
         {/* Modal Header */}
-        <div style={{ padding: '20px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '20px', borderBottom: '1px solid #e5e7eb', background: '#f9fafb', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <span style={{ fontSize: '0.78rem', textTransform: 'uppercase', color: '#176c61', fontWeight: 'bold' }}>
               Catalog Research details
@@ -7277,7 +7278,7 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
                     { label: "Store Brand Fit Score", val: opportunity.brand_fit_score },
                     { label: "UGC Video Content Score", val: opportunity.content_score }
                   ].map(sc => (
-                    <div key={sc.label} style={{ border: '1px solid #e5e7eb', padding: '10px 12px', borderRadius: '8px', display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div key={sc.label} style={{ border: '1px solid #e5e7eb', padding: '10px 12px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <span style={{ fontSize: '0.8rem', color: '#68777d' }}>{sc.label}</span>
                       <strong style={{ color: '#111827', fontSize: '1.1rem' }}>{sc.val} / 100</strong>
                     </div>
@@ -7286,7 +7287,7 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
               </div>
 
               <div>
-                <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', padding: '16px', borderRadius: '10px', height: '100%', display: 'flex', flexDirection: 'column', justifyBetween: 'space-between', justifyContent: 'space-between' }}>
+                <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', padding: '16px', borderRadius: '10px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                   <div>
                     <h3 style={{ fontSize: '1rem', color: '#111827', marginBottom: '8px' }}>Opportunity Score Evaluation</h3>
                     <div style={{ fontSize: '3rem', fontWeight: 'bold', color: '#176c61', textAlign: 'center', margin: '20px 0' }}>
@@ -7341,15 +7342,15 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
                   </div>
 
                   <div style={{ background: '#f9fafb', border: '1px solid #dce3e7', borderRadius: '10px', padding: '14px', marginTop: '8px' }}>
-                    <div style={{ display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                       <span style={{ fontSize: '0.85rem', color: '#68777d' }}>Total Landed Cost:</span>
                       <strong>${totalLanded.toFixed(2)}</strong>
                     </div>
-                    <div style={{ display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', marginBottom: '6px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
                       <span style={{ fontSize: '0.85rem', color: '#68777d' }}>Estimated Profit:</span>
                       <strong>${profitVal.toFixed(2)}</strong>
                     </div>
-                    <div style={{ display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', borderTop: '1px solid #e5e7eb', paddingTop: '6px', fontWeight: 'bold' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e5e7eb', paddingTop: '6px', fontWeight: 'bold' }}>
                       <span style={{ color: '#111827' }}>Gross Markup Margin:</span>
                       <span style={{ color: marginPct >= 60 ? '#16a34a' : '#d97706' }}>
                         {marginPct}% {marginPct >= 60 ? "✓ High Profit" : "!"}
@@ -7369,7 +7370,7 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
                     </div>
                   ) : competitors.map(comp => (
                     <div key={comp.id} style={{ border: '1px solid #e5e7eb', padding: '10px 14px', borderRadius: '8px' }}>
-                      <div style={{ display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <strong style={{ fontSize: '0.9rem' }}>{comp.competitor_name}</strong>
                         <strong style={{ color: '#176c61' }}>${comp.price}</strong>
                       </div>
@@ -7442,7 +7443,7 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
                     No AliExpress listings linked to this opportunity. Click "Search AliExpress" in the main workspace directory.
                   </div>
                 ) : suppliers.map(sup => (
-                  <div key={sup.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '14px', display: 'flex', justifyBetween: 'space-between', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb' }}>
+                  <div key={sup.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f9fafb' }}>
                     <div style={{ maxWidth: '70%' }}>
                       <strong style={{ fontSize: '0.94rem', color: '#111827', display: 'block' }}>{sup.title}</strong>
                       <div style={{ fontSize: '0.8rem', color: '#4b5563', marginTop: '4px' }}>
@@ -7488,7 +7489,7 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
   );
 }
 
-function Metric({
+function ResearchMetric({
   icon: Icon,
   label,
   value,
