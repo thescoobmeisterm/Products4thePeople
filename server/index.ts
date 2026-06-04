@@ -56,6 +56,8 @@ interface DbSchema {
   suppliers?: Record<string, any>;
   researchRuns?: Record<string, any>;
   importJobs?: Record<string, any>;
+  experiments?: Record<string, any>;
+  experimentVariants?: Record<string, any>;
 }
 
 function readDb(): DbSchema {
@@ -70,7 +72,9 @@ function readDb(): DbSchema {
         competitors: {},
         suppliers: {},
         researchRuns: {},
-        importJobs: {}
+        importJobs: {},
+        experiments: {},
+        experimentVariants: {}
       };
     }
     const content = fs.readFileSync(DB_FILE, "utf-8");
@@ -85,6 +89,8 @@ function readDb(): DbSchema {
       suppliers: parsed.suppliers || {},
       researchRuns: parsed.researchRuns || {},
       importJobs: parsed.importJobs || {},
+      experiments: parsed.experiments || {},
+      experimentVariants: parsed.experimentVariants || {},
     };
   } catch {
     return {
@@ -96,7 +102,9 @@ function readDb(): DbSchema {
       competitors: {},
       suppliers: {},
       researchRuns: {},
-      importJobs: {}
+      importJobs: {},
+      experiments: {},
+      experimentVariants: {}
     };
   }
 }
@@ -360,7 +368,7 @@ app.post("/api/contacts", async (request, response) => {
 // Stripe Checkout Session Integration
 app.post("/api/create-checkout-session", async (request, response) => {
   try {
-    const { customerName, email, items, storefront, discountCode } = request.body;
+    const { customerName, email, items, storefront, discountCode, shippingThreshold } = request.body;
     const cleanedEmail = String(email || "").trim();
     const cleanedName = String(customerName || "Customer").trim();
 
@@ -401,7 +409,10 @@ app.post("/api/create-checkout-session", async (request, response) => {
 
     const subtotal = lineItems.reduce((total, item) => total + item.price_data.unit_amount * item.quantity, 0);
     const tax = Math.round(subtotal * taxRate);
-    const shipping = (isFreeShipping || subtotal >= Math.round(freeShippingThreshold * 100)) ? 0 : Math.round(flatShipping * 100);
+    
+    // Support custom free shipping threshold from active A/B testing variations
+    const thresholdToUse = shippingThreshold !== undefined ? Number(shippingThreshold) : freeShippingThreshold;
+    const shipping = (isFreeShipping || subtotal >= Math.round(thresholdToUse * 100)) ? 0 : Math.round(flatShipping * 100);
 
     if (tax > 0) {
       lineItems.push({
@@ -1138,6 +1149,299 @@ app.post("/api/admin/product-research/generate-content", requireAdmin, async (re
     };
 
     response.json({ content: aiContent });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+// A/B Testing Schemas
+const createExperimentSchema = z.object({
+  name: z.string().min(1),
+  niche: z.string().min(1),
+  test_type: z.enum(["homepage_hero", "product_pricing", "checkout_threshold"]),
+  target_id: z.string().optional(),
+  traffic_allocation: z.number().int().min(0).max(100),
+  confidence_threshold: z.number().int().min(0).max(100),
+  variants: z.array(z.object({
+    name: z.string().min(1),
+    changes: z.record(z.any()),
+    is_control: z.boolean()
+  })).min(2)
+});
+
+// A/B Testing REST Endpoints
+app.get("/api/experiments/active", async (_request, response) => {
+  try {
+    const all = await getExperimentsDb();
+    const active = all.filter((e: any) => e.status === "active");
+    const result = [];
+    for (const exp of active) {
+      const variants = await getVariantsForExperimentDb(exp.id);
+      result.push({
+        ...exp,
+        variants
+      });
+    }
+    response.json({ experiments: result });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/experiments/run-simulation", requireAdmin, async (request, response) => {
+  try {
+    const { id } = z.object({ id: z.string() }).parse(request.body);
+    const exp = await getExperimentByIdDb(id);
+    if (!exp) {
+      response.status(404).json({ error: "Experiment not found" });
+      return;
+    }
+
+    const variants = await getVariantsForExperimentDb(id);
+    if (variants.length < 2) {
+      response.status(400).json({ error: "Experiment must have at least 2 variants to simulate." });
+      return;
+    }
+
+    const totalSimulated = 800 + Math.floor(Math.random() * 400);
+
+    for (const variant of variants) {
+      const isControl = variant.is_control;
+      const purchaseProb = isControl ? 0.045 : 0.075;
+      const cartProb = isControl ? 0.12 : 0.18;
+      const checkoutProb = isControl ? 0.08 : 0.13;
+      const emailProb = isControl ? 0.06 : 0.10;
+
+      const visitors = Math.round(totalSimulated / variants.length);
+      let carts = 0;
+      let checkouts = 0;
+      let purchases = 0;
+      let revenue = 0;
+      let emails = 0;
+
+      for (let i = 0; i < visitors; i++) {
+        if (Math.random() < cartProb) carts++;
+        if (Math.random() < checkoutProb) checkouts++;
+        if (Math.random() < purchaseProb) {
+          purchases++;
+          const basePrice = exp.test_type === "product_pricing" ? 50 : 35;
+          revenue += basePrice + Math.random() * 20;
+        }
+        if (Math.random() < emailProb) emails++;
+      }
+
+      variant.visitors = (variant.visitors || 0) + visitors;
+      variant.add_to_cart_count = (variant.add_to_cart_count || 0) + carts;
+      variant.checkout_count = (variant.checkout_count || 0) + checkouts;
+      variant.purchase_count = (variant.purchase_count || 0) + purchases;
+      variant.revenue = Number(variant.revenue || 0) + Math.round(revenue * 100) / 100;
+      variant.emails_captured = (variant.emails_captured || 0) + emails;
+
+      await upsertExperimentVariantDb(variant);
+    }
+
+    exp.updated_at = new Date().toISOString();
+    await upsertExperimentDb(exp);
+
+    response.json({ success: true, message: "Simulation completed.", variants });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/experiments/:id/promote", requireAdmin, async (request, response) => {
+  try {
+    const { id } = request.params;
+    const { variantId } = z.object({ variantId: z.string() }).parse(request.body);
+
+    const exp = await getExperimentByIdDb(id);
+    if (!exp) {
+      response.status(404).json({ error: "Experiment not found" });
+      return;
+    }
+
+    const variants = await getVariantsForExperimentDb(id);
+    const winningVariant = variants.find((v: any) => v.id === variantId);
+    if (!winningVariant) {
+      response.status(404).json({ error: "Variant not found" });
+      return;
+    }
+
+    exp.status = "completed";
+    exp.winner_variant_id = variantId;
+    exp.end_date = new Date().toISOString();
+    await upsertExperimentDb(exp);
+
+    if (exp.test_type === "product_pricing" && exp.target_id) {
+      const products = await getProductsDb();
+      const product = products.find((p: any) => p.id === exp.target_id);
+      if (product) {
+        const price = Number(winningVariant.changes.price || winningVariant.changes.retailMin);
+        if (price > 0) {
+          product.retailMin = price;
+          product.retailMax = price;
+          await upsertProductDb(product);
+        }
+      }
+    }
+
+    response.json({ success: true, experiment: exp, variant: winningVariant });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/experiments/:id/track", async (request, response) => {
+  try {
+    const { id } = request.params;
+    const { action, variantId, revenue } = z.object({
+      action: z.enum(["visitor", "add_to_cart", "checkout", "purchase", "email_capture"]),
+      variantId: z.string(),
+      revenue: z.number().optional()
+    }).parse(request.body);
+
+    const exp = await getExperimentByIdDb(id);
+    if (!exp) {
+      response.status(404).json({ error: "Experiment not found" });
+      return;
+    }
+
+    if (exp.status !== "active") {
+      response.json({ message: "Experiment is not active, track skipped." });
+      return;
+    }
+
+    const variants = await getVariantsForExperimentDb(id);
+    const variant = variants.find((v: any) => v.id === variantId);
+    if (!variant) {
+      response.status(404).json({ error: "Variant not found" });
+      return;
+    }
+
+    if (action === "visitor") {
+      variant.visitors = (variant.visitors || 0) + 1;
+    } else if (action === "add_to_cart") {
+      variant.add_to_cart_count = (variant.add_to_cart_count || 0) + 1;
+    } else if (action === "checkout") {
+      variant.checkout_count = (variant.checkout_count || 0) + 1;
+    } else if (action === "purchase") {
+      variant.purchase_count = (variant.purchase_count || 0) + 1;
+      if (revenue) {
+        variant.revenue = Number(variant.revenue || 0) + revenue;
+      }
+    } else if (action === "email_capture") {
+      variant.emails_captured = (variant.emails_captured || 0) + 1;
+    }
+
+    await upsertExperimentVariantDb(variant);
+    response.json({ success: true, variant });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/admin/experiments", requireAdmin, async (_request, response) => {
+  try {
+    const experiments = await getExperimentsDb();
+    const result = [];
+    for (const exp of experiments) {
+      const variants = await getVariantsForExperimentDb(exp.id);
+      result.push({
+        ...exp,
+        variants
+      });
+    }
+    response.json({ experiments: result });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/experiments", requireAdmin, async (request, response) => {
+  try {
+    const body = createExperimentSchema.parse(request.body);
+    const expId = crypto.randomUUID();
+    const start_date = new Date().toISOString();
+
+    const experiment = {
+      id: expId,
+      name: body.name,
+      status: "active",
+      niche: body.niche,
+      test_type: body.test_type,
+      target_id: body.target_id || null,
+      traffic_allocation: body.traffic_allocation,
+      winner_variant_id: null,
+      confidence_threshold: body.confidence_threshold,
+      start_date,
+      end_date: null,
+      created_at: start_date,
+      updated_at: start_date
+    };
+
+    await upsertExperimentDb(experiment);
+
+    const variantsCreated = [];
+    for (const v of body.variants) {
+      const variant = {
+        id: crypto.randomUUID(),
+        experiment_id: expId,
+        name: v.name,
+        changes: v.changes,
+        visitors: 0,
+        add_to_cart_count: 0,
+        checkout_count: 0,
+        purchase_count: 0,
+        revenue: 0,
+        emails_captured: 0,
+        is_control: v.is_control
+      };
+      await upsertExperimentVariantDb(variant);
+      variantsCreated.push(variant);
+    }
+
+    response.status(201).json({
+      experiment: {
+        ...experiment,
+        variants: variantsCreated
+      }
+    });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/admin/experiments/:id", requireAdmin, async (request, response) => {
+  try {
+    const { id } = request.params;
+    const experiment = await getExperimentByIdDb(id);
+    if (!experiment) {
+      response.status(404).json({ error: "Experiment not found" });
+      return;
+    }
+    const variants = await getVariantsForExperimentDb(id);
+    response.json({
+      experiment: {
+        ...experiment,
+        variants
+      }
+    });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.patch("/api/admin/experiments/:id", requireAdmin, async (request, response) => {
+  try {
+    const { id } = request.params;
+    const exp = await getExperimentByIdDb(id);
+    if (!exp) {
+      response.status(404).json({ error: "Experiment not found" });
+      return;
+    }
+    const updated = { ...exp, ...request.body, id, updated_at: new Date().toISOString() };
+    await upsertExperimentDb(updated);
+    response.json({ experiment: updated });
   } catch (error: any) {
     response.status(500).json({ error: error.message });
   }
@@ -2430,6 +2734,131 @@ async function upsertImportJobDb(job: any) {
   }
 }
 
+async function getExperimentsDb() {
+  if (usePostgres) {
+    const result = await pool.query("select * from experiments order by created_at desc");
+    return result.rows;
+  } else {
+    const db = readDb();
+    return Object.values(db.experiments || {}).sort((a: any, b: any) => b.created_at.localeCompare(a.created_at));
+  }
+}
+
+async function getExperimentByIdDb(id: string) {
+  if (usePostgres) {
+    const result = await pool.query("select * from experiments where id = $1", [id]);
+    return result.rowCount > 0 ? result.rows[0] : null;
+  } else {
+    const db = readDb();
+    return db.experiments?.[id] || null;
+  }
+}
+
+async function upsertExperimentDb(exp: any) {
+  if (usePostgres) {
+    await pool.query(
+      `insert into experiments (
+        id, name, status, niche, test_type, target_id, traffic_allocation, 
+        winner_variant_id, confidence_threshold, start_date, end_date, created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       on conflict (id) do update set
+         name = excluded.name,
+         status = excluded.status,
+         niche = excluded.niche,
+         test_type = excluded.test_type,
+         target_id = excluded.target_id,
+         traffic_allocation = excluded.traffic_allocation,
+         winner_variant_id = excluded.winner_variant_id,
+         confidence_threshold = excluded.confidence_threshold,
+         end_date = excluded.end_date,
+         updated_at = now()`,
+      [
+        exp.id, exp.name, exp.status, exp.niche, exp.test_type, exp.target_id || null, exp.traffic_allocation,
+        exp.winner_variant_id || null, exp.confidence_threshold, exp.start_date, exp.end_date || null,
+        exp.created_at || new Date().toISOString(), exp.updated_at || new Date().toISOString()
+      ]
+    );
+  } else {
+    const db = readDb();
+    if (!db.experiments) db.experiments = {};
+    db.experiments[exp.id] = exp;
+    writeDb(db);
+  }
+}
+
+async function deleteExperimentDb(id: string) {
+  if (usePostgres) {
+    await pool.query("delete from experiments where id = $1", [id]);
+  } else {
+    const db = readDb();
+    if (db.experiments?.[id]) {
+      delete db.experiments[id];
+      if (db.experimentVariants) {
+        Object.keys(db.experimentVariants).forEach((vid) => {
+          if (db.experimentVariants[vid].experiment_id === id) {
+            delete db.experimentVariants[vid];
+          }
+        });
+      }
+      writeDb(db);
+    }
+  }
+}
+
+async function getVariantsForExperimentDb(experimentId: string) {
+  if (usePostgres) {
+    const result = await pool.query("select * from experiment_variants where experiment_id = $1 order by is_control desc, id asc", [experimentId]);
+    return result.rows.map(v => ({
+      ...v,
+      changes: typeof v.changes === 'string' ? JSON.parse(v.changes) : v.changes
+    }));
+  } else {
+    const db = readDb();
+    const list = Object.values(db.experimentVariants || {})
+      .filter((v: any) => v.experiment_id === experimentId)
+      .sort((a: any, b: any) => (b.is_control ? 1 : 0) - (a.is_control ? 1 : 0) || a.id.localeCompare(b.id));
+    return list.map((v: any) => ({
+      ...v,
+      changes: typeof v.changes === 'string' ? JSON.parse(v.changes) : v.changes
+    }));
+  }
+}
+
+async function upsertExperimentVariantDb(v: any) {
+  const changesVal = typeof v.changes === 'string' ? JSON.parse(v.changes) : v.changes;
+  if (usePostgres) {
+    await pool.query(
+      `insert into experiment_variants (
+        id, experiment_id, name, changes, visitors, add_to_cart_count, 
+        checkout_count, purchase_count, revenue, emails_captured, is_control
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       on conflict (id) do update set
+         name = excluded.name,
+         changes = excluded.changes,
+         visitors = excluded.visitors,
+         add_to_cart_count = excluded.add_to_cart_count,
+         checkout_count = excluded.checkout_count,
+         purchase_count = excluded.purchase_count,
+         revenue = excluded.revenue,
+         emails_captured = excluded.emails_captured,
+         is_control = excluded.is_control`,
+      [
+        v.id, v.experiment_id, v.name, JSON.stringify(changesVal),
+        v.visitors || 0, v.add_to_cart_count || 0, v.checkout_count || 0, v.purchase_count || 0,
+        v.revenue || 0, v.emails_captured || 0, v.is_control || false
+      ]
+    );
+  } else {
+    const db = readDb();
+    if (!db.experimentVariants) db.experimentVariants = {};
+    db.experimentVariants[v.id] = {
+      ...v,
+      changes: changesVal
+    };
+    writeDb(db);
+  }
+}
+
 async function getProductsDb() {
   if (usePostgres) {
     const result = await pool.query("select payload from products order by priority asc, name asc");
@@ -2717,6 +3146,36 @@ async function migrate() {
       completed_at timestamptz,
       error_message text,
       import_payload jsonb
+    );
+
+    create table if not exists experiments (
+      id text primary key,
+      name text not null,
+      status text not null,
+      niche text not null,
+      test_type text not null,
+      target_id text,
+      traffic_allocation integer not null default 50,
+      winner_variant_id text,
+      confidence_threshold integer not null default 95,
+      start_date timestamptz not null default now(),
+      end_date timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists experiment_variants (
+      id text primary key,
+      experiment_id text references experiments(id) on delete cascade,
+      name text not null,
+      changes jsonb not null,
+      visitors integer not null default 0,
+      add_to_cart_count integer not null default 0,
+      checkout_count integer not null default 0,
+      purchase_count integer not null default 0,
+      revenue numeric not null default 0,
+      emails_captured integer not null default 0,
+      is_control boolean not null default false
     );
   `);
 }

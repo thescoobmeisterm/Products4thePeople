@@ -267,6 +267,84 @@ export async function generateContentForOpportunity(id: string) {
   });
 }
 
+export type ExperimentVariant = {
+  id: string;
+  experiment_id: string;
+  name: string;
+  changes: Record<string, any>;
+  visitors: number;
+  add_to_cart_count: number;
+  checkout_count: number;
+  purchase_count: number;
+  revenue: number;
+  emails_captured: number;
+  is_control: boolean;
+};
+
+export type Experiment = {
+  id: string;
+  name: string;
+  status: "draft" | "active" | "completed";
+  niche: string;
+  test_type: "homepage_hero" | "product_pricing" | "checkout_threshold";
+  target_id?: string;
+  traffic_allocation: number;
+  winner_variant_id?: string | null;
+  confidence_threshold: number;
+  start_date: string;
+  end_date?: string | null;
+  created_at: string;
+  updated_at: string;
+  variants: ExperimentVariant[];
+};
+
+export async function getActiveExperiments() {
+  return apiFetch<{ experiments: Experiment[] }>("/experiments/active");
+}
+
+export async function getExperiments() {
+  return apiFetch<{ experiments: Experiment[] }>("/admin/experiments");
+}
+
+export async function getExperimentDetails(id: string) {
+  return apiFetch<{ experiment: Experiment }>(`/admin/experiments/${encodeURIComponent(id)}`);
+}
+
+export async function createExperiment(exp: Omit<Experiment, "id" | "status" | "created_at" | "updated_at" | "variants"> & { variants: Array<Omit<ExperimentVariant, "id" | "experiment_id" | "visitors" | "add_to_cart_count" | "checkout_count" | "purchase_count" | "revenue" | "emails_captured">> }) {
+  return apiFetch<{ experiment: Experiment }>("/admin/experiments", {
+    method: "POST",
+    body: JSON.stringify(exp),
+  });
+}
+
+export async function updateExperimentStatus(id: string, status: Experiment["status"]) {
+  return apiFetch<{ experiment: Experiment }>(`/admin/experiments/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ status }),
+  });
+}
+
+export async function trackExperimentConversion(id: string, action: "visitor" | "add_to_cart" | "checkout" | "purchase" | "email_capture", variantId: string, revenue?: number) {
+  return apiFetch<{ success: boolean; variant: ExperimentVariant }>(`/admin/experiments/${encodeURIComponent(id)}/track`, {
+    method: "POST",
+    body: JSON.stringify({ action, variantId, revenue }),
+  });
+}
+
+export async function promoteExperimentVariant(id: string, variantId: string) {
+  return apiFetch<{ success: boolean; experiment: Experiment; variant: ExperimentVariant }>(`/admin/experiments/${encodeURIComponent(id)}/promote`, {
+    method: "POST",
+    body: JSON.stringify({ variantId }),
+  });
+}
+
+export async function simulateExperimentTraffic(id: string) {
+  return apiFetch<{ success: boolean; message: string; variants: ExperimentVariant[] }>("/admin/experiments/run-simulation", {
+    method: "POST",
+    body: JSON.stringify({ id }),
+  });
+}
+
 async function apiFetch<T>(path: string, options: RequestInit = {}) {
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...options,

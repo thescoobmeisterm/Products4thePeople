@@ -80,10 +80,20 @@ import {
   importSupplierProduct,
   setWatchlistStatus,
   generateContentForOpportunity,
+  getExperiments,
+  getExperimentDetails,
+  createExperiment,
+  updateExperimentStatus,
+  trackExperimentConversion,
+  promoteExperimentVariant,
+  simulateExperimentTraffic,
+  getActiveExperiments,
   type ApiOrder,
   type ResearchOpportunity,
   type CompetitorProduct,
   type SupplierProduct,
+  type Experiment,
+  type ExperimentVariant,
 } from "./lib/api";
 import "./styles.css";
 
@@ -425,6 +435,7 @@ const navItems = [
   ["Stores", Store],
   ["Products", Package],
   ["Research", Search],
+  ["Experimentation", Sparkles],
   ["Imports", Import],
   ["Orders", ClipboardList],
   ["Customers", Users],
@@ -1306,6 +1317,16 @@ function App() {
 
         {adminTab === "research" && (
           <ResearchWorkspace products={products} setProducts={setProducts} setNotice={setNotice} />
+        )}
+
+        {adminTab === "experimentation" && (
+          <ExperimentationWorkspace
+            products={products}
+            setProducts={setProducts}
+            stores={stores}
+            setStores={setStores}
+            setNotice={setNotice}
+          />
         )}
 
         {adminTab === "imports" && (
@@ -2478,7 +2499,7 @@ function getDefaultReviews(product: Product): ProductReview[] {
 }
 
 function Storefront({
-  products,
+  products: originalProducts,
   initialMode,
   stores,
   orders,
@@ -2498,6 +2519,86 @@ function Storefront({
 }) {
   const [activeNiche, setActiveNiche] = React.useState<StorefrontMode>(initialMode);
   const [activeSubcategory, setActiveSubcategory] = React.useState("All");
+  const [detailProductId, setDetailProductId] = React.useState(() => getProductIdFromHash());
+
+  const [activeVariants, setActiveVariants] = React.useState<Record<string, { experiment: Experiment; variant: ExperimentVariant }>>({});
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const loadActiveTests = async () => {
+      try {
+        const res = await getActiveExperiments();
+        if (!isMounted || !res.experiments) return;
+        
+        const assignments: Record<string, { experiment: Experiment; variant: ExperimentVariant }> = {};
+        
+        for (const exp of res.experiments) {
+          const matchesNiche = exp.niche === "global" || exp.niche === activeNiche;
+          const matchesProduct = exp.test_type === "product_pricing" && exp.target_id === detailProductId;
+          
+          if (matchesNiche || matchesProduct) {
+            const storageKey = `p4tp_experiment_${exp.id}`;
+            let variantId = localStorage.getItem(storageKey);
+            
+            if (!variantId && exp.variants && exp.variants.length > 0) {
+              const control = exp.variants.find((v: any) => v.is_control) || exp.variants[0];
+              if (Math.random() * 100 <= exp.traffic_allocation) {
+                const randomIndex = Math.floor(Math.random() * exp.variants.length);
+                const assigned = exp.variants[randomIndex];
+                variantId = assigned.id;
+              } else {
+                variantId = control.id;
+              }
+              localStorage.setItem(storageKey, variantId);
+              void trackExperimentConversion(exp.id, "visitor", variantId).catch(() => {});
+            }
+            
+            const assignedVariant = exp.variants.find((v: any) => v.id === variantId);
+            if (assignedVariant) {
+              assignments[exp.id] = { experiment: exp, variant: assignedVariant };
+            }
+          }
+        }
+        setActiveVariants(assignments);
+      } catch (e) {
+        console.warn("Failed to load active A/B tests:", e);
+      }
+    };
+    
+    void loadActiveTests();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeNiche, detailProductId]);
+
+  const triggerTrack = React.useCallback((action: "add_to_cart" | "checkout" | "purchase" | "email_capture", revenue?: number) => {
+    Object.values(activeVariants).forEach(({ experiment, variant }) => {
+      void trackExperimentConversion(experiment.id, action, variant.id, revenue).catch(() => {});
+    });
+  }, [activeVariants]);
+
+  const overriddenProducts = React.useMemo(() => {
+    return originalProducts.map(product => {
+      let retailMin = product.retailMin;
+      let name = product.name;
+      
+      Object.values(activeVariants).forEach(({ experiment, variant }) => {
+        if (experiment.test_type === "product_pricing" && experiment.target_id === product.id) {
+          const newPrice = Number(variant.changes.price || variant.changes.retailMin);
+          if (newPrice > 0) retailMin = newPrice;
+          if (variant.changes.name) name = variant.changes.name;
+        }
+      });
+      
+      return {
+        ...product,
+        retailMin,
+        name
+      };
+    });
+  }, [originalProducts, activeVariants]);
+
+  const products = overriddenProducts;
   const [cart, setCart] = React.useState<Record<string, number>>({});
   const [productQuantities, setProductQuantities] = React.useState<Record<string, number>>({});
   const [email, setEmail] = React.useState("");
@@ -2505,7 +2606,6 @@ function Storefront({
   const [confirmation, setConfirmation] = React.useState("");
   const [checkoutStatus, setCheckoutStatus] = React.useState<"idle" | "redirecting" | "confirming">("idle");
   const [selectedProduct, setSelectedProduct] = React.useState<Product | null>(null);
-  const [detailProductId, setDetailProductId] = React.useState(() => getProductIdFromHash());
   const [leadEmail, setLeadEmail] = React.useState("");
   const [leadName, setLeadName] = React.useState("");
   const [leadPhone, setLeadPhone] = React.useState("");
@@ -2869,6 +2969,7 @@ function Storefront({
             transaction_id: orderId,
             value: pendingOrder.total,
           });
+          triggerTrack("purchase", pendingOrder.total);
         }
         localStorage.removeItem(pendingCheckoutKey);
         setCart({});
@@ -2884,7 +2985,7 @@ function Storefront({
     };
 
     void confirmPaidOrder();
-  }, [onPlaceOrder]);
+  }, [onPlaceOrder, triggerTrack]);
 
   const storefrontProducts = products.filter((product) => activeNiche === "general" || product.subdomain === activeNiche);
   const subcategories = getSubcategories(storefrontProducts);
@@ -2909,6 +3010,14 @@ function Storefront({
   const subtotal = cartItems.reduce((total, item) => total + item.product.retailMin * item.quantity, 0);
   const totalCartCount = cartItems.reduce((count, item) => count + item.quantity, 0);
 
+  let freeShippingLimit = 25;
+  Object.values(activeVariants).forEach(({ experiment, variant }) => {
+    if (experiment.test_type === "checkout_threshold") {
+      const threshold = Number(variant.changes.freeShippingThreshold || variant.changes.threshold);
+      if (threshold > 0) freeShippingLimit = threshold;
+    }
+  });
+
   let discountPercent = 0;
   if (appliedCoupon === "WHEEL10" || appliedCoupon === "WELCOME10") discountPercent = 0.1;
   else if (appliedCoupon === "WHEEL15") discountPercent = 0.15;
@@ -2917,7 +3026,7 @@ function Storefront({
   const discountAmount = roundMoney(subtotal * discountPercent);
   const discountedSubtotal = Math.max(0, subtotal - discountAmount);
 
-  const shipping = (appliedCoupon === "FREESHIP" || subtotal >= 25 || subtotal === 0) ? 0 : 7;
+  const shipping = (appliedCoupon === "FREESHIP" || subtotal >= freeShippingLimit || subtotal === 0) ? 0 : 7;
   const tax = subtotal > 0 ? roundMoney(discountedSubtotal * 0.06) : 0;
   const total = roundMoney(discountedSubtotal + shipping + tax);
 
@@ -2957,6 +3066,7 @@ function Storefront({
         value: product.retailMin * Math.max(1, quantity),
       });
       addToast(`${product.name} added to cart`, "success");
+      triggerTrack("add_to_cart");
     }
     // Animation
     setAddedProductId(productId);
@@ -3001,6 +3111,7 @@ function Storefront({
       phone: leadPhone || undefined,
       wantsSms: wantsSms || undefined,
     });
+    triggerTrack("email_capture");
     addToast("You're on the list! Watch for offers and launch tests.", "success");
     setLeadEmail("");
     setLeadName("");
@@ -3194,6 +3305,7 @@ function Storefront({
       value: total,
       num_items: cartItems.reduce((count, item) => count + item.quantity, 0),
     });
+    triggerTrack("checkout");
     setCheckoutStatus("redirecting");
     setConfirmation("");
     try {
@@ -3207,6 +3319,7 @@ function Storefront({
           totals: { subtotal, shipping, tax, total },
           storefront: activeNiche,
           discountCode: appliedCoupon,
+          shippingThreshold: freeShippingLimit,
         }),
       });
       const session = (await response.json()) as { url?: string; error?: string };
@@ -3219,6 +3332,20 @@ function Storefront({
       setConfirmation(error instanceof Error ? error.message : "Stripe checkout could not be started.");
     }
   };
+
+  let heroHeadline = config.heroHeadline;
+  let heroSubheadline = config.heroSubheadline;
+  let heroImage = config.heroImage;
+  let ctaText = config.ctaText;
+
+  Object.values(activeVariants).forEach(({ experiment, variant }) => {
+    if (experiment.test_type === "homepage_hero") {
+      if (variant.changes.heroHeadline) heroHeadline = variant.changes.heroHeadline;
+      if (variant.changes.heroSubheadline) heroSubheadline = variant.changes.heroSubheadline;
+      if (variant.changes.heroImage) heroImage = variant.changes.heroImage;
+      if (variant.changes.ctaText) ctaText = variant.changes.ctaText;
+    }
+  });
 
   return (
     <main
@@ -3234,7 +3361,7 @@ function Storefront({
           "--store-font-body": config.bodyFont,
           "--store-header-bg": config.backgroundColor + "f0",
           "--store-border": config.textColor + "1a",
-          "--store-hero": `linear-gradient(90deg, rgba(17, 25, 29, 0.8), rgba(17, 25, 29, 0.18)), url(${config.heroImage})`,
+          "--store-hero": `linear-gradient(90deg, rgba(17, 25, 29, 0.8), rgba(17, 25, 29, 0.18)), url(${heroImage})`,
           "--store-card-bg": activeNiche === "fitness" || activeNiche === "automotive" ? (config.secondaryColor || "#111827") : "#ffffff",
           "--store-card-text": config.textColor,
         } as React.CSSProperties
@@ -3363,15 +3490,15 @@ function Storefront({
       <section className="store-hero">
         <div>
           <p>{config.eyebrow}</p>
-          <h1>{config.heroHeadline}</h1>
+          <h1>{heroHeadline}</h1>
           <p className="hero-subheadline" style={{ fontSize: '1.2rem', opacity: 0.9, maxWidth: '640px', margin: '8px 0 24px' }}>
-            {config.heroSubheadline}
+            {heroSubheadline}
           </p>
           <div className="hero-ctas" style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>
             <button className="primary" onClick={() => {
               document.querySelector(".shop-grid")?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }} style={{ minHeight: '44px', padding: '0 24px', fontWeight: 600 }}>
-              {config.ctaText}
+              {ctaText}
             </button>
             {config.secondaryCtaText && (
               <button className="secondary" onClick={() => {
@@ -3862,17 +3989,17 @@ function Storefront({
           {cartItems.length > 0 && (
             <div className="shipping-progress-container" style={{ margin: '12px 0 6px' }}>
               <div className="shipping-progress-text">
-                {subtotal >= 25 ? (
+                {subtotal >= freeShippingLimit ? (
                   <span>🎉 <strong>Free Shipping Unlocked!</strong></span>
                 ) : (
-                  <span>Add <strong>{money(25 - subtotal)}</strong> for free shipping</span>
+                  <span>Add <strong>{money(freeShippingLimit - subtotal)}</strong> for free shipping</span>
                 )}
-                <span>{Math.min(100, Math.round((subtotal / 25) * 100))}%</span>
+                <span>{Math.min(100, Math.round((subtotal / freeShippingLimit) * 100))}%</span>
               </div>
               <div className="shipping-progress-bar-bg">
                 <div 
                   className="shipping-progress-bar-fill" 
-                  style={{ width: `${Math.min(100, (subtotal / 25) * 100)}%` }} 
+                  style={{ width: `${Math.min(100, (subtotal / freeShippingLimit) * 100)}%` }} 
                 />
               </div>
             </div>
@@ -4060,6 +4187,7 @@ function Storefront({
                         phone: leadPhone || undefined,
                         wantsSms: wantsSms || undefined,
                       });
+                      triggerTrack("email_capture");
 
                       if (wheelResult.code !== "TRYAGAIN") {
                         setAppliedCoupon(wheelResult.code);
@@ -4605,17 +4733,17 @@ function Storefront({
               {cartItems.length > 0 && (
                 <div className="shipping-progress-container">
                   <div className="shipping-progress-text">
-                    {subtotal >= 25 ? (
+                    {subtotal >= freeShippingLimit ? (
                       <span>🎉 <strong>Congratulations!</strong> You've unlocked Free Shipping!</span>
                     ) : (
-                      <span>Spend <strong>{money(25 - subtotal)}</strong> more for <strong>FREE SHIPPING</strong></span>
+                      <span>Spend <strong>{money(freeShippingLimit - subtotal)}</strong> more for <strong>FREE SHIPPING</strong></span>
                     )}
-                    <span>{Math.min(100, Math.round((subtotal / 25) * 100))}%</span>
+                    <span>{Math.min(100, Math.round((subtotal / freeShippingLimit) * 100))}%</span>
                   </div>
                   <div className="shipping-progress-bar-bg">
                     <div 
                       className="shipping-progress-bar-fill" 
-                      style={{ width: `${Math.min(100, (subtotal / 25) * 100)}%` }} 
+                      style={{ width: `${Math.min(100, (subtotal / freeShippingLimit) * 100)}%` }} 
                     />
                   </div>
                 </div>
@@ -7487,6 +7615,933 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
       </div>
     </div>
   );
+}
+
+interface ExperimentationWorkspaceProps {
+  products: Product[];
+  setProducts: React.Dispatch<React.SetStateAction<Product[]>>;
+  stores: Record<string, StorefrontNicheConfig>;
+  setStores: React.Dispatch<React.SetStateAction<Record<string, StorefrontNicheConfig>>>;
+  setNotice: (notice: string) => void;
+}
+
+function ExperimentationWorkspace({ products, setProducts, stores, setStores, setNotice }: ExperimentationWorkspaceProps) {
+  const [experiments, setExperiments] = React.useState<Experiment[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [selectedExperiment, setSelectedExperiment] = React.useState<Experiment | null>(null);
+  const [showCreateForm, setShowCreateForm] = React.useState(false);
+
+  // Form states
+  const [testName, setTestName] = React.useState("");
+  const [testType, setTestType] = React.useState<"homepage_hero" | "product_pricing" | "checkout_threshold">("homepage_hero");
+  const [targetId, setTargetId] = React.useState("");
+  const [trafficAllocation, setTrafficAllocation] = React.useState(100);
+  const [confidenceThreshold, setConfidenceThreshold] = React.useState(95);
+
+  // Variant fields
+  // homepage_hero
+  const [controlHeroHeadline, setControlHeroHeadline] = React.useState("");
+  const [controlHeroSubheadline, setControlHeroSubheadline] = React.useState("");
+  const [controlHeroImage, setControlHeroImage] = React.useState("");
+  const [controlCtaText, setControlCtaText] = React.useState("");
+  
+  const [variantHeroHeadline, setVariantHeroHeadline] = React.useState("");
+  const [variantHeroSubheadline, setVariantHeroSubheadline] = React.useState("");
+  const [variantHeroImage, setVariantHeroImage] = React.useState("");
+  const [variantCtaText, setVariantCtaText] = React.useState("");
+
+  // product_pricing
+  const [controlPrice, setControlPrice] = React.useState("");
+  const [controlName, setControlName] = React.useState("");
+  const [variantPrice, setVariantPrice] = React.useState("");
+  const [variantName, setVariantName] = React.useState("");
+
+  // checkout_threshold
+  const [controlThreshold, setControlThreshold] = React.useState("25");
+  const [variantThreshold, setVariantThreshold] = React.useState("35");
+
+  const [simulatingId, setSimulatingId] = React.useState<string | null>(null);
+  const [promotingId, setPromotingId] = React.useState<string | null>(null);
+
+  const loadAllExperiments = async () => {
+    setLoading(true);
+    try {
+      const res = await getExperiments();
+      setExperiments(res.experiments || []);
+    } catch (e) {
+      setNotice(e instanceof Error ? `Failed to load experiments: ${e.message}` : "Failed to load experiments");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  React.useEffect(() => {
+    void loadAllExperiments();
+  }, []);
+
+  // Update target fields when testType or targetId changes
+  React.useEffect(() => {
+    if (testType === "homepage_hero") {
+      const storeKeys = Object.keys(stores);
+      const storeKey = targetId || storeKeys[0] || "general";
+      if (!targetId && storeKeys.length > 0) {
+        setTargetId(storeKey);
+      }
+      const store = stores[storeKey];
+      if (store) {
+        setControlHeroHeadline(store.heroHeadline || store.headline || "");
+        setControlHeroSubheadline(store.heroSubheadline || store.eyebrow || "");
+        setControlHeroImage(store.heroImage || "");
+        setControlCtaText(store.ctaText || "Shop Now");
+      }
+    } else if (testType === "product_pricing") {
+      const prodId = targetId || products[0]?.id || "";
+      if (!targetId && products.length > 0) {
+        setTargetId(prodId);
+      }
+      const prod = products.find(p => p.id === prodId);
+      if (prod) {
+        setControlPrice(String(prod.retailMin));
+        setControlName(prod.name);
+      }
+    } else if (testType === "checkout_threshold") {
+      setTargetId("global");
+      const defaultThreshold = localStorage.getItem("p4tp_free_shipping_threshold") || "25";
+      setControlThreshold(defaultThreshold);
+    }
+  }, [testType, targetId, stores, products]);
+
+  const handleCreateExperiment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testName.trim()) {
+      setNotice("Test name is required.");
+      return;
+    }
+
+    try {
+      const expNiche = testType === "homepage_hero" ? targetId : (testType === "checkout_threshold" ? "global" : (products.find(p => p.id === targetId)?.subdomain || "global"));
+      
+      const controlChanges = testType === "homepage_hero" ? {
+        heroHeadline: controlHeroHeadline,
+        heroSubheadline: controlHeroSubheadline,
+        heroImage: controlHeroImage,
+        ctaText: controlCtaText,
+      } : testType === "product_pricing" ? {
+        price: Number(controlPrice),
+        name: controlName,
+      } : {
+        threshold: Number(controlThreshold),
+      };
+
+      const variantChanges = testType === "homepage_hero" ? {
+        heroHeadline: variantHeroHeadline,
+        heroSubheadline: variantHeroSubheadline,
+        heroImage: variantHeroImage,
+        ctaText: variantCtaText,
+      } : testType === "product_pricing" ? {
+        price: Number(variantPrice),
+        name: variantName,
+      } : {
+        threshold: Number(variantThreshold),
+      };
+
+      await createExperiment({
+        name: testName,
+        niche: expNiche,
+        test_type: testType,
+        target_id: targetId,
+        traffic_allocation: trafficAllocation,
+        confidence_threshold: confidenceThreshold,
+        start_date: new Date().toISOString(),
+        variants: [
+          { name: "Control (A)", changes: controlChanges, is_control: true },
+          { name: "Variant (B)", changes: variantChanges, is_control: false }
+        ]
+      });
+
+      setNotice(`Experiment "${testName}" created successfully!`);
+      setTestName("");
+      setVariantHeroHeadline("");
+      setVariantHeroSubheadline("");
+      setVariantHeroImage("");
+      setVariantCtaText("");
+      setVariantPrice("");
+      setVariantName("");
+      setVariantThreshold("35");
+      setShowCreateForm(false);
+      void loadAllExperiments();
+    } catch (e) {
+      setNotice(e instanceof Error ? `Failed to create experiment: ${e.message}` : "Failed to create experiment");
+    }
+  };
+
+  const handleStartStop = async (id: string, currentStatus: Experiment["status"]) => {
+    try {
+      const nextStatus = currentStatus === "active" ? "completed" : "active";
+      await updateExperimentStatus(id, nextStatus);
+      setNotice(`Experiment status updated to ${nextStatus}.`);
+      void loadAllExperiments();
+      if (selectedExperiment?.id === id) {
+        const details = await getExperimentDetails(id);
+        setSelectedExperiment(details.experiment);
+      }
+    } catch (e) {
+      setNotice(e instanceof Error ? `Failed to update experiment: ${e.message}` : "Failed to update experiment");
+    }
+  };
+
+  const handleSimulate = async (id: string) => {
+    setSimulatingId(id);
+    try {
+      const res = await simulateExperimentTraffic(id);
+      setNotice("Traffic simulation completed with realistic distribution.");
+      void loadAllExperiments();
+      if (selectedExperiment?.id === id) {
+        const details = await getExperimentDetails(id);
+        setSelectedExperiment(details.experiment);
+      }
+    } catch (e) {
+      setNotice(e instanceof Error ? `Simulation failed: ${e.message}` : "Simulation failed");
+    } finally {
+      setSimulatingId(null);
+    }
+  };
+
+  const handlePromote = async (expId: string, variantId: string) => {
+    setPromotingId(variantId);
+    try {
+      const res = await promoteExperimentVariant(expId, variantId);
+      setNotice(`Variant promoted successfully! Applied changes live.`);
+      
+      const experiment = res.experiment;
+      const variant = res.variant;
+
+      if (experiment.test_type === "homepage_hero" && experiment.niche) {
+        const storeKey = experiment.niche;
+        const currentStore = stores[storeKey];
+        if (currentStore) {
+          const updatedStore = {
+            ...currentStore,
+            heroHeadline: variant.changes.heroHeadline || currentStore.heroHeadline,
+            heroSubheadline: variant.changes.heroSubheadline || currentStore.heroSubheadline,
+            heroImage: variant.changes.heroImage || currentStore.heroImage,
+            ctaText: variant.changes.ctaText || currentStore.ctaText,
+          };
+          setStores(curr => ({ ...curr, [storeKey]: updatedStore }));
+        }
+      } else if (experiment.test_type === "product_pricing" && experiment.target_id) {
+        const prodId = experiment.target_id;
+        const newPrice = Number(variant.changes.price || variant.changes.retailMin);
+        const newName = variant.changes.name;
+        
+        setProducts(curr => curr.map(p => {
+          if (p.id === prodId) {
+            return {
+              ...p,
+              retailMin: newPrice > 0 ? newPrice : p.retailMin,
+              retailMax: newPrice > 0 ? newPrice : p.retailMax,
+              name: newName || p.name
+            };
+          }
+          return p;
+        }));
+      } else if (experiment.test_type === "checkout_threshold") {
+        const newThreshold = Number(variant.changes.threshold || variant.changes.freeShippingThreshold);
+        if (newThreshold > 0) {
+          localStorage.setItem("p4tp_free_shipping_threshold", String(newThreshold));
+        }
+      }
+
+      void loadAllExperiments();
+      if (selectedExperiment?.id === expId) {
+        const details = await getExperimentDetails(expId);
+        setSelectedExperiment(details.experiment);
+      }
+    } catch (e) {
+      setNotice(e instanceof Error ? `Promotion failed: ${e.message}` : "Promotion failed");
+    } finally {
+      setPromotingId(null);
+    }
+  };
+
+  const activeTests = experiments.filter(e => e.status === "active");
+  const completedTests = experiments.filter(e => e.status === "completed");
+
+  const totalVisitors = experiments.reduce((sum, exp) => 
+    sum + (exp.variants?.reduce((vSum, v) => vSum + (v.visitors || 0), 0) || 0), 0
+  );
+
+  return (
+    <div style={{ display: 'grid', gap: '20px' }}>
+      {/* Tab Header Banner */}
+      <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <span className="eyebrow" style={{ color: '#64748b', fontSize: '0.85rem', fontWeight: 600, textTransform: 'uppercase' }}>A/B Testing Framework</span>
+          <h2 style={{ fontSize: '1.75rem', fontWeight: 900, marginTop: '4px' }}>Conversion Experimentation Engine</h2>
+        </div>
+        <button 
+          className="primary" 
+          type="button" 
+          onClick={() => setShowCreateForm(!showCreateForm)}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px', minHeight: '40px' }}
+        >
+          <Plus size={18} />
+          {showCreateForm ? "Close Builder" : "Create New A/B Test"}
+        </button>
+      </div>
+
+      {/* Metrics Row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+        <div className="metric-card" style={{ background: '#fff', border: '1px solid #e5eaee', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Active Experiments</span>
+            <Activity size={18} />
+          </div>
+          <strong style={{ fontSize: '1.8rem', fontWeight: 900 }}>{activeTests.length}</strong>
+          <small style={{ color: '#94a3b8' }}>{experiments.length} total experiments configured</small>
+        </div>
+        <div className="metric-card" style={{ background: '#fff', border: '1px solid #e5eaee', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Total Test Visitors</span>
+            <Users size={18} />
+          </div>
+          <strong style={{ fontSize: '1.8rem', fontWeight: 900 }}>{totalVisitors.toLocaleString()}</strong>
+          <small style={{ color: '#94a3b8' }}>Real-time user assignments</small>
+        </div>
+        <div className="metric-card" style={{ background: '#fff', border: '1px solid #e5eaee', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b' }}>
+            <span style={{ fontSize: '0.9rem', fontWeight: 600 }}>Successful Promotions</span>
+            <CheckCircle2 size={18} style={{ color: '#10b981' }} />
+          </div>
+          <strong style={{ fontSize: '1.8rem', fontWeight: 900 }}>{completedTests.length}</strong>
+          <small style={{ color: '#94a3b8' }}>Variants promoted to production</small>
+        </div>
+      </div>
+
+      {/* Creation Form */}
+      {showCreateForm && (
+        <article className="panel" style={{ background: '#fff', border: '1px solid #e5eaee', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 20px rgba(0,0,0,0.02)' }}>
+          <div className="panel-header" style={{ marginBottom: '20px' }}>
+            <h2>New Experiment Configuration</h2>
+            <p>Establish splits, control baselines, and test modifications.</p>
+          </div>
+          <form onSubmit={handleCreateExperiment} style={{ display: 'grid', gap: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Experiment Name</label>
+                <input 
+                  value={testName}
+                  onChange={e => setTestName(e.target.value)}
+                  placeholder="e.g. Red Sign-up Button Hero Test"
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}
+                  required
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Test Template Category</label>
+                <select
+                  value={testType}
+                  onChange={e => {
+                    setTestType(e.target.value as any);
+                    setTargetId("");
+                  }}
+                  style={{ padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff' }}
+                >
+                  <option value="homepage_hero">Homepage Hero Layout</option>
+                  <option value="product_pricing">Product Pricing and Title</option>
+                  <option value="checkout_threshold">Free Shipping Checkout Threshold</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>Target Selection</label>
+                {testType === "homepage_hero" ? (
+                  <select
+                    value={targetId}
+                    onChange={e => setTargetId(e.target.value)}
+                    style={{ padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    {Object.entries(stores).map(([key, config]) => (
+                      <option key={key} value={key}>{config.label} ({key}.products4thepeople.com)</option>
+                    ))}
+                  </select>
+                ) : testType === "product_pricing" ? (
+                  <select
+                    value={targetId}
+                    onChange={e => setTargetId(e.target.value)}
+                    style={{ padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff' }}
+                  >
+                    {products.map(p => (
+                      <option key={p.id} value={p.id}>{p.name} - ${p.retailMin}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value="Global Storewide Threshold"
+                    disabled
+                    style={{ padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f1f5f9', color: '#64748b' }}
+                  />
+                )}
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: 700, color: '#334155' }}>
+                  <span>Traffic Split Allocation</span>
+                  <span style={{ color: '#6366f1' }}>{trafficAllocation}% active test / {100 - trafficAllocation}% raw control</span>
+                </label>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <input
+                    type="range"
+                    min="10"
+                    max="100"
+                    step="10"
+                    value={trafficAllocation}
+                    onChange={e => setTrafficAllocation(Number(e.target.value))}
+                    style={{ flex: 1, accentColor: '#6366f1' }}
+                  />
+                  <span style={{ fontWeight: 'bold', width: '36px', textAlign: 'right' }}>{trafficAllocation}%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Template Specific Inputs */}
+            <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '20px', border: '1px solid #e2e8f0', display: 'grid', gap: '16px' }}>
+              <h3 style={{ fontSize: '1rem', fontWeight: 800, borderBottom: '1px solid #e2e8f0', paddingBottom: '8px', color: '#1e293b' }}>
+                Variant Configuration Details
+              </h3>
+
+              {testType === "homepage_hero" && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  {/* Control A */}
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    <h4 style={{ fontWeight: 'bold', color: '#475569' }}>Control Configuration (A)</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Hero Headline</label>
+                      <input value={controlHeroHeadline} onChange={e => setControlHeroHeadline(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Hero Subheadline</label>
+                      <input value={controlHeroSubheadline} onChange={e => setControlHeroSubheadline(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Hero Image (URL)</label>
+                      <input value={controlHeroImage} onChange={e => setControlHeroImage(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>CTA Button Text</label>
+                      <input value={controlCtaText} onChange={e => setControlCtaText(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                  </div>
+
+                  {/* Variant B */}
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    <h4 style={{ fontWeight: 'bold', color: '#6366f1' }}>Variant Configuration (B)</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Hero Headline</label>
+                      <input value={variantHeroHeadline} onChange={e => setVariantHeroHeadline(e.target.value)} placeholder="Enter test headline..." style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} required />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Hero Subheadline</label>
+                      <input value={variantHeroSubheadline} onChange={e => setVariantHeroSubheadline(e.target.value)} placeholder="Enter test subheadline..." style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} required />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Hero Image (URL)</label>
+                      <input value={variantHeroImage} onChange={e => setVariantHeroImage(e.target.value)} placeholder="Enter image URL..." style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>CTA Button Text</label>
+                      <input value={variantCtaText} onChange={e => setVariantCtaText(e.target.value)} placeholder="Shop Now" style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {testType === "product_pricing" && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  {/* Control A */}
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    <h4 style={{ fontWeight: 'bold', color: '#475569' }}>Control Configuration (A)</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Product Name</label>
+                      <input value={controlName} onChange={e => setControlName(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Price ($)</label>
+                      <input type="number" step="0.01" value={controlPrice} onChange={e => setControlPrice(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                  </div>
+
+                  {/* Variant B */}
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    <h4 style={{ fontWeight: 'bold', color: '#6366f1' }}>Variant Configuration (B)</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Product Name</label>
+                      <input value={variantName} onChange={e => setVariantName(e.target.value)} placeholder="Enter modified name..." style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} required />
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Price ($)</label>
+                      <input type="number" step="0.01" value={variantPrice} onChange={e => setVariantPrice(e.target.value)} placeholder="e.g. 19.99" style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} required />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {testType === "checkout_threshold" && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                  {/* Control A */}
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    <h4 style={{ fontWeight: 'bold', color: '#475569' }}>Control Configuration (A)</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Free Shipping Limit ($)</label>
+                      <input type="number" value={controlThreshold} onChange={e => setControlThreshold(e.target.value)} style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                    </div>
+                  </div>
+
+                  {/* Variant B */}
+                  <div style={{ display: 'grid', gap: '10px' }}>
+                    <h4 style={{ fontWeight: 'bold', color: '#6366f1' }}>Variant Configuration (B)</h4>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <label style={{ fontSize: '0.8rem', color: '#64748b' }}>Free Shipping Limit ($)</label>
+                      <input type="number" value={variantThreshold} onChange={e => setVariantThreshold(e.target.value)} placeholder="e.g. 35" style={{ padding: '8px', borderRadius: '6px', border: '1px solid #cbd5e1' }} required />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '8px' }}>
+              <button className="secondary" type="button" onClick={() => setShowCreateForm(false)} style={{ minHeight: '38px' }}>Cancel</button>
+              <button className="primary" type="submit" style={{ minHeight: '38px' }}>Create and Save Draft</button>
+            </div>
+          </form>
+        </article>
+      )}
+
+      {/* Experiments List Panel */}
+      <article className="panel wide" style={{ background: '#fff', border: '1px solid #e5eaee', borderRadius: '16px', padding: '24px' }}>
+        <div className="panel-header" style={{ marginBottom: '16px' }}>
+          <div>
+            <p>Active and past tests</p>
+            <h2>Experiment Inventory</h2>
+          </div>
+          <Layers size={22} />
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Test Name</th>
+                <th>Category Type</th>
+                <th>Target</th>
+                <th>Traffic Size</th>
+                <th>Confidence Reached</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {experiments.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ textAlign: 'center', padding: '30px', color: '#64748b' }}>
+                    No experiments created yet. Select "Create New A/B Test" above to define your first A/B testing campaign.
+                  </td>
+                </tr>
+              ) : (
+                experiments.map(exp => {
+                  const totalExpVisitors = exp.variants?.reduce((sum, v) => sum + (v.visitors || 0), 0) || 0;
+                  
+                  // Compute stats
+                  const ctrl = exp.variants?.find(v => v.is_control);
+                  const vart = exp.variants?.find(v => !v.is_control);
+                  let confidenceScoreStr = "N/A (No Traffic)";
+                  let isWinner = false;
+                  
+                  if (ctrl && vart && ctrl.visitors > 5 && vart.visitors > 5) {
+                    const stats = computeABStats(ctrl, vart);
+                    confidenceScoreStr = `${stats.confidence.toFixed(1)}%`;
+                    isWinner = stats.confidence >= exp.confidence_threshold;
+                  }
+
+                  const getStatusBadge = (status: Experiment["status"]) => {
+                    if (status === "active") return <span className="status active">Active</span>;
+                    if (status === "completed") return <span className="status draft" style={{ background: '#e2e8f0', color: '#475569' }}>Completed</span>;
+                    return <span className="status review">Draft</span>;
+                  };
+
+                  const getCategoryLabel = (type: Experiment["test_type"]) => {
+                    if (type === "homepage_hero") return "Hero Banner";
+                    if (type === "product_pricing") return "Pricing / Title";
+                    return "Free Shipping Threshold";
+                  };
+
+                  const getTargetLabel = (type: Experiment["test_type"], target: string | undefined) => {
+                    if (type === "homepage_hero") return `${target} niche`;
+                    if (type === "product_pricing") return products.find(p => p.id === target)?.name || `Product: ${target}`;
+                    return "Storewide (Global)";
+                  };
+
+                  return (
+                    <tr key={exp.id}>
+                      <td>
+                        <strong>{exp.name}</strong>
+                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>Created {new Date(exp.created_at).toLocaleDateString()}</div>
+                      </td>
+                      <td>{getCategoryLabel(exp.test_type)}</td>
+                      <td>{getTargetLabel(exp.test_type, exp.target_id)}</td>
+                      <td>{totalExpVisitors.toLocaleString()} views</td>
+                      <td>
+                        <span style={{ fontWeight: 'bold', color: isWinner ? '#10b981' : '#475569' }}>
+                          {confidenceScoreStr}
+                        </span>
+                      </td>
+                      <td>{getStatusBadge(exp.status)}</td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '8px' }}>
+                          <button 
+                            className="secondary" 
+                            type="button" 
+                            onClick={async () => {
+                              const details = await getExperimentDetails(exp.id);
+                              setSelectedExperiment(details.experiment);
+                            }}
+                            style={{ padding: '4px 8px', fontSize: '0.8rem', minHeight: '30px' }}
+                          >
+                            Analyze
+                          </button>
+                          
+                          <button
+                            className={exp.status === "active" ? "secondary danger-button" : "primary"}
+                            type="button"
+                            onClick={() => handleStartStop(exp.id, exp.status)}
+                            style={{ padding: '4px 8px', fontSize: '0.8rem', minHeight: '30px' }}
+                          >
+                            {exp.status === "active" ? "Stop" : "Launch"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </article>
+
+      {/* Details / Drawer Modal */}
+      {selectedExperiment && (() => {
+        const ctrl = selectedExperiment.variants?.find(v => v.is_control) || {
+          id: "ctrl", experiment_id: selectedExperiment.id, name: "Control", visitors: 0, add_to_cart_count: 0, checkout_count: 0, purchase_count: 0, revenue: 0, emails_captured: 0, is_control: true, changes: {}
+        };
+        const vart = selectedExperiment.variants?.find(v => !v.is_control) || {
+          id: "vart", experiment_id: selectedExperiment.id, name: "Variant B", visitors: 0, add_to_cart_count: 0, checkout_count: 0, purchase_count: 0, revenue: 0, emails_captured: 0, is_control: false, changes: {}
+        };
+
+        const stats = computeABStats(ctrl, vart);
+        
+        const getRate = (count: number, total: number) => {
+          if (total <= 0) return "0.0%";
+          return `${((count / total) * 100).toFixed(2)}%`;
+        };
+
+        const getLift = (ctrlRate: number, vartRate: number) => {
+          if (ctrlRate <= 0) return vartRate > 0 ? "+100%" : "0.0%";
+          const lift = ((vartRate - ctrlRate) / ctrlRate) * 100;
+          const sign = lift > 0 ? "+" : "";
+          return `${sign}${lift.toFixed(1)}%`;
+        };
+
+        const getLiftColor = (ctrlRate: number, vartRate: number) => {
+          if (vartRate > ctrlRate) return '#10b981'; // green
+          if (vartRate < ctrlRate) return '#ef4444'; // red
+          return '#475569';
+        };
+
+        const isSigWinner = stats.confidence >= selectedExperiment.confidence_threshold && stats.zScore > 0;
+        const isSigLoser = stats.confidence >= selectedExperiment.confidence_threshold && stats.zScore < 0;
+
+        return (
+          <div className="modal-backdrop" role="presentation" style={{ zIndex: 1000 }}>
+            <div 
+              className="panel" 
+              role="dialog" 
+              aria-modal="true"
+              style={{ width: '90%', maxWidth: '950px', background: '#fff', borderRadius: '16px', padding: '24px', boxShadow: '0 10px 40px rgba(0,0,0,0.1)' }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', marginBottom: '20px' }}>
+                <div>
+                  <span className="eyebrow" style={{ color: '#6366f1', fontWeight: 'bold' }}>Experiment Detailed Analysis</span>
+                  <h2 style={{ fontSize: '1.5rem', fontWeight: 900, marginTop: '4px' }}>{selectedExperiment.name}</h2>
+                </div>
+                <button type="button" onClick={() => setSelectedExperiment(null)} style={{ background: '#f1f5f9', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Status Indicator */}
+              {selectedExperiment.status === "completed" && selectedExperiment.winner_variant_id && (
+                <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: '8px', padding: '12px', display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '0.9rem' }}>
+                  <CheckCircle2 size={18} style={{ color: '#10b981' }} />
+                  <span>
+                    <strong>Experiment Completed:</strong> The winning variant has been promoted as the live default storefront settings.
+                  </span>
+                </div>
+              )}
+
+              {/* Grid of Results */}
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '20px', alignItems: 'start' }}>
+                <div style={{ display: 'grid', gap: '16px' }}>
+                  {/* Detailed Stats Table */}
+                  <div className="table-wrap" style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden' }}>
+                    <table style={{ margin: 0 }}>
+                      <thead>
+                        <tr style={{ background: '#f8fafc' }}>
+                          <th>Metric</th>
+                          <th>Control (A)</th>
+                          <th>Variant (B)</th>
+                          <th>Lift %</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td><strong>Visitors (Views)</strong></td>
+                          <td>{ctrl.visitors.toLocaleString()}</td>
+                          <td>{vart.visitors.toLocaleString()}</td>
+                          <td style={{ color: getLiftColor(ctrl.visitors, vart.visitors) }}>
+                            {getLift(ctrl.visitors, vart.visitors)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td><strong>Add to Cart Rate</strong></td>
+                          <td>{ctrl.add_to_cart_count} ({getRate(ctrl.add_to_cart_count, ctrl.visitors)})</td>
+                          <td>{vart.add_to_cart_count} ({getRate(vart.add_to_cart_count, vart.visitors)})</td>
+                          <td style={{ fontWeight: 'bold', color: getLiftColor(ctrl.add_to_cart_count / (ctrl.visitors || 1), vart.add_to_cart_count / (vart.visitors || 1)) }}>
+                            {getLift(ctrl.add_to_cart_count / (ctrl.visitors || 1), vart.add_to_cart_count / (vart.visitors || 1))}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td><strong>Checkout Initiated</strong></td>
+                          <td>{ctrl.checkout_count} ({getRate(ctrl.checkout_count, ctrl.visitors)})</td>
+                          <td>{vart.checkout_count} ({getRate(vart.checkout_count, vart.visitors)})</td>
+                          <td style={{ color: getLiftColor(ctrl.checkout_count / (ctrl.visitors || 1), vart.checkout_count / (vart.visitors || 1)) }}>
+                            {getLift(ctrl.checkout_count / (ctrl.visitors || 1), vart.checkout_count / (vart.visitors || 1))}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td><strong>Purchases (Conversion)</strong></td>
+                          <td>{ctrl.purchase_count} ({getRate(ctrl.purchase_count, ctrl.visitors)})</td>
+                          <td>{vart.purchase_count} ({getRate(vart.purchase_count, vart.visitors)})</td>
+                          <td style={{ fontWeight: 'bold', color: getLiftColor(ctrl.purchase_count / (ctrl.visitors || 1), vart.purchase_count / (vart.visitors || 1)) }}>
+                            {getLift(ctrl.purchase_count / (ctrl.visitors || 1), vart.purchase_count / (vart.visitors || 1))}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td><strong>Revenue Captured</strong></td>
+                          <td>${Number(ctrl.revenue).toFixed(2)}</td>
+                          <td>${Number(vart.revenue).toFixed(2)}</td>
+                          <td style={{ fontWeight: 'bold', color: getLiftColor(ctrl.revenue, vart.revenue) }}>
+                            {getLift(ctrl.revenue, vart.revenue)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td><strong>Average Order Value (AOV)</strong></td>
+                          <td>
+                            ${ctrl.purchase_count > 0 ? (ctrl.revenue / ctrl.purchase_count).toFixed(2) : "0.00"}
+                          </td>
+                          <td>
+                            ${vart.purchase_count > 0 ? (vart.revenue / vart.purchase_count).toFixed(2) : "0.00"}
+                          </td>
+                          <td style={{ color: getLiftColor(ctrl.purchase_count > 0 ? ctrl.revenue / ctrl.purchase_count : 0, vart.purchase_count > 0 ? vart.revenue / vart.purchase_count : 0) }}>
+                            {getLift(ctrl.purchase_count > 0 ? ctrl.revenue / ctrl.purchase_count : 0, vart.purchase_count > 0 ? vart.revenue / vart.purchase_count : 0)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td><strong>Revenue Per Visitor</strong></td>
+                          <td>
+                            ${ctrl.visitors > 0 ? (ctrl.revenue / ctrl.visitors).toFixed(2) : "0.00"}
+                          </td>
+                          <td>
+                            ${vart.visitors > 0 ? (vart.revenue / vart.visitors).toFixed(2) : "0.00"}
+                          </td>
+                          <td style={{ fontWeight: 'bold', color: getLiftColor(ctrl.visitors > 0 ? ctrl.revenue / ctrl.visitors : 0, vart.visitors > 0 ? vart.revenue / vart.visitors : 0) }}>
+                            {getLift(ctrl.visitors > 0 ? ctrl.revenue / ctrl.visitors : 0, vart.visitors > 0 ? vart.revenue / vart.visitors : 0)}
+                          </td>
+                        </tr>
+                        <tr>
+                          <td><strong>Email Captures</strong></td>
+                          <td>{ctrl.emails_captured} ({getRate(ctrl.emails_captured, ctrl.visitors)})</td>
+                          <td>{vart.emails_captured} ({getRate(vart.emails_captured, vart.visitors)})</td>
+                          <td style={{ color: getLiftColor(ctrl.emails_captured / (ctrl.visitors || 1), vart.emails_captured / (vart.visitors || 1)) }}>
+                            {getLift(ctrl.emails_captured / (ctrl.visitors || 1), vart.emails_captured / (vart.visitors || 1))}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Variant configuration changes details */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.8rem', background: '#f8fafc' }}>
+                      <strong>Control Config Changes:</strong>
+                      <pre style={{ margin: '6px 0 0 0', whiteSpace: 'pre-wrap', color: '#475569', fontSize: '0.75rem' }}>
+                        {JSON.stringify(ctrl.changes, null, 2)}
+                      </pre>
+                    </div>
+                    <div style={{ padding: '12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '0.8rem', background: '#f8fafc' }}>
+                      <strong>Variant Config Changes:</strong>
+                      <pre style={{ margin: '6px 0 0 0', whiteSpace: 'pre-wrap', color: '#6366f1', fontSize: '0.75rem' }}>
+                        {JSON.stringify(vart.changes, null, 2)}
+                      </pre>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Z-Test Confidence Panel */}
+                <div style={{ display: 'grid', gap: '16px' }}>
+                  <div style={{ background: '#fafafa', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <h3 style={{ fontSize: '0.95rem', fontWeight: 800, margin: 0, display: 'flex', alignItems: 'center', gap: '6px', color: '#334155' }}>
+                      <TrendingUp size={16} />
+                      Statistical Evaluation
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Z-Test Score:</span>
+                      <strong style={{ fontSize: '1.25rem' }}>{stats.zScore.toFixed(4)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>p-Value (Probability):</span>
+                      <strong style={{ fontSize: '1.25rem' }}>{stats.pValue.toFixed(6)}</strong>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>Confidence Reached:</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '2px' }}>
+                        <div style={{ flex: 1, height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden' }}>
+                          <div 
+                            style={{ 
+                              height: '100%', 
+                              width: `${stats.confidence}%`, 
+                              background: stats.confidence >= selectedExperiment.confidence_threshold ? '#10b981' : '#f59e0b',
+                              borderRadius: '4px' 
+                            }} 
+                          />
+                        </div>
+                        <strong style={{ fontSize: '0.95rem' }}>{stats.confidence.toFixed(1)}%</strong>
+                      </div>
+                      <small style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px' }}>Required: {selectedExperiment.confidence_threshold}%</small>
+                    </div>
+
+                    <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '12px', marginTop: '4px' }}>
+                      <span style={{ fontSize: '0.8rem', color: '#64748b', display: 'block', marginBottom: '6px' }}>Result Status & Recommendation:</span>
+                      {isSigWinner ? (
+                        <div style={{ background: '#ecfdf5', border: '1px solid #10b981', color: '#065f46', borderRadius: '6px', padding: '10px', fontSize: '0.8rem' }}>
+                          🏆 <strong>Winner Detected!</strong> Variant B outperforms Control with statistical significance. Promote Variant B to live production.
+                        </div>
+                      ) : isSigLoser ? (
+                        <div style={{ background: '#fef2f2', border: '1px solid #ef4444', color: '#991b1b', borderRadius: '6px', padding: '10px', fontSize: '0.8rem' }}>
+                          ⚠️ <strong>Control Winner.</strong> Control outperforms Variant B with statistical significance. Recommendation: Keep Control and archive Variant B.
+                        </div>
+                      ) : (
+                        <div style={{ background: '#fffbeb', border: '1px solid #f59e0b', color: '#92400e', borderRadius: '6px', padding: '10px', fontSize: '0.8rem' }}>
+                          ⏳ <strong>Inconclusive.</strong> Traffic volume or conversion differences do not meet the {selectedExperiment.confidence_threshold}% significance threshold. Let the test run longer.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Actions Drawer */}
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '16px', display: 'grid', gap: '10px' }}>
+                    <h3 style={{ fontSize: '0.85rem', fontWeight: 800, textTransform: 'uppercase', color: '#475569', margin: 0 }}>
+                      Control Options
+                    </h3>
+                    
+                    <button 
+                      className="primary full" 
+                      type="button" 
+                      onClick={() => handleSimulate(selectedExperiment.id)}
+                      disabled={simulatingId === selectedExperiment.id || selectedExperiment.status === "completed"}
+                      style={{ minHeight: '38px', fontSize: '0.85rem' }}
+                    >
+                      {simulatingId === selectedExperiment.id ? "Simulating..." : "Run Traffic Simulation"}
+                    </button>
+
+                    <button 
+                      className="primary full" 
+                      type="button" 
+                      onClick={() => handlePromote(selectedExperiment.id, vart.id)}
+                      disabled={promotingId === vart.id || selectedExperiment.status === "completed" || vart.visitors < 2}
+                      style={{ minHeight: '38px', background: isSigWinner ? '#10b981' : '#6366f1', borderColor: isSigWinner ? '#10b981' : '#6366f1', fontSize: '0.85rem' }}
+                    >
+                      {promotingId === vart.id ? "Promoting..." : "One-Click Promote Variant B"}
+                    </button>
+
+                    {selectedExperiment.status === "active" && (
+                      <button 
+                        className="secondary danger-button full" 
+                        type="button" 
+                        onClick={() => handleStartStop(selectedExperiment.id, selectedExperiment.status)}
+                        style={{ minHeight: '38px', fontSize: '0.85rem' }}
+                      >
+                        Stop Experiment (Archive)
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '20px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
+                <button className="secondary" type="button" onClick={() => setSelectedExperiment(null)} style={{ minHeight: '38px' }}>
+                  Close Panel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+    </div>
+  );
+}
+
+function computeABStats(control: ExperimentVariant, variant: ExperimentVariant) {
+  const nA = control.visitors;
+  const nB = variant.visitors;
+  const cA = control.purchase_count;
+  const cB = variant.purchase_count;
+  
+  if (nA <= 0 || nB <= 0) {
+    return { zScore: 0, pValue: 1, confidence: 0, isSignificant: false };
+  }
+  
+  const pA = cA / nA;
+  const pB = cB / nB;
+  
+  const pPooled = (cA + cB) / (nA + nB);
+  if (pPooled <= 0 || pPooled >= 1) {
+    return { zScore: 0, pValue: 1, confidence: 0, isSignificant: false };
+  }
+  
+  const se = Math.sqrt(pPooled * (1 - pPooled) * (1 / nA + 1 / nB));
+  if (se === 0) {
+    return { zScore: 0, pValue: 1, confidence: 0, isSignificant: false };
+  }
+  
+  const zScore = (pB - pA) / se;
+  const absZ = Math.abs(zScore);
+  
+  // Abramowitz & Stegun approximation
+  const t = 1 / (1 + 0.2316419 * absZ);
+  const d = 0.39894228;
+  const p = d * Math.exp(-0.5 * absZ * absZ) * t * (0.31938153 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+  const pValue = p * 2;
+  const confidence = Math.max(0, Math.min(100, (1 - pValue) * 100));
+  
+  return {
+    zScore,
+    pValue,
+    confidence,
+    isSignificant: confidence >= 95
+  };
 }
 
 function ResearchMetric({
