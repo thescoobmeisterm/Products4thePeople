@@ -1578,9 +1578,11 @@ tr:last-child td {
 }
 
 .store-product-modal {
-  background: #fff;
+  background: var(--store-card-bg, #fff);
   border-radius: 8px;
+  border: 1px solid var(--store-border, #e0d9ce);
   box-shadow: 0 30px 80px rgba(17, 25, 29, 0.24);
+  color: var(--store-card-text, #151f22);
   display: grid;
   grid-template-columns: minmax(260px, 0.85fr) minmax(320px, 1fr);
   max-height: min(780px, 92vh);
@@ -1605,7 +1607,7 @@ tr:last-child td {
 }
 
 .quick-view-lede {
-  color: #52636a;
+  color: color-mix(in srgb, var(--store-card-text, #151f22), transparent 22%);
   font-size: 1.05rem;
   line-height: 1.6;
 }
@@ -1619,9 +1621,9 @@ tr:last-child td {
 
 .quick-view-stats span,
 .quick-view-notes span {
-  background: #f7f9fa;
+  background: color-mix(in srgb, var(--store-card-bg, #fff), var(--store-card-text, #151f22) 6%);
   border-radius: 8px;
-  color: #68777d;
+  color: color-mix(in srgb, var(--store-card-text, #151f22), transparent 22%);
   display: grid;
   font-size: 0.82rem;
   font-weight: 850;
@@ -1710,9 +1712,10 @@ tr:last-child td {
 
 .product-detail-copy {
   align-self: center;
-  background: #fff;
-  border: 1px solid #e0d9ce;
+  background: var(--store-card-bg, #fff);
+  border: 1px solid var(--store-border, #e0d9ce);
   border-radius: 8px;
+  color: var(--store-card-text, #151f22);
   padding: clamp(20px, 3vw, 34px);
 }
 
@@ -1734,7 +1737,7 @@ tr:last-child td {
 }
 
 .product-detail-copy p {
-  color: #52636a;
+  color: color-mix(in srgb, var(--store-card-text, #151f22), transparent 22%);
   font-size: 1.05rem;
   line-height: 1.65;
 }
@@ -1748,8 +1751,8 @@ tr:last-child td {
 }
 
 .detail-price-row {
-  border-bottom: 1px solid #ece7df;
-  border-top: 1px solid #ece7df;
+  border-bottom: 1px solid var(--store-border, #ece7df);
+  border-top: 1px solid var(--store-border, #ece7df);
   margin: 24px 0;
   padding: 18px 0;
 }
@@ -1761,7 +1764,7 @@ tr:last-child td {
 
 .detail-price-row small,
 .quantity-row > span {
-  color: #68777d;
+  color: color-mix(in srgb, var(--store-card-text, #151f22), transparent 28%);
   font-weight: 900;
 }
 
@@ -1801,9 +1804,9 @@ tr:last-child td {
 }
 
 .detail-notes span {
-  background: #f7f9fa;
+  background: color-mix(in srgb, var(--store-card-bg, #fff), var(--store-card-text, #151f22) 6%);
   border-radius: 8px;
-  color: #52636a;
+  color: color-mix(in srgb, var(--store-card-text, #151f22), transparent 22%);
   font-weight: 850;
   padding: 11px 12px;
 }
@@ -3043,7 +3046,7 @@ tr:last-child td {
   align-items: center;
   background: none;
   border: none;
-  color: #f8fafb;
+  color: var(--store-text, #151f22);
   cursor: pointer;
   display: flex;
   padding: 4px;
@@ -4154,4 +4157,3 @@ tr:last-child td {
 .badge-new {
   background: linear-gradient(135deg, #11998e, #38ef7d);
 }
-
