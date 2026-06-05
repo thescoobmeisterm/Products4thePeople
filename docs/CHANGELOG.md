@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.3.2 — 2026-06-05
+
+### Added
+- Added a full IONOS production setup walkthrough with SSH, VPS, PostgreSQL, Nginx, PM2, HTTPS, Stripe, Google Login, AI, analytics, deployment, backup, and troubleshooting steps.
+
 ## v1.3.1 — 2026-06-05
 
 ### Changed
