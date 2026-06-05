@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.3.0 — 2026-06-04
+
+### Added
+- Expanded Admin Settings into a full integration setup hub for database, Stripe, Medusa, Google login, AI provider keys, analytics pixels, admin credentials, site URLs, tax, and shipping.
+- Added readiness status cards so admins can see which platform systems are connected versus still running in simulator or fallback mode.
+- Expanded the settings config API to load and save the new setup keys while preserving masked secrets.
+- Documented Google OAuth and AI provider keys in `.env.example`.
+
 ## v1.2.0 — 2026-06-04
 
 ### Added

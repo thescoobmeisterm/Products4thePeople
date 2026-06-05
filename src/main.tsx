@@ -632,8 +632,22 @@ function App() {
 
   // System credentials settings state
   const [settingsStripeKey, setSettingsStripeKey] = React.useState("");
+  const [settingsDatabaseUrl, setSettingsDatabaseUrl] = React.useState("");
   const [settingsMedusaUrl, setSettingsMedusaUrl] = React.useState("http://localhost:9000");
   const [settingsMedusaKey, setSettingsMedusaKey] = React.useState("");
+  const [settingsGoogleClientId, setSettingsGoogleClientId] = React.useState("");
+  const [settingsOpenAiKey, setSettingsOpenAiKey] = React.useState("");
+  const [settingsAdminEmail, setSettingsAdminEmail] = React.useState(adminEmail);
+  const [settingsAdminPassword, setSettingsAdminPassword] = React.useState("");
+  const [settingsPublicSiteUrl, setSettingsPublicSiteUrl] = React.useState("");
+  const [settingsPublicAppBase, setSettingsPublicAppBase] = React.useState("");
+  const [settingsGa4Id, setSettingsGa4Id] = React.useState("");
+  const [settingsMetaPixelId, setSettingsMetaPixelId] = React.useState("");
+  const [settingsTiktokPixelId, setSettingsTiktokPixelId] = React.useState("");
+  const [settingsTaxRate, setSettingsTaxRate] = React.useState("0.06");
+  const [settingsFreeShipping, setSettingsFreeShipping] = React.useState("75");
+  const [settingsFlatShipping, setSettingsFlatShipping] = React.useState("7");
+  const [settingsConfigStatus, setSettingsConfigStatus] = React.useState<Record<string, any>>({});
   const [isSavingConfig, setIsSavingConfig] = React.useState(false);
 
   const handleImportAliexpress = async (e: React.FormEvent) => {
@@ -661,8 +675,8 @@ function App() {
     setNotice("Saving system configurations in .env...");
     try {
       const adminHeaders = {
-        "x-admin-email": "admin@products4thepeople.com",
-        "x-admin-password": "change-this-password",
+        "x-admin-email": adminEmail,
+        "x-admin-password": adminPassword,
         "Content-Type": "application/json",
       };
       
@@ -670,9 +684,22 @@ function App() {
         method: "POST",
         headers: adminHeaders,
         body: JSON.stringify({
+          databaseUrl: settingsDatabaseUrl,
           stripeSecretKey: settingsStripeKey,
           medusaBackendUrl: settingsMedusaUrl,
           medusaAdminApiKey: settingsMedusaKey,
+          googleClientId: settingsGoogleClientId,
+          openAiApiKey: settingsOpenAiKey,
+          adminEmail: settingsAdminEmail,
+          adminPassword: settingsAdminPassword,
+          publicSiteUrl: settingsPublicSiteUrl,
+          publicAppBase: settingsPublicAppBase,
+          ga4MeasurementId: settingsGa4Id,
+          metaPixelId: settingsMetaPixelId,
+          tiktokPixelId: settingsTiktokPixelId,
+          basicTaxRate: settingsTaxRate,
+          freeShippingThreshold: settingsFreeShipping,
+          flatShipping: settingsFlatShipping,
         }),
       });
 
@@ -688,8 +715,22 @@ function App() {
       if (configRes.ok) {
         const config = await configRes.json();
         setSettingsStripeKey(config.stripeSecretKey || "");
+        setSettingsDatabaseUrl(config.databaseUrl || "");
         setSettingsMedusaUrl(config.medusaBackendUrl || "http://localhost:9000");
         setSettingsMedusaKey(config.medusaAdminApiKey || "");
+        setSettingsGoogleClientId(config.googleClientId || "");
+        setSettingsOpenAiKey(config.openAiApiKey || "");
+        setSettingsAdminEmail(config.adminEmail || adminEmail);
+        setSettingsAdminPassword(config.adminPassword || "");
+        setSettingsPublicSiteUrl(config.publicSiteUrl || "");
+        setSettingsPublicAppBase(config.publicAppBase || "");
+        setSettingsGa4Id(config.ga4MeasurementId || "");
+        setSettingsMetaPixelId(config.metaPixelId || "");
+        setSettingsTiktokPixelId(config.tiktokPixelId || "");
+        setSettingsTaxRate(config.basicTaxRate || "0.06");
+        setSettingsFreeShipping(config.freeShippingThreshold || "75");
+        setSettingsFlatShipping(config.flatShipping || "7");
+        setSettingsConfigStatus(config);
       }
     } catch (error) {
       setNotice(error instanceof Error ? `Config error: ${error.message}` : "Failed to save configuration.");
@@ -734,8 +775,22 @@ function App() {
           if (configRes.ok && isMounted) {
             const config = await configRes.json();
             setSettingsStripeKey(config.stripeSecretKey || "");
+            setSettingsDatabaseUrl(config.databaseUrl || "");
             setSettingsMedusaUrl(config.medusaBackendUrl || "http://localhost:9000");
             setSettingsMedusaKey(config.medusaAdminApiKey || "");
+            setSettingsGoogleClientId(config.googleClientId || "");
+            setSettingsOpenAiKey(config.openAiApiKey || "");
+            setSettingsAdminEmail(config.adminEmail || adminEmail);
+            setSettingsAdminPassword(config.adminPassword || "");
+            setSettingsPublicSiteUrl(config.publicSiteUrl || "");
+            setSettingsPublicAppBase(config.publicAppBase || "");
+            setSettingsGa4Id(config.ga4MeasurementId || "");
+            setSettingsMetaPixelId(config.metaPixelId || "");
+            setSettingsTiktokPixelId(config.tiktokPixelId || "");
+            setSettingsTaxRate(config.basicTaxRate || "0.06");
+            setSettingsFreeShipping(config.freeShippingThreshold || "75");
+            setSettingsFlatShipping(config.flatShipping || "7");
+            setSettingsConfigStatus(config);
           }
         } catch (e) {
           console.warn("Failed to load environment credentials from settings endpoint:", e);
@@ -1060,6 +1115,47 @@ function App() {
       setNotice(error instanceof Error ? `Order status update failed: ${error.message}` : "Order status update failed.");
     }
   };
+
+  const isSetupValuePresent = (value?: string) => Boolean(value && value.trim() && !value.includes("replace_me") && !value.includes("change-this-password"));
+  const setupItems = [
+    {
+      label: "Database",
+      detail: settingsConfigStatus.databaseMode || (settingsConfigStatus.hasDatabaseUrl ? "PostgreSQL configured" : "Local fallback active"),
+      ready: Boolean(settingsConfigStatus.hasDatabaseUrl || isSetupValuePresent(settingsDatabaseUrl)),
+      icon: Database,
+    },
+    {
+      label: "Stripe Checkout",
+      detail: settingsConfigStatus.hasStripeKey || isSetupValuePresent(settingsStripeKey) ? "Live checkout key saved" : "Simulator mode active",
+      ready: Boolean(settingsConfigStatus.hasStripeKey || isSetupValuePresent(settingsStripeKey)),
+      icon: CreditCard,
+    },
+    {
+      label: "Google Login",
+      detail: settingsConfigStatus.hasGoogleClientId || isSetupValuePresent(settingsGoogleClientId) ? "OAuth client configured" : "Auth simulator active",
+      ready: Boolean(settingsConfigStatus.hasGoogleClientId || isSetupValuePresent(settingsGoogleClientId)),
+      icon: User,
+    },
+    {
+      label: "AI Tools",
+      detail: settingsConfigStatus.hasOpenAiApiKey || isSetupValuePresent(settingsOpenAiKey) ? "AI provider key saved" : "Template AI mode active",
+      ready: Boolean(settingsConfigStatus.hasOpenAiApiKey || isSetupValuePresent(settingsOpenAiKey)),
+      icon: Bot,
+    },
+    {
+      label: "Medusa",
+      detail: settingsConfigStatus.hasMedusaAdminApiKey || isSetupValuePresent(settingsMedusaKey) ? "Backend and admin key configured" : "Mock Medusa available",
+      ready: Boolean(isSetupValuePresent(settingsMedusaUrl) && (settingsConfigStatus.hasMedusaAdminApiKey || isSetupValuePresent(settingsMedusaKey))),
+      icon: Database,
+    },
+    {
+      label: "Analytics",
+      detail: isSetupValuePresent(settingsGa4Id) || isSetupValuePresent(settingsMetaPixelId) || isSetupValuePresent(settingsTiktokPixelId) ? "Tracking IDs configured" : "No pixels connected",
+      ready: Boolean(isSetupValuePresent(settingsGa4Id) || isSetupValuePresent(settingsMetaPixelId) || isSetupValuePresent(settingsTiktokPixelId)),
+      icon: LineChart,
+    },
+  ];
+  const setupReadyCount = setupItems.filter((item) => item.ready).length;
 
   if (view === "storefront") {
     return (
@@ -1693,20 +1789,36 @@ function App() {
         )}
 
         {adminTab === "settings" && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', alignItems: 'start' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 0.75fr) minmax(420px, 1.25fr)', gap: '16px', alignItems: 'start' }}>
             <article className="panel" id="settings-readiness">
               <div className="panel-header">
                 <div>
-                  <p>Platform readiness</p>
-                  <h2>Core systems</h2>
+                  <p>Setup readiness</p>
+                  <h2>{setupReadyCount}/{setupItems.length} systems connected</h2>
                 </div>
                 <Settings size={22} />
               </div>
-              <div className="readiness-grid" style={{ display: 'grid', gap: '12px', marginTop: '16px' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14.5px', color: '#68777d' }}><Database size={16} style={{ color: '#176c61' }} /> Medusa SDK active</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14.5px', color: '#68777d' }}><Truck size={16} style={{ color: '#176c61' }} /> Inventory tracking enabled</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14.5px', color: '#68777d' }}><CreditCard size={16} style={{ color: settingsStripeKey ? '#10b981' : '#f59e0b' }} /> {settingsStripeKey ? 'Stripe live checkout wired' : 'Stripe simulator mode active (no secret key)'}</span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14.5px', color: '#68777d' }}><Mail size={16} style={{ color: '#176c61' }} /> exit-intent funnels active</span>
+              <div className="readiness-grid" style={{ display: 'grid', gap: '10px', marginTop: '16px' }}>
+                {setupItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <div key={item.label} style={{ display: 'grid', gridTemplateColumns: '28px 1fr auto', gap: '10px', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #edf2f5' }}>
+                      <span style={{ width: '28px', height: '28px', borderRadius: '8px', display: 'grid', placeItems: 'center', background: item.ready ? '#dcfce7' : '#fef3c7', color: item.ready ? '#166534' : '#92400e' }}>
+                        <Icon size={15} />
+                      </span>
+                      <span style={{ display: 'grid', gap: '2px' }}>
+                        <strong style={{ fontSize: '13.5px', color: '#1f2937' }}>{item.label}</strong>
+                        <small style={{ color: '#68777d', fontSize: '12px' }}>{item.detail}</small>
+                      </span>
+                      <span style={{ borderRadius: '999px', padding: '3px 8px', fontSize: '11px', fontWeight: 700, background: item.ready ? '#dcfce7' : '#fef3c7', color: item.ready ? '#166534' : '#92400e' }}>
+                        {item.ready ? 'Ready' : 'Setup'}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ marginTop: '16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '12px', color: '#64748b', fontSize: '12.5px', lineHeight: 1.5 }}>
+                Database, Google OAuth, admin credentials, and Vite public keys require an API restart or production rebuild after saving.
               </div>
             </article>
 
@@ -1714,48 +1826,75 @@ function App() {
               <div className="panel-header">
                 <div>
                   <p>Integration Manager</p>
-                  <h2>Stripe & Medusa setup</h2>
+                  <h2>Connection setup</h2>
                 </div>
                 <Globe2 size={22} />
               </div>
               <form onSubmit={handleSaveConfig} style={{ display: 'grid', gap: '16px', marginTop: '16px' }}>
                 <div style={{ background: '#f7f9fa', border: '1px solid #e1e7eb', borderRadius: '10px', padding: '16px', display: 'grid', gap: '12px' }}>
-                  <h3 style={{ margin: '0', fontSize: '15px', fontWeight: 600, color: '#176c61', display: 'flex', alignItems: 'center', gap: '6px' }}><CreditCard size={16} /> Stripe configuration</h3>
+                  <h3 style={{ margin: '0', fontSize: '15px', fontWeight: 600, color: '#176c61', display: 'flex', alignItems: 'center', gap: '6px' }}><ShieldCheck size={16} /> Admin & database</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <label style={{ display: 'grid', gap: '6px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Admin Email</span>
+                      <input type="email" value={settingsAdminEmail} onChange={(e) => setSettingsAdminEmail(e.target.value)} placeholder="admin@products4thepeople.com" style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} />
+                    </label>
+                    <label style={{ display: 'grid', gap: '6px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Admin Password</span>
+                      <input type="password" value={settingsAdminPassword} onChange={(e) => setSettingsAdminPassword(e.target.value)} placeholder="Set a strong password" style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} />
+                    </label>
+                  </div>
                   <label style={{ display: 'grid', gap: '6px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Stripe Secret Key (sk_...)</span>
-                    <input
-                      type="password"
-                      value={settingsStripeKey}
-                      onChange={(e) => setSettingsStripeKey(e.target.value)}
-                      placeholder="sk_test_..."
-                      style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }}
-                    />
-                    <span style={{ fontSize: '11px', color: '#68777d' }}>Keep blank to automatically use the Stripe Simulator during checkout testing.</span>
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>PostgreSQL Database URL</span>
+                    <input type="password" value={settingsDatabaseUrl} onChange={(e) => setSettingsDatabaseUrl(e.target.value)} placeholder="postgres://user:password@host:5432/products4thepeople" style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} />
+                    <span style={{ fontSize: '11px', color: '#68777d' }}>Leave blank for local file fallback. Restart the API after changing this.</span>
                   </label>
                 </div>
 
                 <div style={{ background: '#f7f9fa', border: '1px solid #e1e7eb', borderRadius: '10px', padding: '16px', display: 'grid', gap: '12px' }}>
-                  <h3 style={{ margin: '0', fontSize: '15px', fontWeight: 600, color: '#176c61', display: 'flex', alignItems: 'center', gap: '6px' }}><Database size={16} /> Medusa configuration</h3>
+                  <h3 style={{ margin: '0', fontSize: '15px', fontWeight: 600, color: '#176c61', display: 'flex', alignItems: 'center', gap: '6px' }}><CreditCard size={16} /> Payments & commerce</h3>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Stripe Secret Key</span>
+                    <input type="password" value={settingsStripeKey} onChange={(e) => setSettingsStripeKey(e.target.value)} placeholder="sk_test_..." style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} />
+                    <span style={{ fontSize: '11px', color: '#68777d' }}>Keep blank to use the checkout simulator during testing.</span>
+                  </label>
                   <label style={{ display: 'grid', gap: '6px' }}>
                     <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Medusa Backend URL</span>
-                    <input
-                      type="text"
-                      value={settingsMedusaUrl}
-                      onChange={(e) => setSettingsMedusaUrl(e.target.value)}
-                      placeholder="http://localhost:9000"
-                      style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }}
-                    />
+                    <input type="text" value={settingsMedusaUrl} onChange={(e) => setSettingsMedusaUrl(e.target.value)} placeholder="http://localhost:9000" style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} />
                   </label>
                   <label style={{ display: 'grid', gap: '6px' }}>
-                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Admin API Key</span>
-                    <input
-                      type="password"
-                      value={settingsMedusaKey}
-                      onChange={(e) => setSettingsMedusaKey(e.target.value)}
-                      placeholder="api_key_..."
-                      style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }}
-                    />
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Medusa Admin API Key</span>
+                    <input type="password" value={settingsMedusaKey} onChange={(e) => setSettingsMedusaKey(e.target.value)} placeholder="api_key_..." style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} />
                   </label>
+                </div>
+
+                <div style={{ background: '#f7f9fa', border: '1px solid #e1e7eb', borderRadius: '10px', padding: '16px', display: 'grid', gap: '12px' }}>
+                  <h3 style={{ margin: '0', fontSize: '15px', fontWeight: 600, color: '#176c61', display: 'flex', alignItems: 'center', gap: '6px' }}><Bot size={16} /> Login, AI & analytics</h3>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Google OAuth Client ID</span>
+                    <input type="text" value={settingsGoogleClientId} onChange={(e) => setSettingsGoogleClientId(e.target.value)} placeholder="1234567890-abc.apps.googleusercontent.com" style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} />
+                  </label>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>AI Provider API Key</span>
+                    <input type="password" value={settingsOpenAiKey} onChange={(e) => setSettingsOpenAiKey(e.target.value)} placeholder="sk-..." style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} />
+                  </label>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                    <label style={{ display: 'grid', gap: '6px' }}><span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>GA4 ID</span><input type="text" value={settingsGa4Id} onChange={(e) => setSettingsGa4Id(e.target.value)} placeholder="G-..." style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} /></label>
+                    <label style={{ display: 'grid', gap: '6px' }}><span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Meta Pixel</span><input type="text" value={settingsMetaPixelId} onChange={(e) => setSettingsMetaPixelId(e.target.value)} placeholder="Pixel ID" style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} /></label>
+                    <label style={{ display: 'grid', gap: '6px' }}><span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>TikTok Pixel</span><input type="text" value={settingsTiktokPixelId} onChange={(e) => setSettingsTiktokPixelId(e.target.value)} placeholder="Pixel ID" style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} /></label>
+                  </div>
+                </div>
+
+                <div style={{ background: '#f7f9fa', border: '1px solid #e1e7eb', borderRadius: '10px', padding: '16px', display: 'grid', gap: '12px' }}>
+                  <h3 style={{ margin: '0', fontSize: '15px', fontWeight: 600, color: '#176c61', display: 'flex', alignItems: 'center', gap: '6px' }}><Truck size={16} /> Site, tax & shipping</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <label style={{ display: 'grid', gap: '6px' }}><span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Public Site URL</span><input type="text" value={settingsPublicSiteUrl} onChange={(e) => setSettingsPublicSiteUrl(e.target.value)} placeholder="https://products4thepeople.com" style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} /></label>
+                    <label style={{ display: 'grid', gap: '6px' }}><span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Public App Base</span><input type="text" value={settingsPublicAppBase} onChange={(e) => setSettingsPublicAppBase(e.target.value)} placeholder="/Products4thePeople/" style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} /></label>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px' }}>
+                    <label style={{ display: 'grid', gap: '6px' }}><span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Tax Rate</span><input type="number" step="0.001" value={settingsTaxRate} onChange={(e) => setSettingsTaxRate(e.target.value)} style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} /></label>
+                    <label style={{ display: 'grid', gap: '6px' }}><span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Free Shipping</span><input type="number" step="0.01" value={settingsFreeShipping} onChange={(e) => setSettingsFreeShipping(e.target.value)} style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} /></label>
+                    <label style={{ display: 'grid', gap: '6px' }}><span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Flat Shipping</span><input type="number" step="0.01" value={settingsFlatShipping} onChange={(e) => setSettingsFlatShipping(e.target.value)} style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} /></label>
+                  </div>
                 </div>
 
                 <button 

@@ -3092,6 +3092,13 @@ Discover the viral ${name}: ${angle}. Order today for fast shipping, 30-day mone
 // GET /api/settings/config loads current environment credentials
 app.get("/api/settings/config", requireAdmin, (_request, response) => {
   const stripeKey = process.env.STRIPE_SECRET_KEY || "";
+  const openAiKey = process.env.OPENAI_API_KEY || "";
+  const databaseUrlValue = process.env.DATABASE_URL || "";
+  const adminPasswordValue = process.env.VITE_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || "";
+  const maskSecret = (value: string, prefix = "") => {
+    if (!value) return "";
+    return `${prefix || "****"}...${value.slice(-4)}`;
+  };
   
   // Mask the secret key for safety
   const maskedStripeKey = stripeKey 
@@ -3103,18 +3110,67 @@ app.get("/api/settings/config", requireAdmin, (_request, response) => {
   response.json({
     stripeSecretKey: maskedStripeKey,
     hasStripeKey: Boolean(stripeKey),
+    databaseUrl: maskSecret(databaseUrlValue, databaseUrlValue.startsWith("postgres") ? "postgres" : ""),
+    hasDatabaseUrl: Boolean(databaseUrlValue),
+    databaseMode: usePostgres ? "PostgreSQL" : "Local file fallback",
     medusaBackendUrl: process.env.MEDUSA_BACKEND_URL || "http://localhost:9000",
-    medusaAdminApiKey: process.env.MEDUSA_ADMIN_API_KEY || "",
+    medusaAdminApiKey: maskSecret(process.env.MEDUSA_ADMIN_API_KEY || ""),
+    hasMedusaAdminApiKey: Boolean(process.env.MEDUSA_ADMIN_API_KEY),
+    googleClientId: process.env.VITE_GOOGLE_CLIENT_ID || "",
+    hasGoogleClientId: Boolean(process.env.VITE_GOOGLE_CLIENT_ID),
+    openAiApiKey: maskSecret(openAiKey, openAiKey.startsWith("sk-") ? "sk" : ""),
+    hasOpenAiApiKey: Boolean(openAiKey),
+    adminEmail: process.env.VITE_ADMIN_EMAIL || process.env.ADMIN_EMAIL || adminEmail,
+    adminPassword: maskSecret(adminPasswordValue),
+    hasCustomAdminPassword: Boolean(adminPasswordValue && adminPasswordValue !== "change-this-password"),
+    publicSiteUrl: process.env.PUBLIC_SITE_URL || "",
+    publicAppBase: process.env.PUBLIC_APP_BASE || "",
+    ga4MeasurementId: process.env.VITE_GA4_MEASUREMENT_ID || "",
+    metaPixelId: process.env.VITE_META_PIXEL_ID || "",
+    tiktokPixelId: process.env.VITE_TIKTOK_PIXEL_ID || "",
+    basicTaxRate: process.env.BASIC_TAX_RATE || String(taxRate),
+    freeShippingThreshold: process.env.FREE_SHIPPING_THRESHOLD || String(freeShippingThreshold),
+    flatShipping: process.env.FLAT_SHIPPING || String(flatShipping),
   });
 });
 
 // POST /api/settings/config writes configurations back to .env
 app.post("/api/settings/config", requireAdmin, async (request, response) => {
   try {
-    const { stripeSecretKey, medusaBackendUrl, medusaAdminApiKey } = z.object({
+    const {
+      databaseUrl: nextDatabaseUrl,
+      stripeSecretKey,
+      medusaBackendUrl,
+      medusaAdminApiKey,
+      googleClientId,
+      openAiApiKey,
+      adminEmail: nextAdminEmail,
+      adminPassword: nextAdminPassword,
+      publicSiteUrl,
+      publicAppBase,
+      ga4MeasurementId,
+      metaPixelId,
+      tiktokPixelId,
+      basicTaxRate,
+      freeShippingThreshold: nextFreeShippingThreshold,
+      flatShipping: nextFlatShipping,
+    } = z.object({
+      databaseUrl: z.string().optional(),
       stripeSecretKey: z.string().optional(),
       medusaBackendUrl: z.string().url().optional().or(z.string().length(0)),
       medusaAdminApiKey: z.string().optional(),
+      googleClientId: z.string().optional(),
+      openAiApiKey: z.string().optional(),
+      adminEmail: z.string().email().optional().or(z.string().length(0)),
+      adminPassword: z.string().optional(),
+      publicSiteUrl: z.string().optional(),
+      publicAppBase: z.string().optional(),
+      ga4MeasurementId: z.string().optional(),
+      metaPixelId: z.string().optional(),
+      tiktokPixelId: z.string().optional(),
+      basicTaxRate: z.string().optional(),
+      freeShippingThreshold: z.string().optional(),
+      flatShipping: z.string().optional(),
     }).parse(request.body);
 
     const envFile = path.join(process.cwd(), ".env");
@@ -3147,6 +3203,30 @@ app.post("/api/settings/config", requireAdmin, async (request, response) => {
       updatedKeys.add(key);
     };
 
+    const isMaskedValue = (value?: string) => Boolean(value && (value.includes("...") || value.includes("****") || value.includes("â€¢")));
+    const updatePlainValue = (key: string, value?: string) => {
+      if (value === undefined || isMaskedValue(value)) return;
+      const cleanValue = String(value || "").trim();
+      updateOrAdd(key, cleanValue);
+      process.env[key] = cleanValue;
+    };
+
+    updatePlainValue("DATABASE_URL", nextDatabaseUrl);
+    updatePlainValue("VITE_GOOGLE_CLIENT_ID", googleClientId);
+    updatePlainValue("OPENAI_API_KEY", openAiApiKey);
+    updatePlainValue("VITE_ADMIN_EMAIL", nextAdminEmail);
+    updatePlainValue("ADMIN_EMAIL", nextAdminEmail);
+    updatePlainValue("VITE_ADMIN_PASSWORD", nextAdminPassword);
+    updatePlainValue("ADMIN_PASSWORD", nextAdminPassword);
+    updatePlainValue("PUBLIC_SITE_URL", publicSiteUrl);
+    updatePlainValue("PUBLIC_APP_BASE", publicAppBase);
+    updatePlainValue("VITE_GA4_MEASUREMENT_ID", ga4MeasurementId);
+    updatePlainValue("VITE_META_PIXEL_ID", metaPixelId);
+    updatePlainValue("VITE_TIKTOK_PIXEL_ID", tiktokPixelId);
+    updatePlainValue("BASIC_TAX_RATE", basicTaxRate);
+    updatePlainValue("FREE_SHIPPING_THRESHOLD", nextFreeShippingThreshold);
+    updatePlainValue("FLAT_SHIPPING", nextFlatShipping);
+
     // Update Stripe configuration if provided
     if (stripeSecretKey && !stripeSecretKey.startsWith("sk_...") && !stripeSecretKey.startsWith("•••")) {
       updateOrAdd("STRIPE_SECRET_KEY", stripeSecretKey);
@@ -3168,10 +3248,12 @@ app.post("/api/settings/config", requireAdmin, async (request, response) => {
     process.env.VITE_MEDUSA_BACKEND_URL = cleanMedusaUrl;
 
     const cleanMedusaKey = String(medusaAdminApiKey || "").trim();
-    updateOrAdd("MEDUSA_ADMIN_API_KEY", cleanMedusaKey);
-    updateOrAdd("VITE_MEDUSA_ADMIN_API_KEY", cleanMedusaKey);
-    process.env.MEDUSA_ADMIN_API_KEY = cleanMedusaKey;
-    process.env.VITE_MEDUSA_ADMIN_API_KEY = cleanMedusaKey;
+    if (!isMaskedValue(cleanMedusaKey)) {
+      updateOrAdd("MEDUSA_ADMIN_API_KEY", cleanMedusaKey);
+      updateOrAdd("VITE_MEDUSA_ADMIN_API_KEY", cleanMedusaKey);
+      process.env.MEDUSA_ADMIN_API_KEY = cleanMedusaKey;
+      process.env.VITE_MEDUSA_ADMIN_API_KEY = cleanMedusaKey;
+    }
 
     console.log("[CONFIG] Medusa configurations updated successfully.");
 
