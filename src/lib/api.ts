@@ -459,6 +459,13 @@ export async function generateArticle(niche: string, topic: string, keyword: str
   });
 }
 
+export async function generateArticleFromProduct(productId: string, angle: string) {
+  return apiFetch<{ success: boolean; article: Article }>("/admin/articles/generate-from-product", {
+    method: "POST",
+    body: JSON.stringify({ productId, angle }),
+  });
+}
+
 export async function updateArticle(id: string, updates: Partial<Article>) {
   return apiFetch<{ article: Article }>(`/admin/articles/${encodeURIComponent(id)}`, {
     method: "PATCH",
@@ -521,6 +528,13 @@ export async function generateSeoPage(niche: string, categoryName: string, keywo
   return apiFetch<{ success: boolean; page: SeoPage }>("/admin/seo-pages/generate", {
     method: "POST",
     body: JSON.stringify({ niche, categoryName, keywords }),
+  });
+}
+
+export async function generateSeoPageFromProduct(productId: string, angle: string) {
+  return apiFetch<{ success: boolean; page: SeoPage }>("/admin/seo-pages/generate-from-product", {
+    method: "POST",
+    body: JSON.stringify({ productId, angle }),
   });
 }
 

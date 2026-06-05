@@ -1267,6 +1267,31 @@ const createExperimentSchema = z.object({
   })).min(2)
 });
 
+const productSeoGenerationSchema = z.object({
+  productId: z.string().min(1),
+  angle: z.string().optional().default("")
+});
+
+function slugifySeo(value: string) {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "") || "product";
+}
+
+function resolveProductNiche(product: any) {
+  return product.subdomain || product.niche || "general";
+}
+
+function formatProductPriceRange(product: any) {
+  const min = Number(product.retailMin || 0);
+  const max = Number(product.retailMax || min);
+  if (!min && !max) return "competitive pricing";
+  if (min === max || !max) return `$${min.toFixed(2)}`;
+  return `$${min.toFixed(2)}-$${max.toFixed(2)}`;
+}
+
 // --- Content & SEO REST Endpoints ---
 
 // Public Blog endpoints
@@ -1401,6 +1426,96 @@ By investing time in understanding ${topic}, you set yourself up for long-term s
       revenue: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
+    };
+
+    await upsertArticleDb(newArticle);
+    response.json({ success: true, article: newArticle });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/articles/generate-from-product", requireAdmin, async (request, response) => {
+  try {
+    const { productId, angle } = productSeoGenerationSchema.parse(request.body);
+    const allProducts = await getProductsDb();
+    const product = allProducts.find((p: any) => p.id === productId);
+    if (!product) {
+      response.status(404).json({ error: "Product not found" });
+      return;
+    }
+
+    const niche = resolveProductNiche(product);
+    const productAngle = angle.trim() || product.contentAngle || `a practical ${niche} upgrade`;
+    const title = `${product.name}: A Smarter Fix for ${productAngle}`;
+    const slug = `${niche}-${slugifySeo(product.name)}-solution-guide`;
+    const productUrl = `#/product/${product.id}`;
+    const priceRange = formatProductPriceRange(product);
+    const productStatus = String(product.status || "Review").toLowerCase();
+    const seoDescription = `Learn how ${product.name} solves ${productAngle}. Compare benefits, fit, pricing, and next steps before you buy.`;
+
+    const content = `
+# ${title}
+
+When shoppers search for **${productAngle}**, they usually are not looking for another generic product list. They are trying to solve a specific daily friction point with something simple, useful, and fairly priced.
+
+## The Problem
+The usual alternatives can be confusing, overpriced, or too broad for the actual need. That makes it harder to decide what is worth buying and what will sit unused after the first week.
+
+## The Product-Led Solution
+[${product.name}](${productUrl}) is positioned as a focused answer for this need. It sits in the ${niche} catalog with ${priceRange}, a ${productStatus} product status, and a merchandising angle built around ${product.contentAngle || productAngle}.
+
+## Why It Works
+1. **Clear fit:** The product is easy to explain around one concrete customer problem.
+2. **Conversion path:** The article can educate first, then move readers directly to the product detail page.
+3. **SEO intent match:** Searchers get context, comparison points, and a specific recommended next step.
+
+## Who Should Consider It
+Choose ${product.name} if you want a practical option for ${productAngle} without digging through scattered marketplace listings. It is especially useful for shoppers who value fast comparison, transparent pricing, and a direct path to checkout.
+
+## Next Step
+See the current product details, images, and availability here: [Shop ${product.name}](${productUrl}).
+    `.trim();
+
+    const schemaMarkup = {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      "headline": title,
+      "description": seoDescription,
+      "about": {
+        "@type": "Product",
+        "name": product.name,
+        "url": productUrl
+      },
+      "author": {
+        "@type": "Organization",
+        "name": "Products4ThePeople"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Products4ThePeople"
+      },
+      "datePublished": new Date().toISOString()
+    };
+
+    const now = new Date().toISOString();
+    const newArticle = {
+      id: crypto.randomUUID(),
+      title,
+      slug,
+      content,
+      summary: `A product-led guide showing how ${product.name} helps solve ${productAngle}.`,
+      niche,
+      status: "draft",
+      seo_title: `${product.name} Solution Guide | Products4ThePeople`,
+      seo_description: seoDescription,
+      keywords: `${product.name}, ${productAngle}, ${niche}, product guide`,
+      schema_markup: schemaMarkup,
+      views: 0,
+      conversions: 0,
+      revenue: 0,
+      created_at: now,
+      updated_at: now
     };
 
     await upsertArticleDb(newArticle);
@@ -1601,6 +1716,87 @@ Explore our premier selection of **${categoryName}** specifically optimized for 
       revenue: 0,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
+    };
+
+    await upsertSeoPageDb(newPage);
+    response.json({ success: true, page: newPage });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/seo-pages/generate-from-product", requireAdmin, async (request, response) => {
+  try {
+    const { productId, angle } = productSeoGenerationSchema.parse(request.body);
+    const allProducts = await getProductsDb();
+    const product = allProducts.find((p: any) => p.id === productId);
+    if (!product) {
+      response.status(404).json({ error: "Product not found" });
+      return;
+    }
+
+    const niche = resolveProductNiche(product);
+    const productAngle = angle.trim() || product.contentAngle || `a practical ${niche} solution`;
+    const slug = `${niche}/${slugifySeo(product.name)}-solution`;
+    const title = `${product.name} for ${productAngle}`;
+    const productUrl = `#/product/${product.id}`;
+    const priceRange = formatProductPriceRange(product);
+    const seoDescription = `${product.name} helps solve ${productAngle}. Review benefits, pricing, and the fastest path to buy from Products4ThePeople.`;
+
+    const description = `
+## Start With the Problem
+Shoppers looking for **${productAngle}** need a clear answer, not another crowded category page. This landing page frames the decision around the outcome first, then points to the product that best fits the need.
+
+## Meet the Solution
+[${product.name}](${productUrl}) is the recommended product for this use case. It is part of the ${niche} catalog, priced at ${priceRange}, and positioned around ${product.contentAngle || productAngle}.
+
+## Why This Product Belongs on the Shortlist
+- Built around a specific customer pain point instead of a generic collection.
+- Easy to connect with organic search, ads, and email campaigns.
+- Direct product path keeps the page conversion-focused.
+
+## Buy With Context
+Use this page to explain the problem, answer buying questions, and send ready shoppers to the product detail page: [View ${product.name}](${productUrl}).
+    `.trim();
+
+    const schemaMarkup = {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": title,
+      "description": seoDescription,
+      "mainEntity": {
+        "@type": "Product",
+        "name": product.name,
+        "url": productUrl,
+        "offers": {
+          "@type": "AggregateOffer",
+          "lowPrice": Number(product.retailMin || 0),
+          "highPrice": Number(product.retailMax || product.retailMin || 0),
+          "priceCurrency": "USD"
+        }
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Products4ThePeople"
+      }
+    };
+
+    const now = new Date().toISOString();
+    const newPage = {
+      id: crypto.randomUUID(),
+      title,
+      slug,
+      niche,
+      category_name: `${product.name} Solution`,
+      description,
+      seo_title: `${product.name} for ${productAngle} | Products4ThePeople`,
+      seo_description: seoDescription,
+      schema_markup: schemaMarkup,
+      views: 0,
+      conversions: 0,
+      revenue: 0,
+      created_at: now,
+      updated_at: now
     };
 
     await upsertSeoPageDb(newPage);

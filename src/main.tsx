@@ -97,6 +97,7 @@ import {
   getAdminArticles,
   createArticle,
   generateArticle,
+  generateArticleFromProduct,
   updateArticle,
   deleteArticle,
   getKbArticles,
@@ -108,6 +109,7 @@ import {
   getAdminSeoPages,
   createSeoPage,
   generateSeoPage,
+  generateSeoPageFromProduct,
   trackSeoHit,
   getSeoDashboard,
   type Article,
@@ -551,6 +553,10 @@ function App() {
   const [seoPageGenCategory, setSeoPageGenCategory] = React.useState("");
   const [seoPageGenKeywords, setSeoPageGenKeywords] = React.useState("");
   const [seoPageGenNiche, setSeoPageGenNiche] = React.useState("beauty");
+  const [seoProductGenId, setSeoProductGenId] = React.useState("");
+  const [seoProductGenType, setSeoProductGenType] = React.useState<"article" | "sales_page">("article");
+  const [seoProductGenAngle, setSeoProductGenAngle] = React.useState("");
+  const [seoProductGenerating, setSeoProductGenerating] = React.useState(false);
   const [kbNewTitle, setKbNewTitle] = React.useState("");
   const [kbNewContent, setKbNewContent] = React.useState("");
   const [kbNewCategory, setKbNewCategory] = React.useState<"faq" | "tutorial" | "product_guide">("faq");
@@ -799,6 +805,16 @@ function App() {
     };
     void load();
   }, [adminTab]);
+
+  React.useEffect(() => {
+    if (products.length === 0) {
+      if (seoProductGenId) setSeoProductGenId("");
+      return;
+    }
+    if (!seoProductGenId || !products.some((product) => product.id === seoProductGenId)) {
+      setSeoProductGenId(products[0].id);
+    }
+  }, [products, seoProductGenId]);
 
   const filteredProducts = products.filter((product) => {
     const matchesNiche = activeNiche === "all" || product.subdomain === activeNiche;
@@ -1788,6 +1804,95 @@ function App() {
             {/* Overview Tab */}
             {!seoLoading && seoSubTab === "overview" && (
               <>
+                <article className="panel" style={{ marginBottom: '20px' }}>
+                  <div className="panel-header">
+                    <div>
+                      <p>Product SEO Generator</p>
+                      <h2>Turn a product into content</h2>
+                    </div>
+                    <Sparkles size={22} />
+                  </div>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const selectedProductId = seoProductGenId || products[0]?.id || "";
+                      if (!selectedProductId) {
+                        setNotice("Add or import a product before generating product-led SEO content.");
+                        return;
+                      }
+                      setSeoProductGenerating(true);
+                      try {
+                        if (seoProductGenType === "article") {
+                          const res = await generateArticleFromProduct(selectedProductId, seoProductGenAngle);
+                          setSeoArticles((prev) => [res.article, ...prev]);
+                          setSeoSubTab("articles");
+                          setNotice(`Generated draft article: ${res.article.title}`);
+                        } else {
+                          const res = await generateSeoPageFromProduct(selectedProductId, seoProductGenAngle);
+                          setSeoPages((prev) => [res.page, ...prev]);
+                          setSeoSubTab("pages");
+                          setNotice(`Generated sales page: ${res.page.title}`);
+                        }
+                        setSeoProductGenAngle("");
+                      } catch (err) {
+                        console.error("Product SEO generation failed:", err);
+                        setNotice(err instanceof Error ? `Product SEO generation failed: ${err.message}` : "Product SEO generation failed.");
+                      } finally {
+                        setSeoProductGenerating(false);
+                      }
+                    }}
+                    style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginTop: '16px' }}
+                  >
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Product</span>
+                      <select
+                        value={seoProductGenId}
+                        onChange={(e) => setSeoProductGenId(e.target.value)}
+                        disabled={products.length === 0}
+                        style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}
+                      >
+                        {products.length === 0 ? (
+                          <option value="">No products available</option>
+                        ) : (
+                          products.map((product) => (
+                            <option key={product.id} value={product.id}>
+                              {product.name} ({product.subdomain || product.niche})
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Output</span>
+                      <select
+                        value={seoProductGenType}
+                        onChange={(e) => setSeoProductGenType(e.target.value as "article" | "sales_page")}
+                        style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}
+                      >
+                        <option value="article">Educational article</option>
+                        <option value="sales_page">Sales page</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px', gridColumn: '1 / -1' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Problem / Angle</span>
+                      <input
+                        value={seoProductGenAngle}
+                        onChange={(e) => setSeoProductGenAngle(e.target.value)}
+                        placeholder="e.g. reduce morning routine time, cleaner car interiors, easier pet grooming"
+                        style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      disabled={seoProductGenerating || products.length === 0}
+                      className="primary"
+                      style={{ gridColumn: '1 / -1', padding: '10px', borderRadius: '8px', border: 'none', background: '#176c61', color: 'white', fontWeight: 600, fontSize: '14px', cursor: products.length === 0 ? 'not-allowed' : 'pointer', opacity: products.length === 0 ? 0.65 : 1 }}
+                    >
+                      {seoProductGenerating ? 'Generating...' : 'Generate From Product'}
+                    </button>
+                  </form>
+                </article>
+
                 <section className="metrics-grid" id="seo-metrics">
                   <Metric icon={Eye} label="Organic Views" value={seoDashboard?.summary.totalViews?.toLocaleString() || "0"} trend="All content pages" />
                   <Metric icon={TrendingUp} label="Conversions" value={seoDashboard?.summary.totalConversions?.toLocaleString() || "0"} trend="From organic traffic" />

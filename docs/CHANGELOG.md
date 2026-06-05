@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.2.0 — 2026-06-04
+
+### Added
+- Added a Product SEO Generator to the SEO Hub for creating draft educational articles or sales pages from a selected catalog product.
+- Added admin API endpoints for product-led article generation and product-led programmatic sales page generation.
+- Added generated product content with product-aware titles, internal links, problem/solution positioning, pricing context, keywords, and schema markup.
+
 ## v1.1.0 — 2026-06-04
 
 ### Added
