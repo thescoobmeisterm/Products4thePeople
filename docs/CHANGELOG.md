@@ -7,6 +7,17 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.1.0 — 2026-06-04
+
+### Added
+- Completed the Phase 0 Product Research backend workflow with persisted competitor captures and API-backed competitor registry views.
+- Added demand and competitor scan actions from the research dashboard and opportunity detail modal.
+- Added score recalculation, expanded research statuses, richer score columns, and filters for score, margin, risk, category, and discovery date.
+- Preserved manual AliExpress URLs during supplier intake and moved imported supplier products into the review queue with generated import payload/checklist data.
+
+### Changed
+- Admin version badge now reads from the canonical `APP_VERSION` source instead of hard-coded display text.
+
 ## v1.0.1 — 2026-06-04
 
 ### Fixed

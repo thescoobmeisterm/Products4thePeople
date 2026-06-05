@@ -55,6 +55,7 @@ import {
   type MedusaOrder,
   type MedusaProduct,
 } from "./lib/medusa";
+import { APP_VERSION } from "./lib/version";
 import {
   createOrder,
   getOrders,
@@ -73,12 +74,15 @@ import {
   createOpportunity,
   getOpportunityDetails,
   updateOpportunity,
+  getCompetitors,
+  createCompetitor,
   runGapAnalysis,
   runDemandResearch,
   runCompetitorResearch,
   searchAliExpress,
   importSupplierProduct,
   setWatchlistStatus,
+  scoreResearchProduct,
   generateContentForOpportunity,
   getExperiments,
   getExperimentDetails,
@@ -88,6 +92,28 @@ import {
   promoteExperimentVariant,
   simulateExperimentTraffic,
   getActiveExperiments,
+  getArticles,
+  getArticleDetails,
+  getAdminArticles,
+  createArticle,
+  generateArticle,
+  updateArticle,
+  deleteArticle,
+  getKbArticles,
+  getAdminKbArticles,
+  createKbArticle,
+  updateKbArticle,
+  getSeoPages,
+  getSeoPageDetails,
+  getAdminSeoPages,
+  createSeoPage,
+  generateSeoPage,
+  trackSeoHit,
+  getSeoDashboard,
+  type Article,
+  type KnowledgeArticle,
+  type SeoPage,
+  type SeoDashboardStats,
   type ApiOrder,
   type ResearchOpportunity,
   type CompetitorProduct,
@@ -442,6 +468,7 @@ const navItems = [
   ["Funnels", Mail],
   ["Analytics", BarChart3],
   ["AI Studio", Bot],
+  ["SEO Hub", Globe2],
   ["Settings", Settings],
 ] as const;
 
@@ -513,6 +540,23 @@ function App() {
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [notice, setNotice] = React.useState("Connecting to backend storage.");
   const [adminTab, setAdminTab] = React.useState("dashboard");
+  const [seoArticles, setSeoArticles] = React.useState<Article[]>([]);
+  const [seoKbArticles, setSeoKbArticles] = React.useState<KnowledgeArticle[]>([]);
+  const [seoPages, setSeoPages] = React.useState<SeoPage[]>([]);
+  const [seoDashboard, setSeoDashboard] = React.useState<SeoDashboardStats | null>(null);
+  const [seoLoading, setSeoLoading] = React.useState(false);
+  const [seoGenTopic, setSeoGenTopic] = React.useState("");
+  const [seoGenKeyword, setSeoGenKeyword] = React.useState("");
+  const [seoGenNiche, setSeoGenNiche] = React.useState("beauty");
+  const [seoPageGenCategory, setSeoPageGenCategory] = React.useState("");
+  const [seoPageGenKeywords, setSeoPageGenKeywords] = React.useState("");
+  const [seoPageGenNiche, setSeoPageGenNiche] = React.useState("beauty");
+  const [kbNewTitle, setKbNewTitle] = React.useState("");
+  const [kbNewContent, setKbNewContent] = React.useState("");
+  const [kbNewCategory, setKbNewCategory] = React.useState<"faq" | "tutorial" | "product_guide">("faq");
+  const [kbNewNiche, setKbNewNiche] = React.useState("beauty");
+  const [seoSitemapPreview, setSeoSitemapPreview] = React.useState("");
+  const [seoSubTab, setSeoSubTab] = React.useState<"overview" | "articles" | "pages" | "kb" | "sitemap">("overview");
   const [dbContacts, setDbContacts] = React.useState<any[]>([]);
 
   // Stores Manager Dialog States & Handlers
@@ -731,6 +775,30 @@ function App() {
   React.useEffect(() => {
     localStorage.setItem(medusaConfigKey, JSON.stringify(medusaConnection));
   }, [medusaConnection]);
+
+  React.useEffect(() => {
+    if (adminTab !== "seo-hub") return;
+    const load = async () => {
+      setSeoLoading(true);
+      try {
+        const [artRes, kbRes, pageRes, dashRes] = await Promise.all([
+          getAdminArticles(),
+          getAdminKbArticles(),
+          getAdminSeoPages(),
+          getSeoDashboard()
+        ]);
+        setSeoArticles(artRes.articles || []);
+        setSeoKbArticles(kbRes.articles || []);
+        setSeoPages(pageRes.pages || []);
+        setSeoDashboard(dashRes);
+      } catch (e) {
+        console.warn("Failed to load SEO dashboard:", e);
+      } finally {
+        setSeoLoading(false);
+      }
+    };
+    void load();
+  }, [adminTab]);
 
   const filteredProducts = products.filter((product) => {
     const matchesNiche = activeNiche === "all" || product.subdomain === activeNiche;
@@ -1046,7 +1114,7 @@ function App() {
         <header className="topbar">
           <div>
             <p>Products4ThePeople.com</p>
-            <h1>Commerce Command Center <span style={{ fontSize: '0.45em', opacity: 0.6, fontWeight: 'normal', backgroundColor: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: '4px', marginLeft: '10px', verticalAlign: 'middle', display: 'inline-block' }}>v1.0.1</span></h1>
+            <h1>Commerce Command Center <span style={{ fontSize: '0.45em', opacity: 0.6, fontWeight: 'normal', backgroundColor: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: '4px', marginLeft: '10px', verticalAlign: 'middle', display: 'inline-block' }}>v{APP_VERSION}</span></h1>
           </div>
           <div className="topbar-actions">
             <button type="button" onClick={() => {
@@ -1685,6 +1753,419 @@ function App() {
               </form>
             </article>
           </div>
+        )}
+
+        {adminTab === "seo-hub" && (
+          <>
+            {/* Sub-tab navigation */}
+            <div style={{ display: 'flex', gap: '4px', marginBottom: '20px', background: '#f1f5f9', borderRadius: '10px', padding: '4px' }}>
+              {(["overview", "articles", "pages", "kb", "sitemap"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setSeoSubTab(tab)}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    cursor: 'pointer',
+                    fontSize: '13.5px',
+                    fontWeight: seoSubTab === tab ? 700 : 500,
+                    background: seoSubTab === tab ? '#ffffff' : 'transparent',
+                    color: seoSubTab === tab ? '#176c61' : '#64748b',
+                    boxShadow: seoSubTab === tab ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                    transition: 'all 0.2s',
+                    textTransform: 'capitalize',
+                  }}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            {seoLoading && <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>Loading SEO data…</p>}
+
+            {/* Overview Tab */}
+            {!seoLoading && seoSubTab === "overview" && (
+              <>
+                <section className="metrics-grid" id="seo-metrics">
+                  <Metric icon={Eye} label="Organic Views" value={seoDashboard?.summary.totalViews?.toLocaleString() || "0"} trend="All content pages" />
+                  <Metric icon={TrendingUp} label="Conversions" value={seoDashboard?.summary.totalConversions?.toLocaleString() || "0"} trend="From organic traffic" />
+                  <Metric icon={CircleDollarSign} label="SEO Revenue" value={`$${(seoDashboard?.summary.totalRevenue || 0).toFixed(2)}`} trend="Attributed to content" />
+                  <Metric icon={Globe2} label="Indexed URLs" value={seoDashboard?.summary.indexedUrls?.toLocaleString() || "0"} trend="Sitemap entries" />
+                </section>
+
+                {seoDashboard?.leaderboard && seoDashboard.leaderboard.length > 0 && (
+                  <article className="panel" style={{ marginTop: '20px' }}>
+                    <div className="panel-header">
+                      <div>
+                        <p>Content performance</p>
+                        <h2>Leaderboard</h2>
+                      </div>
+                      <BarChart3 size={22} />
+                    </div>
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13.5px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                            <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Title</th>
+                            <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Type</th>
+                            <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Niche</th>
+                            <th style={{ textAlign: 'right', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Views</th>
+                            <th style={{ textAlign: 'right', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Conv.</th>
+                            <th style={{ textAlign: 'right', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Revenue</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {seoDashboard.leaderboard.map((item, i) => (
+                            <tr key={i} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '10px 12px', fontWeight: 500 }}>{item.name}</td>
+                              <td style={{ padding: '10px 12px' }}>
+                                <span style={{ background: item.type === 'article' ? '#dbeafe' : '#fef3c7', color: item.type === 'article' ? '#1e40af' : '#92400e', padding: '2px 8px', borderRadius: '4px', fontSize: '11.5px', fontWeight: 600 }}>{item.type}</span>
+                              </td>
+                              <td style={{ padding: '10px 12px', color: '#64748b' }}>{item.niche}</td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 500 }}>{item.views.toLocaleString()}</td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right' }}>{item.conversions}</td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600, color: '#176c61' }}>${item.revenue.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </article>
+                )}
+              </>
+            )}
+
+            {/* Articles Tab */}
+            {!seoLoading && seoSubTab === "articles" && (
+              <>
+                <article className="panel">
+                  <div className="panel-header">
+                    <div>
+                      <p>AI Content Engine</p>
+                      <h2>Generate Blog Article</h2>
+                    </div>
+                    <Bot size={22} />
+                  </div>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!seoGenTopic.trim()) return;
+                      setSeoLoading(true);
+                      try {
+                        const res = await generateArticle(seoGenNiche, seoGenTopic, seoGenKeyword);
+                        setSeoArticles((prev) => [res.article, ...prev]);
+                        setSeoGenTopic("");
+                        setSeoGenKeyword("");
+                      } catch (err) {
+                        console.error("Article generation failed:", err);
+                      } finally {
+                        setSeoLoading(false);
+                      }
+                    }}
+                    style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px' }}
+                  >
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Niche</span>
+                      <select value={seoGenNiche} onChange={(e) => setSeoGenNiche(e.target.value)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="beauty">Beauty</option>
+                        <option value="pets">Pets</option>
+                        <option value="home">Home</option>
+                        <option value="fitness">Fitness</option>
+                        <option value="automotive">Automotive</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Target Keyword</span>
+                      <input value={seoGenKeyword} onChange={(e) => setSeoGenKeyword(e.target.value)} placeholder="e.g. led face mask" style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }} />
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px', gridColumn: '1 / -1' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Topic / Prompt</span>
+                      <input value={seoGenTopic} onChange={(e) => setSeoGenTopic(e.target.value)} placeholder="e.g. Benefits of LED light therapy for anti-aging" required style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }} />
+                    </label>
+                    <button type="submit" disabled={seoLoading} className="primary" style={{ gridColumn: '1 / -1', padding: '10px', borderRadius: '8px', border: 'none', background: '#176c61', color: 'white', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>
+                      {seoLoading ? 'Generating…' : 'Generate AI Article'}
+                    </button>
+                  </form>
+                </article>
+
+                <article className="panel" style={{ marginTop: '16px' }}>
+                  <div className="panel-header">
+                    <div>
+                      <p>Content Library</p>
+                      <h2>Articles ({seoArticles.length})</h2>
+                    </div>
+                    <BookOpen size={22} />
+                  </div>
+                  {seoArticles.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px' }}>No articles yet. Generate your first one above.</p>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13.5px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                            <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Title</th>
+                            <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Niche</th>
+                            <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Status</th>
+                            <th style={{ textAlign: 'right', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Views</th>
+                            <th style={{ textAlign: 'right', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {seoArticles.map((art) => (
+                            <tr key={art.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '10px 12px', fontWeight: 500 }}>{art.title}</td>
+                              <td style={{ padding: '10px 12px', color: '#64748b' }}>{art.niche}</td>
+                              <td style={{ padding: '10px 12px' }}>
+                                <span style={{ background: art.status === 'published' ? '#dcfce7' : art.status === 'draft' ? '#fef3c7' : '#f1f5f9', color: art.status === 'published' ? '#166534' : art.status === 'draft' ? '#92400e' : '#475569', padding: '2px 8px', borderRadius: '4px', fontSize: '11.5px', fontWeight: 600 }}>{art.status}</span>
+                              </td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right' }}>{art.views}</td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
+                                {art.status === 'draft' && (
+                                  <button type="button" onClick={async () => {
+                                    try {
+                                      const res = await updateArticle(art.id, { status: 'published', published_at: new Date().toISOString() });
+                                      setSeoArticles((prev) => prev.map((a) => a.id === art.id ? res.article : a));
+                                    } catch (err) { console.error(err); }
+                                  }} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid #176c61', background: '#f0fdf4', color: '#176c61', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Publish</button>
+                                )}
+                                <button type="button" onClick={async () => {
+                                  try {
+                                    await deleteArticle(art.id);
+                                    setSeoArticles((prev) => prev.filter((a) => a.id !== art.id));
+                                  } catch (err) { console.error(err); }
+                                }} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fef2f2', color: '#dc2626', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Delete</button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </article>
+              </>
+            )}
+
+            {/* Programmatic Pages Tab */}
+            {!seoLoading && seoSubTab === "pages" && (
+              <>
+                <article className="panel">
+                  <div className="panel-header">
+                    <div>
+                      <p>Category SEO</p>
+                      <h2>Generate Landing Page</h2>
+                    </div>
+                    <Layers size={22} />
+                  </div>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!seoPageGenCategory.trim()) return;
+                      setSeoLoading(true);
+                      try {
+                        const res = await generateSeoPage(seoPageGenNiche, seoPageGenCategory, seoPageGenKeywords);
+                        setSeoPages((prev) => [res.page, ...prev]);
+                        setSeoPageGenCategory("");
+                        setSeoPageGenKeywords("");
+                      } catch (err) {
+                        console.error("Page generation failed:", err);
+                      } finally {
+                        setSeoLoading(false);
+                      }
+                    }}
+                    style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px' }}
+                  >
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Niche</span>
+                      <select value={seoPageGenNiche} onChange={(e) => setSeoPageGenNiche(e.target.value)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="beauty">Beauty</option>
+                        <option value="pets">Pets</option>
+                        <option value="home">Home</option>
+                        <option value="fitness">Fitness</option>
+                        <option value="automotive">Automotive</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Keywords</span>
+                      <input value={seoPageGenKeywords} onChange={(e) => setSeoPageGenKeywords(e.target.value)} placeholder="e.g. face masks, skincare" style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }} />
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px', gridColumn: '1 / -1' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Category Name</span>
+                      <input value={seoPageGenCategory} onChange={(e) => setSeoPageGenCategory(e.target.value)} placeholder="e.g. Face Masks" required style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }} />
+                    </label>
+                    <button type="submit" disabled={seoLoading} className="primary" style={{ gridColumn: '1 / -1', padding: '10px', borderRadius: '8px', border: 'none', background: '#176c61', color: 'white', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>
+                      {seoLoading ? 'Generating…' : 'Generate Category Page'}
+                    </button>
+                  </form>
+                </article>
+
+                <article className="panel" style={{ marginTop: '16px' }}>
+                  <div className="panel-header">
+                    <div>
+                      <p>Landing Pages</p>
+                      <h2>Category Pages ({seoPages.length})</h2>
+                    </div>
+                    <Layers size={22} />
+                  </div>
+                  {seoPages.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px' }}>No category pages generated yet.</p>
+                  ) : (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13.5px' }}>
+                        <thead>
+                          <tr style={{ borderBottom: '2px solid #e2e8f0' }}>
+                            <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Title</th>
+                            <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Slug</th>
+                            <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Niche</th>
+                            <th style={{ textAlign: 'right', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Views</th>
+                            <th style={{ textAlign: 'right', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Conv.</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {seoPages.map((page) => (
+                            <tr key={page.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '10px 12px', fontWeight: 500 }}>{page.title}</td>
+                              <td style={{ padding: '10px 12px' }}>
+                                <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>/c/{page.slug}</code>
+                              </td>
+                              <td style={{ padding: '10px 12px', color: '#64748b' }}>{page.niche}</td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right' }}>{page.views}</td>
+                              <td style={{ padding: '10px 12px', textAlign: 'right' }}>{page.conversions}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </article>
+              </>
+            )}
+
+            {/* Knowledge Base Tab */}
+            {!seoLoading && seoSubTab === "kb" && (
+              <>
+                <article className="panel">
+                  <div className="panel-header">
+                    <div>
+                      <p>Help Center</p>
+                      <h2>Add FAQ / Guide</h2>
+                    </div>
+                    <BookOpen size={22} />
+                  </div>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      if (!kbNewTitle.trim() || !kbNewContent.trim()) return;
+                      setSeoLoading(true);
+                      try {
+                        const slug = kbNewTitle.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                        const res = await createKbArticle({ title: kbNewTitle, slug, content: kbNewContent, category: kbNewCategory, niche: kbNewNiche, status: 'published' });
+                        setSeoKbArticles((prev) => [res.article, ...prev]);
+                        setKbNewTitle("");
+                        setKbNewContent("");
+                      } catch (err) {
+                        console.error("KB article creation failed:", err);
+                      } finally {
+                        setSeoLoading(false);
+                      }
+                    }}
+                    style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px' }}
+                  >
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Category</span>
+                      <select value={kbNewCategory} onChange={(e) => setKbNewCategory(e.target.value as any)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="faq">FAQ</option>
+                        <option value="tutorial">Tutorial</option>
+                        <option value="product_guide">Product Guide</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Niche</span>
+                      <select value={kbNewNiche} onChange={(e) => setKbNewNiche(e.target.value)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="beauty">Beauty</option>
+                        <option value="pets">Pets</option>
+                        <option value="home">Home</option>
+                        <option value="fitness">Fitness</option>
+                        <option value="automotive">Automotive</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px', gridColumn: '1 / -1' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Title / Question</span>
+                      <input value={kbNewTitle} onChange={(e) => setKbNewTitle(e.target.value)} placeholder="e.g. How do I use an LED face mask?" required style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }} />
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px', gridColumn: '1 / -1' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Answer / Content</span>
+                      <textarea value={kbNewContent} onChange={(e) => setKbNewContent(e.target.value)} placeholder="Write the answer or guide content here..." required rows={4} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px', resize: 'vertical', fontFamily: 'inherit' }} />
+                    </label>
+                    <button type="submit" disabled={seoLoading} className="primary" style={{ gridColumn: '1 / -1', padding: '10px', borderRadius: '8px', border: 'none', background: '#176c61', color: 'white', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>
+                      {seoLoading ? 'Adding…' : 'Add Knowledge Base Entry'}
+                    </button>
+                  </form>
+                </article>
+
+                <article className="panel" style={{ marginTop: '16px' }}>
+                  <div className="panel-header">
+                    <div>
+                      <p>Knowledge Base</p>
+                      <h2>Entries ({seoKbArticles.length})</h2>
+                    </div>
+                    <BookOpen size={22} />
+                  </div>
+                  {seoKbArticles.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px' }}>No knowledge base entries yet.</p>
+                  ) : (
+                    <div style={{ display: 'grid', gap: '10px', marginTop: '12px' }}>
+                      {seoKbArticles.map((kb) => (
+                        <div key={kb.id} style={{ padding: '14px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
+                            <strong style={{ fontSize: '14px' }}>{kb.title}</strong>
+                            <span style={{ background: kb.category === 'faq' ? '#dbeafe' : kb.category === 'tutorial' ? '#fef3c7' : '#f3e8ff', color: kb.category === 'faq' ? '#1e40af' : kb.category === 'tutorial' ? '#92400e' : '#7c3aed', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>{kb.category}</span>
+                          </div>
+                          <p style={{ fontSize: '13px', color: '#64748b', margin: 0, lineHeight: '1.5' }}>{kb.content.substring(0, 200)}{kb.content.length > 200 ? '…' : ''}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </article>
+              </>
+            )}
+
+            {/* Sitemap Tab */}
+            {!seoLoading && seoSubTab === "sitemap" && (
+              <article className="panel">
+                <div className="panel-header">
+                  <div>
+                    <p>Dynamic XML</p>
+                    <h2>Sitemap Preview</h2>
+                  </div>
+                  <Globe2 size={22} />
+                </div>
+                <div style={{ marginTop: '16px' }}>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/sitemap.xml');
+                        const text = await res.text();
+                        setSeoSitemapPreview(text);
+                      } catch (err) {
+                        setSeoSitemapPreview('Failed to load sitemap.');
+                      }
+                    }}
+                    style={{ padding: '8px 20px', borderRadius: '8px', border: '1px solid #176c61', background: '#f0fdf4', color: '#176c61', fontSize: '13px', fontWeight: 600, cursor: 'pointer', marginBottom: '12px' }}
+                  >
+                    Load Live Sitemap
+                  </button>
+                  {seoSitemapPreview && (
+                    <pre style={{ background: '#1e293b', color: '#e2e8f0', padding: '20px', borderRadius: '10px', fontSize: '12px', overflow: 'auto', maxHeight: '500px', lineHeight: '1.6', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                      {seoSitemapPreview}
+                    </pre>
+                  )}
+                </div>
+              </article>
+            )}
+          </>
         )}
 
         {adminTab === "stores" && (
@@ -2652,6 +3133,15 @@ function Storefront({
 
   // Mobile Cart Drawer
   const [isCartDrawerOpen, setIsCartDrawerOpen] = React.useState(false);
+
+  // SEO Content Page States
+  const [contentPage, setContentPage] = React.useState<"shop" | "blog" | "blog-detail" | "kb" | "category">("shop");
+  const [blogArticles, setBlogArticles] = React.useState<Article[]>([]);
+  const [currentArticle, setCurrentArticle] = React.useState<Article | null>(null);
+  const [kbArticles, setKbArticles] = React.useState<KnowledgeArticle[]>([]);
+  const [currentSeoPage, setCurrentSeoPage] = React.useState<SeoPage | null>(null);
+  const [kbSearchQuery, setKbSearchQuery] = React.useState("");
+  const [kbExpandedId, setKbExpandedId] = React.useState<string | null>(null);
   const [isMoreOpen, setIsMoreOpen] = React.useState(false);
 
   // Add-to-cart animation
@@ -2765,8 +3255,92 @@ function Storefront({
   const abandonedCartSignatureRef = React.useRef("");
   const config = stores[activeNiche] || stores["general"];
 
+  // Load content page data
+  React.useEffect(() => {
+    if (contentPage === "blog") {
+      getArticles(activeNiche === "general" ? undefined : activeNiche)
+        .then((res) => setBlogArticles(res.articles || []))
+        .catch(() => {});
+      document.title = `Blog | ${config.label}`;
+      setMetaDescription(`Read the latest articles and guides from ${config.label}.`);
+    } else if (contentPage === "blog-detail") {
+      const slug = window.location.hash.replace("#blog/", "");
+      getArticleDetails(decodeURIComponent(slug))
+        .then((res) => {
+          setCurrentArticle(res.article);
+          if (res.article) {
+            document.title = res.article.seo_title || res.article.title;
+            setMetaDescription(res.article.seo_description || res.article.summary || '');
+            void trackSeoHit("article", res.article.slug, "view").catch(() => {});
+            injectJsonLd({
+              "@context": "https://schema.org",
+              "@type": "Article",
+              headline: res.article.title,
+              description: res.article.seo_description || res.article.summary,
+              datePublished: res.article.published_at,
+              dateModified: res.article.updated_at,
+            });
+          }
+        })
+        .catch(() => setCurrentArticle(null));
+    } else if (contentPage === "kb") {
+      getKbArticles(activeNiche === "general" ? undefined : activeNiche)
+        .then((res) => setKbArticles(res.articles || []))
+        .catch(() => {});
+      document.title = `Help Center | ${config.label}`;
+      setMetaDescription(`Find answers, guides, and tutorials from ${config.label}.`);
+    } else if (contentPage === "category") {
+      const slug = window.location.hash.replace("#c/", "");
+      getSeoPageDetails(decodeURIComponent(slug))
+        .then((res) => {
+          setCurrentSeoPage(res.page);
+          if (res.page) {
+            document.title = res.page.seo_title || res.page.title;
+            setMetaDescription(res.page.seo_description || res.page.description || '');
+            void trackSeoHit("seo_page", res.page.slug, "view").catch(() => {});
+            injectJsonLd({
+              "@context": "https://schema.org",
+              "@type": "CollectionPage",
+              name: res.page.title,
+              description: res.page.seo_description || res.page.description,
+            });
+          }
+        })
+        .catch(() => setCurrentSeoPage(null));
+    }
+    return () => removeJsonLd();
+  }, [contentPage, activeNiche]);
+
   React.useEffect(() => {
     const syncStorefrontFromHash = () => {
+      const hash = window.location.hash.replace("#", "");
+
+      // Blog routes
+      if (hash === "blog") {
+        setContentPage("blog");
+        setDetailProductId(null);
+        return;
+      }
+      if (hash.startsWith("blog/")) {
+        setContentPage("blog-detail");
+        setDetailProductId(null);
+        return;
+      }
+      // Knowledge base routes
+      if (hash === "kb") {
+        setContentPage("kb");
+        setDetailProductId(null);
+        return;
+      }
+      // Category page routes
+      if (hash.startsWith("c/")) {
+        setContentPage("category");
+        setDetailProductId(null);
+        return;
+      }
+
+      // Default product/shop routes
+      setContentPage("shop");
       const productId = getProductIdFromHash();
       setDetailProductId(productId);
       if (productId) {
@@ -3405,6 +3979,8 @@ function Storefront({
             Shop
           </button>
           <a href="#checkout">Checkout</a>
+          <a href="#blog">Blog</a>
+          <a href="#kb">Help</a>
           
           <details className="more-shops" open={isMoreOpen} onToggle={(e) => setIsMoreOpen(e.currentTarget.open)}>
             <summary>More</summary>
@@ -3571,7 +4147,177 @@ function Storefront({
 
       {confirmation && <div className="store-notice">{confirmation}</div>}
 
-      {!detailProduct && (
+      {contentPage !== "shop" && (
+        <section style={{ padding: '40px 20px', maxWidth: '900px', margin: '0 auto' }}>
+          {/* Blog List */}
+          {contentPage === "blog" && (
+            <>
+              <div style={{ marginBottom: '32px' }}>
+                <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--store-text, #111827)', margin: '0 0 8px' }}>{config.label} Blog</h1>
+                <p style={{ color: '#64748b', fontSize: '1rem', margin: 0 }}>Guides, tips, and insights curated for you.</p>
+              </div>
+              {blogArticles.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>No published articles yet. Check back soon!</p>
+              ) : (
+                <div style={{ display: 'grid', gap: '20px' }}>
+                  {blogArticles.map((art) => (
+                    <a
+                      key={art.id}
+                      href={`#blog/${art.slug}`}
+                      style={{ display: 'block', padding: '24px', background: 'var(--store-card-bg, #fff)', border: '1px solid var(--store-border, #e5eaee)', borderRadius: '14px', textDecoration: 'none', color: 'inherit', transition: 'box-shadow 0.2s, transform 0.2s' }}
+                      onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; (e.currentTarget as HTMLElement).style.transform = 'translateY(-2px)'; }}
+                      onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.boxShadow = 'none'; (e.currentTarget as HTMLElement).style.transform = 'none'; }}
+                    >
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--store-accent, #176c61)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{art.niche}</span>
+                      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '6px 0 8px', color: 'var(--store-text, #111827)' }}>{art.title}</h2>
+                      <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0, lineHeight: '1.6' }}>{art.summary || art.content?.substring(0, 160) + '…'}</p>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px', fontSize: '0.8rem', color: '#94a3b8' }}>
+                        <span>{art.published_at ? new Date(art.published_at).toLocaleDateString() : ''}</span>
+                        <span>·</span>
+                        <span>{art.views} views</span>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Blog Detail */}
+          {contentPage === "blog-detail" && currentArticle && (
+            <article>
+              <button type="button" onClick={() => { window.location.hash = '#blog'; }} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', color: 'var(--store-accent, #176c61)', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, padding: '0', marginBottom: '20px' }}>
+                ← Back to Blog
+              </button>
+              <span style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--store-accent, #176c61)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px' }}>{currentArticle.niche}</span>
+              <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--store-text, #111827)', margin: '0 0 12px', lineHeight: '1.3' }}>{currentArticle.title}</h1>
+              <div style={{ display: 'flex', gap: '12px', fontSize: '0.85rem', color: '#94a3b8', marginBottom: '28px' }}>
+                {currentArticle.published_at && <span>{new Date(currentArticle.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>}
+                <span>·</span>
+                <span>{currentArticle.views} views</span>
+              </div>
+              <div style={{ fontSize: '1rem', lineHeight: '1.8', color: 'var(--store-text, #374151)', whiteSpace: 'pre-wrap' }}>
+                {currentArticle.content}
+              </div>
+              {currentArticle.keywords && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: '32px', paddingTop: '20px', borderTop: '1px solid var(--store-border, #e5eaee)' }}>
+                  {currentArticle.keywords.split(',').map((kw, i) => (
+                    <span key={i} style={{ background: '#f1f5f9', color: '#475569', padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 500 }}>{kw.trim()}</span>
+                  ))}
+                </div>
+              )}
+            </article>
+          )}
+          {contentPage === "blog-detail" && !currentArticle && (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8' }}>
+              <BookOpen size={40} style={{ marginBottom: '12px', opacity: 0.5 }} />
+              <p>Article not found.</p>
+              <button type="button" onClick={() => { window.location.hash = '#blog'; }} style={{ marginTop: '12px', background: 'var(--store-accent, #176c61)', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Browse Blog</button>
+            </div>
+          )}
+
+          {/* Knowledge Base */}
+          {contentPage === "kb" && (
+            <>
+              <div style={{ marginBottom: '24px' }}>
+                <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--store-text, #111827)', margin: '0 0 8px' }}>Help Center</h1>
+                <p style={{ color: '#64748b', fontSize: '1rem', margin: '0 0 20px' }}>Find answers to common questions and browse our guides.</p>
+                <div style={{ position: 'relative', maxWidth: '400px' }}>
+                  <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <input
+                    value={kbSearchQuery}
+                    onChange={(e) => setKbSearchQuery(e.target.value)}
+                    placeholder="Search help articles…"
+                    style={{ width: '100%', padding: '10px 12px 10px 36px', borderRadius: '10px', border: '1px solid var(--store-border, #e2e8f0)', fontSize: '0.9rem', background: 'var(--store-card-bg, #fff)' }}
+                  />
+                </div>
+              </div>
+              {kbArticles.length === 0 ? (
+                <p style={{ textAlign: 'center', color: '#94a3b8', padding: '40px' }}>No knowledge base entries yet.</p>
+              ) : (
+                <div style={{ display: 'grid', gap: '10px' }}>
+                  {kbArticles
+                    .filter((kb) => {
+                      if (!kbSearchQuery.trim()) return true;
+                      const q = kbSearchQuery.toLowerCase();
+                      return kb.title.toLowerCase().includes(q) || kb.content.toLowerCase().includes(q);
+                    })
+                    .map((kb) => (
+                      <div key={kb.id} style={{ background: 'var(--store-card-bg, #fff)', border: '1px solid var(--store-border, #e2e8f0)', borderRadius: '12px', overflow: 'hidden', transition: 'box-shadow 0.2s' }}>
+                        <button
+                          type="button"
+                          onClick={() => setKbExpandedId(kbExpandedId === kb.id ? null : kb.id)}
+                          style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 20px', background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', gap: '12px' }}
+                        >
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--store-accent, #176c61)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{kb.category.replace('_', ' ')}</span>
+                            <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: '4px 0 0', color: 'var(--store-text, #111827)' }}>{kb.title}</h3>
+                          </div>
+                          {kbExpandedId === kb.id ? <ChevronUp size={18} style={{ color: '#94a3b8', flexShrink: 0 }} /> : <ChevronDown size={18} style={{ color: '#94a3b8', flexShrink: 0 }} />}
+                        </button>
+                        {kbExpandedId === kb.id && (
+                          <div style={{ padding: '0 20px 20px', fontSize: '0.9rem', lineHeight: '1.7', color: 'var(--store-text, #4b5563)', whiteSpace: 'pre-wrap', borderTop: '1px solid var(--store-border, #e2e8f0)' }}>
+                            <div style={{ paddingTop: '16px' }}>{kb.content}</div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* Category Landing Page */}
+          {contentPage === "category" && currentSeoPage && (
+            <>
+              <div style={{ background: 'linear-gradient(135deg, var(--store-accent, #176c61), #0f766e)', padding: '40px 32px', borderRadius: '16px', color: 'white', marginBottom: '32px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', opacity: 0.8 }}>{currentSeoPage.niche}</span>
+                <h1 style={{ fontSize: '2rem', fontWeight: 800, margin: '8px 0 12px' }}>{currentSeoPage.title}</h1>
+                <p style={{ fontSize: '1rem', opacity: 0.9, margin: 0, lineHeight: '1.6', maxWidth: '600px' }}>{currentSeoPage.description}</p>
+              </div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '16px', color: 'var(--store-text, #111827)' }}>Products in "{currentSeoPage.category_name}"</h2>
+              <div className="shop-grid">
+                {products
+                  .filter((p) => {
+                    const catLower = currentSeoPage.category_name.toLowerCase();
+                    return p.niche.toLowerCase().includes(catLower) || p.name.toLowerCase().includes(catLower) || p.contentAngle.toLowerCase().includes(catLower);
+                  })
+                  .map((product) => (
+                    <article className="shop-card" key={`cat-${product.id}`}>
+                      <button className="product-image product-image-button" type="button" onClick={() => openProduct(product)}>
+                        <img src={getProductImages(product)[0]} alt="" />
+                      </button>
+                      <div className="shop-card-body">
+                        <span>{product.niche}</span>
+                        <h3><button type="button" onClick={() => openProduct(product)}>{product.name}</button></h3>
+                        <p>{getConsumerCopy(product)}</p>
+                        <div className="shop-price">
+                          <strong>{money(product.retailMin)}</strong>
+                          <small>{product.inventory} in stock</small>
+                        </div>
+                        <div className="shop-actions">
+                          <button type="button" onClick={() => setSelectedProduct(product)}>Quick view</button>
+                          <button className="primary" type="button" onClick={() => addToCart(product.id)}>
+                            <ShoppingCart size={17} /> Add
+                          </button>
+                        </div>
+                      </div>
+                    </article>
+                  ))}
+              </div>
+            </>
+          )}
+          {contentPage === "category" && !currentSeoPage && (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8' }}>
+              <Globe2 size={40} style={{ marginBottom: '12px', opacity: 0.5 }} />
+              <p>Category page not found.</p>
+              <button type="button" onClick={() => { window.location.hash = `#${getHashFromMode(activeNiche, stores)}`; }} style={{ marginTop: '12px', background: 'var(--store-accent, #176c61)', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Back to Shop</button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {contentPage === "shop" && !detailProduct && (
         <>
           {/* Shop By Category Section (General store only) */}
           {activeNiche === "general" && activeSubcategory === "All" && !searchQuery && (
@@ -4018,6 +4764,7 @@ function Storefront({
       </section>
       </>
       )}
+
 
       {detailProduct && (
         <ProductDetailPage
@@ -4647,6 +5394,8 @@ function Storefront({
               window.scrollTo({ top: 0, behavior: 'smooth' });
             }}>Shop Home</button>
             <button type="button" onClick={() => setIsTrackOrderOpen(true)}>Track Shipment</button>
+            <button type="button" onClick={() => { window.location.hash = '#blog'; window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Blog</button>
+            <button type="button" onClick={() => { window.location.hash = '#kb'; window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Help Center</button>
           </div>
 
           <div className="footer-column">
@@ -5754,7 +6503,7 @@ function loadMedusaConnection(): MedusaConnection {
 function isStorefrontHash(hash: string) {
   const normalized = hash.replace("#", "").toLowerCase();
   if (!normalized) return true;
-  const adminHashes = ["admin", "dashboard", "import", "orders", "customers", "funnels", "analytics", "ai", "settings"];
+  const adminHashes = ["admin", "dashboard", "import", "orders", "customers", "funnels", "analytics", "ai", "settings", "seo-hub"];
   const isAdmin = adminHashes.includes(normalized) || normalized.startsWith("admin-");
   return !isAdmin;
 }
@@ -5967,6 +6716,20 @@ function setMetaDescription(content: string) {
     document.head.appendChild(meta);
   }
   meta.content = content;
+}
+
+function injectJsonLd(data: Record<string, any>) {
+  removeJsonLd();
+  const script = document.createElement("script");
+  script.type = "application/ld+json";
+  script.id = "p4tp-jsonld";
+  script.textContent = JSON.stringify(data);
+  document.head.appendChild(script);
+}
+
+function removeJsonLd() {
+  const existing = document.getElementById("p4tp-jsonld");
+  if (existing) existing.remove();
 }
 
 const productImageFallbacks: Record<string, string[]> = {
@@ -6355,6 +7118,11 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
   const [searchQuery, setSearchQuery] = React.useState("");
   const [nicheFilter, setNicheFilter] = React.useState("all");
   const [statusFilter, setStatusFilter] = React.useState("all");
+  const [scoreFilter, setScoreFilter] = React.useState("all");
+  const [marginFilter, setMarginFilter] = React.useState("all");
+  const [riskFilter, setRiskFilter] = React.useState("all");
+  const [categoryFilter, setCategoryFilter] = React.useState("all");
+  const [dateFilter, setDateFilter] = React.useState("all");
   const [selectedOppId, setSelectedOppId] = React.useState<string | null>(null);
 
   // AliExpress search states
@@ -6373,13 +7141,10 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
   // Competitor states
   const [competitorStoreName, setCompetitorStoreName] = React.useState("");
   const [competitorProductUrl, setCompetitorProductUrl] = React.useState("");
+  const [competitorProductTitle, setCompetitorProductTitle] = React.useState("");
   const [competitorPrice, setCompetitorPrice] = React.useState("");
   const [competitorNiche, setCompetitorNiche] = React.useState("Beauty");
-  const [competitorsList, setCompetitorsList] = React.useState<any[]>([
-    { id: "c1", competitor_name: "GlowSpa Boutique", competitor_url: "https://glowspa.com", niche: "Beauty", product_title: "LED Facial Sculptor", price: 49.99, sales_signal: "High" },
-    { id: "c2", competitor_name: "Pawsitive & Co", competitor_url: "https://pawsitive.com", niche: "Pets", product_title: "Pet Anxiety Water Bowl", price: 24.99, sales_signal: "Moderate" },
-    { id: "c3", competitor_name: "Aesthetic Habitat", competitor_url: "https://aesthetichabitat.com", niche: "Home", product_title: "Sunset Projector Lamp", price: 29.99, sales_signal: "High" }
-  ]);
+  const [competitorsList, setCompetitorsList] = React.useState<CompetitorProduct[]>([]);
 
   const loadOpps = async () => {
     setLoadingOpps(true);
@@ -6393,8 +7158,18 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
     }
   };
 
+  const loadCompetitors = async () => {
+    try {
+      const res = await getCompetitors();
+      setCompetitorsList(res.competitors || []);
+    } catch (e) {
+      setNotice(e instanceof Error ? `Failed to load competitors: ${e.message}` : "Failed to load competitors");
+    }
+  };
+
   React.useEffect(() => {
     void loadOpps();
+    void loadCompetitors();
   }, []);
 
   const handleGapAnalysis = async () => {
@@ -6432,6 +7207,27 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
       setNotice(`Opportunity status updated to ${newStatus}`);
     } catch (e) {
       setNotice(e instanceof Error ? `Failed to update status: ${e.message}` : "Status update failed");
+    }
+  };
+
+  const handleDemandScan = async (id: string) => {
+    try {
+      const res = await runDemandResearch(id);
+      setOpportunities(prev => prev.map(opp => opp.id === id ? res.opportunity : opp));
+      setNotice(res.message);
+    } catch (e) {
+      setNotice(e instanceof Error ? `Demand research failed: ${e.message}` : "Demand research failed");
+    }
+  };
+
+  const handleCompetitorScan = async (id: string) => {
+    try {
+      const res = await runCompetitorResearch(id);
+      setOpportunities(prev => prev.map(opp => opp.id === id ? res.opportunity : opp));
+      setCompetitorsList(prev => [...(res.competitors || []), ...prev]);
+      setNotice(res.message);
+    } catch (e) {
+      setNotice(e instanceof Error ? `Competitor research failed: ${e.message}` : "Competitor research failed");
     }
   };
 
@@ -6524,25 +7320,32 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
     }
   };
 
-  const handleAddCompetitor = (e: React.FormEvent) => {
+  const handleAddCompetitor = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!competitorStoreName.trim()) return;
 
-    const newComp = {
-      id: crypto.randomUUID(),
-      competitor_name: competitorStoreName,
-      competitor_url: competitorProductUrl,
-      niche: competitorNiche,
-      product_title: `Competitor product - ${competitorStoreName}`,
-      price: Number(competitorPrice) || 29.99,
-      sales_signal: "Moderate"
-    };
+    try {
+      const res = await createCompetitor({
+        opportunity_id: null,
+        competitor_name: competitorStoreName,
+        competitor_url: competitorProductUrl,
+        product_title: competitorProductTitle || `Competitor product - ${competitorStoreName}`,
+        price: Number(competitorPrice) || 0,
+        sales_signal: "Manual capture",
+        offer_notes: `Assigned niche: ${competitorNiche}`,
+        positioning_notes: "Manual competitor capture. Review visible pricing, offer structure, variants, and trust elements.",
+        images: [],
+      });
 
-    setCompetitorsList([newComp, ...competitorsList]);
-    setCompetitorStoreName("");
-    setCompetitorProductUrl("");
-    setCompetitorPrice("");
-    setNotice(`Registered competitor store: ${competitorStoreName}`);
+      setCompetitorsList([res.competitor, ...competitorsList]);
+      setCompetitorStoreName("");
+      setCompetitorProductUrl("");
+      setCompetitorProductTitle("");
+      setCompetitorPrice("");
+      setNotice(`Registered competitor store: ${competitorStoreName}`);
+    } catch (error) {
+      setNotice(error instanceof Error ? `Competitor capture failed: ${error.message}` : "Competitor capture failed");
+    }
   };
 
   // Filter opportunities list
@@ -6551,8 +7354,43 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                           (opp.category || "").toLowerCase().includes(searchQuery.toLowerCase());
     const matchesNiche = nicheFilter === "all" || opp.niche.toLowerCase() === nicheFilter.toLowerCase();
     const matchesStatus = statusFilter === "all" || opp.status === statusFilter;
-    return matchesSearch && matchesNiche && matchesStatus;
+    const matchesScore = scoreFilter === "all" ||
+      (scoreFilter === "high" && opp.opportunity_score >= 75) ||
+      (scoreFilter === "medium" && opp.opportunity_score >= 55 && opp.opportunity_score < 75) ||
+      (scoreFilter === "low" && opp.opportunity_score < 55);
+    const matchesMargin = marginFilter === "all" ||
+      (marginFilter === "high" && opp.margin_score >= 75) ||
+      (marginFilter === "medium" && opp.margin_score >= 55 && opp.margin_score < 75) ||
+      (marginFilter === "low" && opp.margin_score < 55);
+    const matchesRisk = riskFilter === "all" ||
+      (riskFilter === "low" && opp.risk_score < 15) ||
+      (riskFilter === "medium" && opp.risk_score >= 15 && opp.risk_score < 30) ||
+      (riskFilter === "high" && opp.risk_score >= 30);
+    const matchesCategory = categoryFilter === "all" || (opp.category || "General") === categoryFilter;
+    const createdMs = new Date(opp.created_at).getTime();
+    const nowMs = Date.now();
+    const matchesDate = dateFilter === "all" ||
+      (dateFilter === "7" && nowMs - createdMs <= 7 * 24 * 60 * 60 * 1000) ||
+      (dateFilter === "30" && nowMs - createdMs <= 30 * 24 * 60 * 60 * 1000);
+    return matchesSearch && matchesNiche && matchesStatus && matchesScore && matchesMargin && matchesRisk && matchesCategory && matchesDate;
   });
+
+  const categoryOptions = Array.from(new Set(opportunities.map(opp => opp.category || "General"))).sort();
+
+  const researchStatuses: ResearchOpportunity["status"][] = [
+    "discovered",
+    "researching",
+    "watchlist",
+    "recommended",
+    "imported_draft",
+    "approved",
+    "published",
+    "testing",
+    "winner",
+    "loser",
+    "archived",
+    "blocked",
+  ];
 
   // Score badge color helper
   const getScoreBadgeClass = (score: number) => {
@@ -6636,7 +7474,7 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
               </div>
             </div>
 
-            <div className="segmented" style={{ width: '100%', display: 'flex', gap: '8px', padding: '0px', background: 'transparent', border: '0' }}>
+            <div className="segmented" style={{ width: '100%', display: 'flex', flexWrap: 'wrap', gap: '8px', padding: '0px', background: 'transparent', border: '0' }}>
               <select 
                 value={nicheFilter} 
                 onChange={(e) => setNicheFilter(e.target.value)}
@@ -6654,10 +7492,58 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                 style={{ padding: '8px 12px', border: '1px solid #dce3e7', borderRadius: '8px', background: '#fff', fontSize: '0.9rem' }}
               >
                 <option value="all">All Statuses</option>
-                <option value="discovered">Discovered</option>
-                <option value="watchlist">Watchlist</option>
-                <option value="researching">Researching</option>
-                <option value="imported_draft">Imported Draft</option>
+                {researchStatuses.map(status => (
+                  <option value={status} key={status}>{titleCase(status.replace("_", " "))}</option>
+                ))}
+              </select>
+              <select 
+                value={scoreFilter} 
+                onChange={(e) => setScoreFilter(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #dce3e7', borderRadius: '8px', background: '#fff', fontSize: '0.9rem' }}
+              >
+                <option value="all">All Scores</option>
+                <option value="high">75+ High Score</option>
+                <option value="medium">55-74 Medium Score</option>
+                <option value="low">Below 55 Low Score</option>
+              </select>
+              <select 
+                value={riskFilter} 
+                onChange={(e) => setRiskFilter(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #dce3e7', borderRadius: '8px', background: '#fff', fontSize: '0.9rem' }}
+              >
+                <option value="all">All Risk</option>
+                <option value="low">Low Risk</option>
+                <option value="medium">Medium Risk</option>
+                <option value="high">High Risk</option>
+              </select>
+              <select 
+                value={marginFilter} 
+                onChange={(e) => setMarginFilter(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #dce3e7', borderRadius: '8px', background: '#fff', fontSize: '0.9rem' }}
+              >
+                <option value="all">All Margins</option>
+                <option value="high">75+ Margin Score</option>
+                <option value="medium">55-74 Margin Score</option>
+                <option value="low">Below 55 Margin Score</option>
+              </select>
+              <select 
+                value={categoryFilter} 
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #dce3e7', borderRadius: '8px', background: '#fff', fontSize: '0.9rem' }}
+              >
+                <option value="all">All Categories</option>
+                {categoryOptions.map(category => (
+                  <option value={category} key={category}>{category}</option>
+                ))}
+              </select>
+              <select 
+                value={dateFilter} 
+                onChange={(e) => setDateFilter(e.target.value)}
+                style={{ padding: '8px 12px', border: '1px solid #dce3e7', borderRadius: '8px', background: '#fff', fontSize: '0.9rem' }}
+              >
+                <option value="all">Any Discovery Date</option>
+                <option value="7">Last 7 Days</option>
+                <option value="30">Last 30 Days</option>
               </select>
             </div>
 
@@ -6669,6 +7555,11 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                     <th>Niche / Category</th>
                     <th>Source Signal</th>
                     <th>Opp Score</th>
+                    <th>Demand</th>
+                    <th>Margin</th>
+                    <th>Supplier</th>
+                    <th>Competition</th>
+                    <th>Risk</th>
                     <th>Intake Pipeline Status</th>
                     <th>Action Plan</th>
                     <th>Execution</th>
@@ -6677,11 +7568,11 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                 <tbody>
                   {loadingOpps ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '24px' }}>Loading evaluated product opportunities...</td>
+                      <td colSpan={12} style={{ textAlign: 'center', padding: '24px' }}>Loading evaluated product opportunities...</td>
                     </tr>
                   ) : filteredOpps.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '24px' }}>
+                      <td colSpan={12} style={{ textAlign: 'center', padding: '24px' }}>
                         No research opportunities found. Click "Run Gap Analysis" to parse missing catalog listings!
                       </td>
                     </tr>
@@ -6706,24 +7597,32 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                           {opp.opportunity_score} / 100
                         </span>
                       </td>
+                      <td>{opp.demand_score}</td>
+                      <td>{opp.margin_score}</td>
+                      <td>{opp.supplier_score}</td>
+                      <td>{opp.competition_score}</td>
+                      <td>
+                        <span className={opp.risk_score >= 30 ? "status draft" : opp.risk_score >= 15 ? "status review" : "status active"}>
+                          {opp.risk_score}
+                        </span>
+                      </td>
                       <td>
                         <select 
                           className={`status-select ${opp.status}`}
                           value={opp.status}
                           onChange={(e) => handleStatusChange(opp.id, e.target.value)}
                         >
-                          <option value="discovered">Discovered</option>
-                          <option value="watchlist">Watchlist</option>
-                          <option value="researching">Researching</option>
-                          <option value="imported_draft">Imported Draft</option>
+                          {researchStatuses.map(status => (
+                            <option value={status} key={status}>{titleCase(status.replace("_", " "))}</option>
+                          ))}
                         </select>
                       </td>
                       <td>
                         <strong style={{ fontSize: '0.85rem' }}>
-                          {opp.status === "imported_draft" ? "Complete Draft Review" : "Research & import"}
+                          {opp.status === "blocked" ? "Skip" : opp.status === "watchlist" ? "Add to watchlist" : opp.status === "imported_draft" ? "Needs Review" : opp.opportunity_score >= 75 && opp.risk_score < 30 ? "Import now" : opp.risk_score >= 30 ? "Research more" : "Research & import"}
                         </strong>
                         <span style={{ fontSize: '0.75rem', marginTop: '2px' }}>
-                          {opp.status === "imported_draft" ? "Available in draft products" : "Analyze suppliers & margins"}
+                          {opp.status === "imported_draft" ? "Draft created in product review queue" : "Validate demand, competitor signals, suppliers, and margins"}
                         </span>
                       </td>
                       <td>
@@ -6744,6 +7643,12 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                             <Eye size={15} style={{ marginRight: '4px' }} />
                             Details
                           </button>
+                          <button type="button" onClick={() => handleDemandScan(opp.id)}>
+                            Demand
+                          </button>
+                          <button type="button" onClick={() => handleCompetitorScan(opp.id)}>
+                            Competitors
+                          </button>
                           {opp.status !== "imported_draft" && (
                             <button 
                               className="primary" 
@@ -6751,7 +7656,7 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                               onClick={() => {
                                 setAliexpressQuery(opp.name);
                                 setActiveSubTab("aliexpress");
-                                void searchAliExpress(opp.name).then(res => {
+                                void searchAliExpress(opp.name, opp.id).then(res => {
                                   setAliexpressResults(res.suppliers || []);
                                 });
                               }}
@@ -7015,12 +7920,12 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                           Visit Store
                         </a>
                       </td>
-                      <td>{comp.niche}</td>
+                      <td>{comp.offer_notes?.replace("Assigned niche: ", "") || "Manual"}</td>
                       <td>{comp.product_title}</td>
                       <td><strong>${comp.price}</strong></td>
                       <td>
-                        <span className={comp.sales_signal === "High" ? "status active" : "status review"}>
-                          {comp.sales_signal} Sales
+                        <span className={(comp.sales_signal || "").includes("High") ? "status active" : "status review"}>
+                          {comp.sales_signal || "Manual capture"}
                         </span>
                       </td>
                       <td>
@@ -7052,6 +7957,15 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                   onChange={(e) => setCompetitorStoreName(e.target.value)} 
                   placeholder="e.g. SkinLuxury Inc"
                   required
+                />
+              </label>
+
+              <label className="field">
+                <span>Competitor Product Title</span>
+                <input 
+                  value={competitorProductTitle} 
+                  onChange={(e) => setCompetitorProductTitle(e.target.value)} 
+                  placeholder="e.g. LED Facial Sculptor"
                 />
               </label>
 
@@ -7180,7 +8094,7 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                           disabled={importingSupplierId === sup.id}
                           onClick={() => triggerImportFlow(sup.id)}
                         >
-                          {importingSupplierId === sup.id ? "Intaking Catalog..." : "Import Product Draft"}
+                          {importingSupplierId === sup.id ? "Intaking Catalog..." : "Import for Review"}
                         </button>
                       </div>
                     </div>
@@ -7257,6 +8171,7 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
   const [activeModalTab, setActiveModalTab] = React.useState<"scores" | "copy" | "pricing" | "suppliers">("scores");
   const [aiContent, setAiContent] = React.useState<any | null>(null);
   const [generatingAi, setGeneratingAi] = React.useState(false);
+  const [updatingResearch, setUpdatingResearch] = React.useState(false);
 
   // Editable Margin Calculator values
   const [calcCost, setCalcCost] = React.useState("5.99");
@@ -7308,6 +8223,47 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
     }
   };
 
+  const handleModalDemandScan = async () => {
+    setUpdatingResearch(true);
+    try {
+      const res = await runDemandResearch(id);
+      setOpportunity(res.opportunity);
+    } finally {
+      setUpdatingResearch(false);
+    }
+  };
+
+  const handleModalCompetitorScan = async () => {
+    setUpdatingResearch(true);
+    try {
+      const res = await runCompetitorResearch(id);
+      setOpportunity(res.opportunity);
+      setCompetitors(res.competitors || []);
+    } finally {
+      setUpdatingResearch(false);
+    }
+  };
+
+  const handleRescore = async () => {
+    if (!opportunity) return;
+    setUpdatingResearch(true);
+    try {
+      const res = await scoreResearchProduct({
+        demand_score: opportunity.demand_score,
+        margin_score: opportunity.margin_score,
+        supplier_score: opportunity.supplier_score,
+        competition_score: opportunity.competition_score,
+        brand_fit_score: opportunity.brand_fit_score,
+        content_score: opportunity.content_score,
+        risk_score: opportunity.risk_score,
+      });
+      const updateRes = await updateOpportunity(opportunity.id, { opportunity_score: res.score });
+      setOpportunity(updateRes.opportunity);
+    } finally {
+      setUpdatingResearch(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="modal-backdrop">
@@ -7340,13 +8296,21 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
             </span>
             <h2 style={{ fontSize: '1.4rem', marginTop: '2px' }}>{opportunity.name}</h2>
           </div>
-          <button 
-            type="button" 
-            onClick={onClose} 
-            style={{ minHeight: '34px', width: '34px', borderRadius: '50%', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <X size={16} />
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <button type="button" onClick={handleModalDemandScan} disabled={updatingResearch} style={{ minHeight: '34px', fontSize: '0.78rem' }}>
+              Run Demand
+            </button>
+            <button type="button" onClick={handleModalCompetitorScan} disabled={updatingResearch} style={{ minHeight: '34px', fontSize: '0.78rem' }}>
+              Scan Competitors
+            </button>
+            <button 
+              type="button" 
+              onClick={onClose} 
+              style={{ minHeight: '34px', width: '34px', borderRadius: '50%', padding: '0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
 
         {/* Tab Selector */}
@@ -7424,6 +8388,9 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
                     <p style={{ fontSize: '0.82rem', color: '#4b5563', textAlign: 'center', lineHeight: '1.4' }}>
                       Formula evaluates Demand (25%), Margin (20%), Suppliers (15%), Competition (15%), Brand Fit (10%), and Content Potential (10%) with a Risk Penalty.
                     </p>
+                    <button type="button" onClick={handleRescore} disabled={updatingResearch} style={{ width: '100%', marginTop: '10px', minHeight: '34px' }}>
+                      Recalculate Score
+                    </button>
                   </div>
 
                   <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '12px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>

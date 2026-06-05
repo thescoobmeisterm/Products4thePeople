@@ -72,7 +72,7 @@ export type ResearchOpportunity = {
 
 export type CompetitorProduct = {
   id: string;
-  opportunity_id: string;
+  opportunity_id?: string | null;
   competitor_name?: string;
   competitor_url?: string;
   product_title?: string;
@@ -89,7 +89,7 @@ export type CompetitorProduct = {
 
 export type SupplierProduct = {
   id: string;
-  opportunity_id: string;
+  opportunity_id?: string | null;
   supplier_platform: string;
   supplier_name?: string;
   supplier_url?: string;
@@ -219,6 +219,17 @@ export async function updateOpportunity(id: string, updates: Partial<ResearchOpp
   });
 }
 
+export async function getCompetitors() {
+  return apiFetch<{ competitors: CompetitorProduct[] }>("/admin/product-research/competitors");
+}
+
+export async function createCompetitor(competitor: Omit<CompetitorProduct, "id" | "captured_at">) {
+  return apiFetch<{ competitor: CompetitorProduct }>("/admin/product-research/competitors", {
+    method: "POST",
+    body: JSON.stringify(competitor),
+  });
+}
+
 export async function runGapAnalysis() {
   return apiFetch<{ message: string; count: number; opportunities: ResearchOpportunity[] }>("/admin/product-research/run-gap-analysis", {
     method: "POST",
@@ -257,6 +268,13 @@ export async function setWatchlistStatus(id: string, isWatched: boolean) {
   return apiFetch<{ message: string; opportunity: ResearchOpportunity }>("/admin/product-research/watchlist", {
     method: "POST",
     body: JSON.stringify({ id, isWatched }),
+  });
+}
+
+export async function scoreResearchProduct(scores: Pick<ResearchOpportunity, "demand_score" | "margin_score" | "supplier_score" | "competition_score" | "brand_fit_score" | "content_score" | "risk_score">) {
+  return apiFetch<{ score: number }>("/admin/product-research/score-product", {
+    method: "POST",
+    body: JSON.stringify(scores),
   });
 }
 
@@ -338,11 +356,184 @@ export async function promoteExperimentVariant(id: string, variantId: string) {
   });
 }
 
+export type Article = {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  summary?: string;
+  niche: string;
+  status: "draft" | "published" | "archived";
+  seo_title?: string;
+  seo_description?: string;
+  keywords?: string;
+  schema_markup?: any;
+  views: number;
+  conversions: number;
+  revenue: number;
+  published_at?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type KnowledgeArticle = {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  category: "faq" | "tutorial" | "product_guide";
+  niche: string;
+  product_id?: string;
+  status: "draft" | "published";
+  views: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SeoPage = {
+  id: string;
+  title: string;
+  slug: string;
+  niche: string;
+  category_name: string;
+  description: string;
+  seo_title?: string;
+  seo_description?: string;
+  schema_markup?: any;
+  views: number;
+  conversions: number;
+  revenue: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SeoDashboardStats = {
+  summary: {
+    totalViews: number;
+    totalConversions: number;
+    totalRevenue: number;
+    indexedUrls: number;
+  };
+  leaderboard: Array<{
+    name: string;
+    type: string;
+    niche: string;
+    views: number;
+    conversions: number;
+    revenue: number;
+  }>;
+};
+
 export async function simulateExperimentTraffic(id: string) {
   return apiFetch<{ success: boolean; message: string; variants: ExperimentVariant[] }>("/admin/experiments/run-simulation", {
     method: "POST",
     body: JSON.stringify({ id }),
   });
+}
+
+// Blog Articles APIs
+export async function getArticles(niche?: string) {
+  const query = niche ? `?niche=${encodeURIComponent(niche)}` : "";
+  return apiFetch<{ articles: Article[] }>(`/articles${query}`);
+}
+
+export async function getArticleDetails(slug: string) {
+  return apiFetch<{ article: Article }>(`/articles/${encodeURIComponent(slug)}`);
+}
+
+export async function getAdminArticles() {
+  return apiFetch<{ articles: Article[] }>("/admin/articles");
+}
+
+export async function createArticle(art: Omit<Article, "id" | "views" | "conversions" | "revenue" | "created_at" | "updated_at">) {
+  return apiFetch<{ article: Article }>("/admin/articles", {
+    method: "POST",
+    body: JSON.stringify(art),
+  });
+}
+
+export async function generateArticle(niche: string, topic: string, keyword: string) {
+  return apiFetch<{ success: boolean; article: Article }>("/admin/articles/generate", {
+    method: "POST",
+    body: JSON.stringify({ niche, topic, keyword }),
+  });
+}
+
+export async function updateArticle(id: string, updates: Partial<Article>) {
+  return apiFetch<{ article: Article }>(`/admin/articles/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
+export async function deleteArticle(id: string) {
+  return apiFetch<{ success: boolean; message: string }>(`/admin/articles/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+// Knowledge Base APIs
+export async function getKbArticles(niche?: string) {
+  const query = niche ? `?niche=${encodeURIComponent(niche)}` : "";
+  return apiFetch<{ articles: KnowledgeArticle[] }>(`/kb${query}`);
+}
+
+export async function getAdminKbArticles() {
+  return apiFetch<{ articles: KnowledgeArticle[] }>("/admin/kb");
+}
+
+export async function createKbArticle(kb: Omit<KnowledgeArticle, "id" | "views" | "created_at" | "updated_at">) {
+  return apiFetch<{ article: KnowledgeArticle }>("/admin/kb", {
+    method: "POST",
+    body: JSON.stringify(kb),
+  });
+}
+
+export async function updateKbArticle(id: string, updates: Partial<KnowledgeArticle>) {
+  return apiFetch<{ article: KnowledgeArticle }>(`/admin/kb/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
+  });
+}
+
+// Programmatic SEO APIs
+export async function getSeoPages(niche?: string) {
+  const query = niche ? `?niche=${encodeURIComponent(niche)}` : "";
+  return apiFetch<{ pages: SeoPage[] }>(`/seo-pages${query}`);
+}
+
+export async function getSeoPageDetails(slug: string) {
+  return apiFetch<{ page: SeoPage }>(`/seo-pages/${encodeURIComponent(slug)}`);
+}
+
+export async function getAdminSeoPages() {
+  return apiFetch<{ pages: SeoPage[] }>("/admin/seo-pages");
+}
+
+export async function createSeoPage(page: Omit<SeoPage, "id" | "views" | "conversions" | "revenue" | "created_at" | "updated_at">) {
+  return apiFetch<{ page: SeoPage }>("/admin/seo-pages", {
+    method: "POST",
+    body: JSON.stringify(page),
+  });
+}
+
+export async function generateSeoPage(niche: string, categoryName: string, keywords: string) {
+  return apiFetch<{ success: boolean; page: SeoPage }>("/admin/seo-pages/generate", {
+    method: "POST",
+    body: JSON.stringify({ niche, categoryName, keywords }),
+  });
+}
+
+// SEO Tracking and Analytics
+export async function trackSeoHit(type: "article" | "seo_page", slug: string, action: "view" | "conversion", revenue?: number) {
+  return apiFetch<{ success: boolean }>("/seo/track", {
+    method: "POST",
+    body: JSON.stringify({ type, slug, action, revenue }),
+  });
+}
+
+export async function getSeoDashboard() {
+  return apiFetch<SeoDashboardStats>("/admin/seo/dashboard");
 }
 
 async function apiFetch<T>(path: string, options: RequestInit = {}) {

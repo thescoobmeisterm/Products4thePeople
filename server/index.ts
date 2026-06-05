@@ -58,6 +58,9 @@ interface DbSchema {
   importJobs?: Record<string, any>;
   experiments?: Record<string, any>;
   experimentVariants?: Record<string, any>;
+  articles?: Record<string, any>;
+  knowledgeArticles?: Record<string, any>;
+  seoPages?: Record<string, any>;
 }
 
 function readDb(): DbSchema {
@@ -74,7 +77,10 @@ function readDb(): DbSchema {
         researchRuns: {},
         importJobs: {},
         experiments: {},
-        experimentVariants: {}
+        experimentVariants: {},
+        articles: {},
+        knowledgeArticles: {},
+        seoPages: {}
       };
     }
     const content = fs.readFileSync(DB_FILE, "utf-8");
@@ -91,6 +97,9 @@ function readDb(): DbSchema {
       importJobs: parsed.importJobs || {},
       experiments: parsed.experiments || {},
       experimentVariants: parsed.experimentVariants || {},
+      articles: parsed.articles || {},
+      knowledgeArticles: parsed.knowledgeArticles || {},
+      seoPages: parsed.seoPages || {},
     };
   } catch {
     return {
@@ -104,7 +113,10 @@ function readDb(): DbSchema {
       researchRuns: {},
       importJobs: {},
       experiments: {},
-      experimentVariants: {}
+      experimentVariants: {},
+      articles: {},
+      knowledgeArticles: {},
+      seoPages: {}
     };
   }
 }
@@ -579,6 +591,56 @@ app.get("/api/admin/product-research/opportunities/:id", requireAdmin, async (re
   }
 });
 
+app.get("/api/admin/product-research/competitors", requireAdmin, async (_request, response) => {
+  try {
+    const competitors = await getAllCompetitorsDb();
+    response.json({ competitors });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/product-research/competitors", requireAdmin, async (request, response) => {
+  try {
+    const payload = z.object({
+      opportunity_id: z.string().optional().nullable(),
+      competitor_name: z.string().min(1),
+      competitor_url: z.string().optional().default(""),
+      product_title: z.string().optional().default("Competitor product"),
+      price: z.number().optional(),
+      compare_at_price: z.number().optional(),
+      rating: z.number().optional(),
+      review_count: z.number().int().optional(),
+      sales_signal: z.string().optional().default("Manual capture"),
+      offer_notes: z.string().optional().default(""),
+      positioning_notes: z.string().optional().default(""),
+      images: z.array(z.string()).optional().default([]),
+    }).parse(request.body);
+
+    const competitor = {
+      id: crypto.randomUUID(),
+      opportunity_id: payload.opportunity_id || null,
+      competitor_name: payload.competitor_name,
+      competitor_url: payload.competitor_url,
+      product_title: payload.product_title,
+      price: payload.price || 0,
+      compare_at_price: payload.compare_at_price || null,
+      rating: payload.rating || null,
+      review_count: payload.review_count || null,
+      sales_signal: payload.sales_signal,
+      offer_notes: payload.offer_notes,
+      positioning_notes: payload.positioning_notes,
+      images: payload.images,
+      captured_at: new Date().toISOString(),
+    };
+
+    await upsertCompetitorProductDb(competitor);
+    response.json({ competitor });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
 app.patch("/api/admin/product-research/opportunities/:id", requireAdmin, async (request, response) => {
   try {
     const id = request.params.id;
@@ -807,6 +869,11 @@ app.post("/api/admin/product-research/search-aliexpress", requireAdmin, async (r
       opportunityId: z.string().optional()
     }).parse(request.body);
 
+    const isManualSupplierUrl = /^https?:\/\/(www\.)?aliexpress\./i.test(query.trim());
+    const cleanQuery = query.trim();
+    const searchLabel = isManualSupplierUrl
+      ? decodeURIComponent(cleanQuery.split("/").filter(Boolean).pop()?.replace(/[-_]+/g, " ").replace(/\.html$/i, "") || "AliExpress manual listing")
+      : cleanQuery;
     const baseCost = 5 + Math.random() * 15;
     const suppliers = [
       {
@@ -815,8 +882,8 @@ app.post("/api/admin/product-research/search-aliexpress", requireAdmin, async (r
         supplier_platform: "aliexpress",
         supplier_name: "Shenzhen Quality Commerce Co., Ltd",
         supplier_url: "https://aliexpress.com/store/11029432",
-        product_url: `https://aliexpress.com/item/10050062${Math.floor(Math.random()*9000000+1000000)}.html`,
-        title: `Original dropshipping ${query} with high durability`,
+        product_url: isManualSupplierUrl ? cleanQuery : `https://aliexpress.com/item/10050062${Math.floor(Math.random()*9000000+1000000)}.html`,
+        title: isManualSupplierUrl ? `Manual AliExpress listing: ${searchLabel}` : `Original dropshipping ${searchLabel} with high durability`,
         price_min: Math.round(baseCost * 100) / 100,
         price_max: Math.round(baseCost * 1.3 * 100) / 100,
         shipping_cost: 2.99,
@@ -846,7 +913,7 @@ app.post("/api/admin/product-research/search-aliexpress", requireAdmin, async (r
         supplier_name: "Yiwu Household Trading Firm",
         supplier_url: "https://aliexpress.com/store/9204921",
         product_url: `https://aliexpress.com/item/10050074${Math.floor(Math.random()*9000000+1000000)}.html`,
-        title: `Cheap bulk ${query} mini portable home accessories`,
+        title: `Cheap bulk ${searchLabel} mini portable home accessories`,
         price_min: Math.round(baseCost * 0.8 * 100) / 100,
         price_max: Math.round(baseCost * 1.1 * 100) / 100,
         shipping_cost: 4.50,
@@ -873,7 +940,7 @@ app.post("/api/admin/product-research/search-aliexpress", requireAdmin, async (r
         supplier_name: "Global Wellness Factory Store",
         supplier_url: "https://aliexpress.com/store/3820491",
         product_url: `https://aliexpress.com/item/10050085${Math.floor(Math.random()*9000000+1000000)}.html`,
-        title: `Premium styling customized ${query} eco-friendly material`,
+        title: `Premium styling customized ${searchLabel} eco-friendly material`,
         price_min: Math.round(baseCost * 1.5 * 100) / 100,
         price_max: Math.round(baseCost * 1.8 * 100) / 100,
         shipping_cost: 0.00,
@@ -1010,8 +1077,8 @@ app.post("/api/admin/product-research/import-aliexpress", requireAdmin, async (r
         marginEst,
         priority: 99,
         aliexpressSearchUrl: supplier.product_url || "",
-        contentAngle: opportunity ? `Premium ${opportunity.name} to fill gap in ${niche}` : "Premium supplier dropship solution",
-        status: "Draft" as const,
+        contentAngle: opportunity ? `Premium ${opportunity.name} to fill gap in ${niche}. Suggested bundle: ${opportunity.name} Starter Kit. Review compliance notes before publishing.` : "Premium supplier dropship solution. Review supplier data, claims, and images before publishing.",
+        status: "Review" as const,
         inventory: 100,
         images,
         seoTitle: `${name} | Premium ${niche} Product`,
@@ -1021,13 +1088,44 @@ app.post("/api/admin/product-research/import-aliexpress", requireAdmin, async (r
 
       await upsertProductDb(newProduct);
 
+      job.import_payload = {
+        opportunityId,
+        generatedContent: {
+          optimizedTitle: newProduct.name,
+          seoTitle: newProduct.seoTitle,
+          seoDescription: newProduct.seoDescription,
+          bullets: [
+            `Curated ${niche} product candidate sourced from ${supplier.supplier_platform || "supplier"} data.`,
+            `Recommended price range: ${retailMin} to ${retailMax}.`,
+            `Supplier rating: ${supplier.rating || "pending"} with ${supplier.review_count || 0} reviews.`,
+          ],
+          hooks: [
+            `Why ${name} is the next ${niche} product worth testing`,
+            `The everyday problem ${name} solves in seconds`,
+            `Unboxing and demo test: ${name}`,
+          ],
+          bundles: [`${name} Starter Kit`, `${name} + best seller add-on`],
+          upsells: ["Premium travel/storage case", "Replacement or accessory pack"],
+        },
+        approvalChecklist: [
+          "Supplier reliability reviewed",
+          "Images acceptable for storefront",
+          "Pricing supports target margin",
+          "Shipping time acceptable",
+          "Risk claims reviewed",
+          "SEO metadata generated",
+          "Content angle present",
+          "Bundle or upsell idea present",
+        ],
+      };
+
       if (opportunity) {
         opportunity.status = "imported_draft";
         opportunity.updated_at = new Date().toISOString();
         await upsertOpportunityDb(opportunity);
       }
 
-      supplier.import_status = "imported";
+      supplier.import_status = "needs_review";
       supplier.updated_at = new Date().toISOString();
       await upsertSupplierProductDb(supplier);
 
@@ -1168,6 +1266,500 @@ const createExperimentSchema = z.object({
     is_control: z.boolean()
   })).min(2)
 });
+
+// --- Content & SEO REST Endpoints ---
+
+// Public Blog endpoints
+app.get("/api/articles", async (request, response) => {
+  try {
+    const all = await getArticlesDb();
+    const niche = request.query.niche as string;
+    let published = all.filter((a: any) => a.status === "published");
+    if (niche && niche !== "general" && niche !== "all") {
+      published = published.filter((a: any) => a.niche === niche);
+    }
+    response.json({ articles: published });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/articles/:slug", async (request, response) => {
+  try {
+    const article = await getArticleBySlugDb(request.params.slug);
+    if (!article || article.status !== "published") {
+      response.status(404).json({ error: "Article not found" });
+      return;
+    }
+    response.json({ article });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+// Admin Blog endpoints
+app.get("/api/admin/articles", requireAdmin, async (_request, response) => {
+  try {
+    const articles = await getArticlesDb();
+    response.json({ articles });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/articles", requireAdmin, async (request, response) => {
+  try {
+    const art = request.body;
+    if (!art.id) art.id = crypto.randomUUID();
+    art.created_at = new Date().toISOString();
+    art.updated_at = new Date().toISOString();
+    await upsertArticleDb(art);
+    response.status(201).json({ article: art });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/articles/generate", requireAdmin, async (request, response) => {
+  try {
+    const { niche, topic, keyword } = z.object({
+      niche: z.string().min(1),
+      topic: z.string().min(1),
+      keyword: z.string().min(1)
+    }).parse(request.body);
+
+    const title = `The Ultimate Guide to ${topic}`;
+    const slug = `${niche}-${topic.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    const seoTitle = `${title} | Products4ThePeople ${niche.toUpperCase()}`;
+    const seoDescription = `Discover everything you need to know about ${topic}. Learn expert tips, industry secrets, and find the best ${keyword} choices.`;
+
+    // Retrieve active products in this niche to build internal links
+    const allProducts = await getProductsDb();
+    const nicheProducts = allProducts.filter((p: any) => p.subdomain === niche || p.niche === niche).slice(0, 3);
+    
+    const internalLinks = nicheProducts.map((p: any) => ({
+      productId: p.id,
+      name: p.name,
+      url: `#/product/${p.id}`
+    }));
+
+    // Build internal links Markdown sidebar list
+    const productLinksList = nicheProducts.map((p: any) => `- [${p.name}](#/product/${p.id})`).join("\n");
+
+    const content = `
+# ${title}
+
+Welcome to our comprehensive guide on **${topic}**. If you are looking to elevate your daily routine and find the best strategies for optimization, you've come to the right place. In this article, we will break down the core mechanics, list key advantages, and help you select the right solutions—including highly recommended **${keyword}** items.
+
+## Why ${topic} Matters
+Modern problems require modern solutions. Understanding the fundamentals of this category helps you make smarter choices, whether you are trying to improve efficiency or upgrade your lifestyle. Integrating structured solutions is the fastest way to see compound results.
+
+## Key Advantages
+1. **Enhanced Quality**: Using verified methods ensures consistent output.
+2. **Time Savings**: Automating or choosing professional-grade options cuts down manual overhead.
+3. **Better Outcomes**: Achieve professional results from the comfort of your own home.
+
+## Featured Recommendations
+To help you get started immediately, we have curated a selection of top-performing products directly linked to ${topic}. These products have been vetted by our team for durability, cost-efficiency, and user satisfaction:
+
+${productLinksList || "*No featured products in this category yet.*"}
+
+## Summary
+By investing time in understanding ${topic}, you set yourself up for long-term success. Check out our featured products above to take action today!
+    `.trim();
+
+    const schemaMarkup = {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      "headline": title,
+      "description": seoDescription,
+      "author": {
+        "@type": "Organization",
+        "name": "Products4ThePeople"
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Products4ThePeople"
+      },
+      "datePublished": new Date().toISOString()
+    };
+
+    const newArticle = {
+      id: crypto.randomUUID(),
+      title,
+      slug,
+      content,
+      summary: `An expert guide exploring the benefits of ${topic} and how to select the best ${keyword} for your needs.`,
+      niche,
+      status: "draft",
+      seo_title: seoTitle,
+      seo_description: seoDescription,
+      keywords: `${keyword}, ${topic}, guide, organic`,
+      schema_markup: schemaMarkup,
+      views: 0,
+      conversions: 0,
+      revenue: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    await upsertArticleDb(newArticle);
+    response.json({ success: true, article: newArticle });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.patch("/api/admin/articles/:id", requireAdmin, async (request, response) => {
+  try {
+    const art = await getArticleByIdDb(request.params.id);
+    if (!art) {
+      response.status(404).json({ error: "Article not found" });
+      return;
+    }
+    const updates = request.body;
+    
+    // Set published_at timestamp if status transitions to published
+    let publishedAt = art.published_at;
+    if (updates.status === "published" && art.status !== "published") {
+      publishedAt = new Date().toISOString();
+    }
+
+    const updatedArt = {
+      ...art,
+      ...updates,
+      published_at: publishedAt,
+      updated_at: new Date().toISOString()
+    };
+
+    await upsertArticleDb(updatedArt);
+    response.json({ article: updatedArt });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/admin/articles/:id", requireAdmin, async (request, response) => {
+  try {
+    await deleteArticleDb(request.params.id);
+    response.json({ success: true, message: "Article deleted successfully" });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+
+// Public Knowledge Base (Help Center) endpoints
+app.get("/api/kb", async (request, response) => {
+  try {
+    const all = await getKbArticlesDb();
+    const niche = request.query.niche as string;
+    let list = all.filter((k: any) => k.status === "published");
+    if (niche && niche !== "general" && niche !== "all") {
+      list = list.filter((k: any) => k.niche === niche);
+    }
+    response.json({ articles: list });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+// Admin KB endpoints
+app.get("/api/admin/kb", requireAdmin, async (_request, response) => {
+  try {
+    const articles = await getKbArticlesDb();
+    response.json({ articles });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/kb", requireAdmin, async (request, response) => {
+  try {
+    const kb = request.body;
+    if (!kb.id) kb.id = crypto.randomUUID();
+    kb.created_at = new Date().toISOString();
+    kb.updated_at = new Date().toISOString();
+    await upsertKbArticleDb(kb);
+    response.status(201).json({ article: kb });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.patch("/api/admin/kb/:id", requireAdmin, async (request, response) => {
+  try {
+    const kb = await getKbArticleByIdDb(request.params.id);
+    if (!kb) {
+      response.status(404).json({ error: "KB article not found" });
+      return;
+    }
+    const updatedKb = {
+      ...kb,
+      ...request.body,
+      updated_at: new Date().toISOString()
+    };
+    await upsertKbArticleDb(updatedKb);
+    response.json({ article: updatedKb });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+
+// Public Programmatic SEO endpoints
+app.get("/api/seo-pages", async (request, response) => {
+  try {
+    const all = await getSeoPagesDb();
+    const niche = request.query.niche as string;
+    let list = all;
+    if (niche && niche !== "general" && niche !== "all") {
+      list = list.filter((s: any) => s.niche === niche);
+    }
+    response.json({ pages: list });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.get("/api/seo-pages/:slug", async (request, response) => {
+  try {
+    const page = await getSeoPageBySlugDb(request.params.slug);
+    if (!page) {
+      response.status(404).json({ error: "SEO landing page not found" });
+      return;
+    }
+    response.json({ page });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+// Admin SEO Page endpoints
+app.get("/api/admin/seo-pages", requireAdmin, async (_request, response) => {
+  try {
+    const pages = await getSeoPagesDb();
+    response.json({ pages });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/seo-pages", requireAdmin, async (request, response) => {
+  try {
+    const page = request.body;
+    if (!page.id) page.id = crypto.randomUUID();
+    page.created_at = new Date().toISOString();
+    page.updated_at = new Date().toISOString();
+    await upsertSeoPageDb(page);
+    response.status(201).json({ page });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/seo-pages/generate", requireAdmin, async (request, response) => {
+  try {
+    const { niche, categoryName, keywords } = z.object({
+      niche: z.string().min(1),
+      categoryName: z.string().min(1),
+      keywords: z.string().min(1)
+    }).parse(request.body);
+
+    const title = `Best ${categoryName} for ${niche.charAt(0).toUpperCase() + niche.slice(1)} Store`;
+    const slug = `${niche}/${categoryName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+    const seoTitle = `Top Rated ${categoryName} | Shop ${niche.toUpperCase()}`;
+    const seoDescription = `Shop the best curated ${categoryName} items. Highly rated collections optimized for price, durability, and fast delivery. Includes ${keywords}.`;
+
+    const description = `
+Explore our premier selection of **${categoryName}** specifically optimized for **${niche}** enthusiasts. Each product is vetted for durability, manufacturer reliability, and customer reviews. Benefit from fast shipping and our 30-day satisfaction guarantee on every item in this collection.
+    `.trim();
+
+    const schemaMarkup = {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      "name": title,
+      "description": seoDescription,
+      "publisher": {
+        "@type": "Organization",
+        "name": "Products4ThePeople"
+      }
+    };
+
+    const newPage = {
+      id: crypto.randomUUID(),
+      title,
+      slug,
+      niche,
+      category_name: categoryName,
+      description,
+      seo_title: seoTitle,
+      seo_description: seoDescription,
+      schema_markup: schemaMarkup,
+      views: 0,
+      conversions: 0,
+      revenue: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    await upsertSeoPageDb(newPage);
+    response.json({ success: true, page: newPage });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+// Dynamic XML Sitemap Endpoint
+app.get("/sitemap.xml", async (_request, response) => {
+  try {
+    const products = await getProductsDb();
+    const articles = await getArticlesDb();
+    const seoPages = await getSeoPagesDb();
+    const kbArticles = await getKbArticlesDb();
+
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;
+    xml += `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+
+    // Home URL
+    xml += `  <url>\n`;
+    xml += `    <loc>https://products4thepeople.com/</loc>\n`;
+    xml += `    <changefreq>daily</changefreq>\n`;
+    xml += `    <priority>1.0</priority>\n`;
+    xml += `  </url>\n`;
+
+    // Niches
+    const niches = ["beauty", "pets", "home", "fitness"];
+    for (const n of niches) {
+      xml += `  <url>\n`;
+      xml += `    <loc>https://products4thepeople.com/#${n}</loc>\n`;
+      xml += `    <changefreq>weekly</changefreq>\n`;
+      xml += `    <priority>0.8</priority>\n`;
+      xml += `  </url>\n`;
+    }
+
+    // Products
+    for (const p of products) {
+      xml += `  <url>\n`;
+      xml += `    <loc>https://products4thepeople.com/#product/${p.id}</loc>\n`;
+      xml += `    <changefreq>weekly</changefreq>\n`;
+      xml += `    <priority>0.7</priority>\n`;
+      xml += `  </url>\n`;
+    }
+
+    // Articles (Published only)
+    const publishedArticles = articles.filter((a: any) => a.status === "published");
+    for (const a of publishedArticles) {
+      xml += `  <url>\n`;
+      xml += `    <loc>https://products4thepeople.com/#blog/${a.slug}</loc>\n`;
+      xml += `    <changefreq>weekly</changefreq>\n`;
+      xml += `    <priority>0.6</priority>\n`;
+      xml += `  </url>\n`;
+    }
+
+    // Programmatic Pages
+    for (const page of seoPages) {
+      xml += `  <url>\n`;
+      xml += `    <loc>https://products4thepeople.com/#c/${page.slug}</loc>\n`;
+      xml += `    <changefreq>weekly</changefreq>\n`;
+      xml += `    <priority>0.6</priority>\n`;
+      xml += `  </url>\n`;
+    }
+
+    // Help center
+    xml += `  <url>\n`;
+    xml += `    <loc>https://products4thepeople.com/#kb</loc>\n`;
+    xml += `    <changefreq>monthly</changefreq>\n`;
+    xml += `    <priority>0.4</priority>\n`;
+    xml += `  </url>\n`;
+
+    xml += `</urlset>`;
+
+    response.header("Content-Type", "application/xml");
+    response.status(200).send(xml);
+  } catch (error: any) {
+    response.status(500).send(`<error>${error.message}</error>`);
+  }
+});
+
+// Conversion & Analytics Trackers
+app.post("/api/seo/track", async (request, response) => {
+  try {
+    const { type, slug, action, revenue } = z.object({
+      type: z.enum(["article", "seo_page"]),
+      slug: z.string().min(1),
+      action: z.enum(["view", "conversion"]),
+      revenue: z.number().optional()
+    }).parse(request.body);
+
+    if (type === "article") {
+      const art = await getArticleBySlugDb(slug);
+      if (art) {
+        if (action === "view") art.views = (art.views || 0) + 1;
+        else {
+          art.conversions = (art.conversions || 0) + 1;
+          if (revenue) art.revenue = Number(art.revenue || 0) + revenue;
+        }
+        await upsertArticleDb(art);
+      }
+    } else {
+      const page = await getSeoPageBySlugDb(slug);
+      if (page) {
+        if (action === "view") page.views = (page.views || 0) + 1;
+        else {
+          page.conversions = (page.conversions || 0) + 1;
+          if (revenue) page.revenue = Number(page.revenue || 0) + revenue;
+        }
+        await upsertSeoPageDb(page);
+      }
+    }
+
+    response.json({ success: true });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+// Admin Dashboard stats
+app.get("/api/admin/seo/dashboard", requireAdmin, async (_request, response) => {
+  try {
+    const articles = await getArticlesDb();
+    const seoPages = await getSeoPagesDb();
+    const kbArticles = await getKbArticlesDb();
+
+    // Summary calculations
+    const totalViews = articles.reduce((sum: number, a: any) => sum + (a.views || 0), 0) +
+                       seoPages.reduce((sum: number, p: any) => sum + (p.views || 0), 0);
+                       
+    const totalConversions = articles.reduce((sum: number, a: any) => sum + (a.conversions || 0), 0) +
+                             seoPages.reduce((sum: number, p: any) => sum + (p.conversions || 0), 0);
+                             
+    const totalRevenue = articles.reduce((sum: number, a: any) => sum + Number(a.revenue || 0), 0) +
+                          seoPages.reduce((sum: number, p: any) => sum + Number(p.revenue || 0), 0);
+
+    const indexedUrls = 1 + 4 + articles.filter((a: any) => a.status === "published").length +
+                        seoPages.length + 1;
+
+    // Leaderboard ranking list
+    const leaderboard = [
+      ...articles.map((a: any) => ({ name: a.title, type: "Article", niche: a.niche, views: a.views || 0, conversions: a.conversions || 0, revenue: Number(a.revenue || 0) })),
+      ...seoPages.map((p: any) => ({ name: p.title, type: "Category Page", niche: p.niche, views: p.views || 0, conversions: p.conversions || 0, revenue: Number(p.revenue || 0) }))
+    ].sort((a, b) => b.views - a.views);
+
+    response.json({
+      summary: {
+        totalViews,
+        totalConversions,
+        totalRevenue,
+        indexedUrls
+      },
+      leaderboard
+    });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
 
 // A/B Testing REST Endpoints
 app.get("/api/experiments/active", async (_request, response) => {
@@ -2593,6 +3185,17 @@ async function getCompetitorsForOpportunityDb(opportunityId: string) {
   }
 }
 
+async function getAllCompetitorsDb() {
+  if (usePostgres) {
+    const result = await pool.query("select * from competitor_products order by captured_at desc");
+    return result.rows;
+  } else {
+    const db = readDb();
+    return Object.values(db.competitors || {})
+      .sort((a: any, b: any) => b.captured_at.localeCompare(a.captured_at));
+  }
+}
+
 async function upsertCompetitorProductDb(competitor: any) {
   if (usePostgres) {
     await pool.query(
@@ -2855,6 +3458,215 @@ async function upsertExperimentVariantDb(v: any) {
       ...v,
       changes: changesVal
     };
+    writeDb(db);
+  }
+}
+
+async function getArticlesDb() {
+  if (usePostgres) {
+    const result = await pool.query("select * from articles order by created_at desc");
+    return result.rows;
+  } else {
+    const db = readDb();
+    return Object.values(db.articles || {}).sort((a: any, b: any) => b.created_at.localeCompare(a.created_at));
+  }
+}
+
+async function getArticleByIdDb(id: string) {
+  if (usePostgres) {
+    const result = await pool.query("select * from articles where id = $1", [id]);
+    return result.rowCount > 0 ? result.rows[0] : null;
+  } else {
+    const db = readDb();
+    return db.articles?.[id] || null;
+  }
+}
+
+async function getArticleBySlugDb(slug: string) {
+  if (usePostgres) {
+    const result = await pool.query("select * from articles where slug = $1", [slug]);
+    return result.rowCount > 0 ? result.rows[0] : null;
+  } else {
+    const db = readDb();
+    return Object.values(db.articles || {}).find((a: any) => a.slug === slug) || null;
+  }
+}
+
+async function upsertArticleDb(art: any) {
+  if (usePostgres) {
+    await pool.query(
+      `insert into articles (
+        id, title, slug, content, summary, niche, status, seo_title, 
+        seo_description, keywords, schema_markup, views, conversions, revenue, published_at, created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+       on conflict (id) do update set
+         title = excluded.title,
+         slug = excluded.slug,
+         content = excluded.content,
+         summary = excluded.summary,
+         niche = excluded.niche,
+         status = excluded.status,
+         seo_title = excluded.seo_title,
+         seo_description = excluded.seo_description,
+         keywords = excluded.keywords,
+         schema_markup = excluded.schema_markup,
+         views = excluded.views,
+         conversions = excluded.conversions,
+         revenue = excluded.revenue,
+         published_at = excluded.published_at,
+         updated_at = now()`,
+      [
+        art.id, art.title, art.slug, art.content, art.summary || null, art.niche, art.status || 'draft',
+        art.seo_title || null, art.seo_description || null, art.keywords || null,
+        art.schema_markup ? (typeof art.schema_markup === 'string' ? art.schema_markup : JSON.stringify(art.schema_markup)) : null,
+        art.views || 0, art.conversions || 0, art.revenue || 0, art.published_at || null,
+        art.created_at || new Date().toISOString(), art.updated_at || new Date().toISOString()
+      ]
+    );
+  } else {
+    const db = readDb();
+    if (!db.articles) db.articles = {};
+    db.articles[art.id] = art;
+    writeDb(db);
+  }
+}
+
+async function deleteArticleDb(id: string) {
+  if (usePostgres) {
+    await pool.query("delete from articles where id = $1", [id]);
+  } else {
+    const db = readDb();
+    if (db.articles?.[id]) {
+      delete db.articles[id];
+      writeDb(db);
+    }
+  }
+}
+
+// KB Helpers
+async function getKbArticlesDb() {
+  if (usePostgres) {
+    const result = await pool.query("select * from knowledge_articles order by created_at desc");
+    return result.rows;
+  } else {
+    const db = readDb();
+    return Object.values(db.knowledgeArticles || {}).sort((a: any, b: any) => b.created_at.localeCompare(a.created_at));
+  }
+}
+
+async function getKbArticleByIdDb(id: string) {
+  if (usePostgres) {
+    const result = await pool.query("select * from knowledge_articles where id = $1", [id]);
+    return result.rowCount > 0 ? result.rows[0] : null;
+  } else {
+    const db = readDb();
+    return db.knowledgeArticles?.[id] || null;
+  }
+}
+
+async function getKbArticleBySlugDb(slug: string) {
+  if (usePostgres) {
+    const result = await pool.query("select * from knowledge_articles where slug = $1", [slug]);
+    return result.rowCount > 0 ? result.rows[0] : null;
+  } else {
+    const db = readDb();
+    return Object.values(db.knowledgeArticles || {}).find((a: any) => a.slug === slug) || null;
+  }
+}
+
+async function upsertKbArticleDb(kb: any) {
+  if (usePostgres) {
+    await pool.query(
+      `insert into knowledge_articles (
+        id, title, slug, content, category, niche, product_id, status, views, created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       on conflict (id) do update set
+         title = excluded.title,
+         slug = excluded.slug,
+         content = excluded.content,
+         category = excluded.category,
+         niche = excluded.niche,
+         product_id = excluded.product_id,
+         status = excluded.status,
+         views = excluded.views,
+         updated_at = now()`,
+      [
+        kb.id, kb.title, kb.slug, kb.content, kb.category, kb.niche, kb.product_id || null,
+        kb.status || 'published', kb.views || 0,
+        kb.created_at || new Date().toISOString(), kb.updated_at || new Date().toISOString()
+      ]
+    );
+  } else {
+    const db = readDb();
+    if (!db.knowledgeArticles) db.knowledgeArticles = {};
+    db.knowledgeArticles[kb.id] = kb;
+    writeDb(db);
+  }
+}
+
+// Programmatic SEO Helpers
+async function getSeoPagesDb() {
+  if (usePostgres) {
+    const result = await pool.query("select * from seo_pages order by created_at desc");
+    return result.rows;
+  } else {
+    const db = readDb();
+    return Object.values(db.seoPages || {}).sort((a: any, b: any) => b.created_at.localeCompare(a.created_at));
+  }
+}
+
+async function getSeoPageByIdDb(id: string) {
+  if (usePostgres) {
+    const result = await pool.query("select * from seo_pages where id = $1", [id]);
+    return result.rowCount > 0 ? result.rows[0] : null;
+  } else {
+    const db = readDb();
+    return db.seoPages?.[id] || null;
+  }
+}
+
+async function getSeoPageBySlugDb(slug: string) {
+  if (usePostgres) {
+    const result = await pool.query("select * from seo_pages where slug = $1", [slug]);
+    return result.rowCount > 0 ? result.rows[0] : null;
+  } else {
+    const db = readDb();
+    return Object.values(db.seoPages || {}).find((s: any) => s.slug === slug) || null;
+  }
+}
+
+async function upsertSeoPageDb(page: any) {
+  if (usePostgres) {
+    await pool.query(
+      `insert into seo_pages (
+        id, title, slug, niche, category_name, description, seo_title, 
+        seo_description, schema_markup, views, conversions, revenue, created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       on conflict (id) do update set
+         title = excluded.title,
+         slug = excluded.slug,
+         niche = excluded.niche,
+         category_name = excluded.category_name,
+         description = excluded.description,
+         seo_title = excluded.seo_title,
+         seo_description = excluded.seo_description,
+         schema_markup = excluded.schema_markup,
+         views = excluded.views,
+         conversions = excluded.conversions,
+         revenue = excluded.revenue,
+         updated_at = now()`,
+      [
+        page.id, page.title, page.slug, page.niche, page.category_name, page.description,
+        page.seo_title || null, page.seo_description || null,
+        page.schema_markup ? (typeof page.schema_markup === 'string' ? page.schema_markup : JSON.stringify(page.schema_markup)) : null,
+        page.views || 0, page.conversions || 0, page.revenue || 0,
+        page.created_at || new Date().toISOString(), page.updated_at || new Date().toISOString()
+      ]
+    );
+  } else {
+    const db = readDb();
+    if (!db.seoPages) db.seoPages = {};
+    db.seoPages[page.id] = page;
     writeDb(db);
   }
 }
@@ -3176,6 +3988,57 @@ async function migrate() {
       revenue numeric not null default 0,
       emails_captured integer not null default 0,
       is_control boolean not null default false
+    );
+
+    create table if not exists articles (
+      id text primary key,
+      title text not null,
+      slug text not null unique,
+      content text not null,
+      summary text,
+      niche text not null,
+      status text not null default 'draft',
+      seo_title text,
+      seo_description text,
+      keywords text,
+      schema_markup jsonb,
+      views integer not null default 0,
+      conversions integer not null default 0,
+      revenue numeric not null default 0,
+      published_at timestamptz,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists knowledge_articles (
+      id text primary key,
+      title text not null,
+      slug text not null unique,
+      content text not null,
+      category text not null,
+      niche text not null,
+      product_id text,
+      status text not null default 'published',
+      views integer not null default 0,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
+    );
+
+    create table if not exists seo_pages (
+      id text primary key,
+      title text not null,
+      slug text not null unique,
+      niche text not null,
+      category_name text not null,
+      description text not null,
+      seo_title text,
+      seo_description text,
+      schema_markup jsonb,
+      views integer not null default 0,
+      conversions integer not null default 0,
+      revenue numeric not null default 0,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
     );
   `);
 }
