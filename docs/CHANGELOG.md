@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.3.1 — 2026-06-05
+
+### Changed
+- Moved storefront Blog and Help Center navigation links into the More menu to simplify the top header.
+
 ## v1.3.0 — 2026-06-04
 
 ### Added

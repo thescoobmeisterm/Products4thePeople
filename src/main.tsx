@@ -4223,8 +4223,6 @@ function Storefront({
             Shop
           </button>
           <a href="#checkout">Checkout</a>
-          <a href="#blog">Blog</a>
-          <a href="#kb">Help</a>
           
           <details className="more-shops" open={isMoreOpen} onToggle={(e) => setIsMoreOpen(e.currentTarget.open)}>
             <summary>More</summary>
@@ -4260,6 +4258,12 @@ function Storefront({
               )}
               <button type="button" onClick={() => { setIsTrackOrderOpen(true); setIsMoreOpen(false); }}>
                 Track Order
+              </button>
+              <button type="button" onClick={() => { window.location.hash = '#blog'; setIsMoreOpen(false); }}>
+                Blog
+              </button>
+              <button type="button" onClick={() => { window.location.hash = '#kb'; setIsMoreOpen(false); }}>
+                Help Center
               </button>
               
               <hr style={{ margin: '4px 0', border: 'none', borderTop: '1px solid #e5eaee' }} />
