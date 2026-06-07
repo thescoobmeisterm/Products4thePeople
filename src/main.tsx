@@ -70,6 +70,9 @@ import {
   updateProductStatus,
   importAliexpress,
   getContacts,
+  createContact,
+  updateContactRole,
+  deleteContact,
   getOpportunities,
   createOpportunity,
   getOpportunityDetails,
@@ -564,6 +567,9 @@ function App() {
   const [seoSitemapPreview, setSeoSitemapPreview] = React.useState("");
   const [seoSubTab, setSeoSubTab] = React.useState<"overview" | "articles" | "pages" | "kb" | "sitemap">("overview");
   const [dbContacts, setDbContacts] = React.useState<any[]>([]);
+  const [newCustomerEmail, setNewCustomerEmail] = React.useState("");
+  const [newCustomerName, setNewCustomerName] = React.useState("");
+  const [newCustomerRole, setNewCustomerRole] = React.useState<"customer" | "admin">("customer");
 
   // Stores Manager Dialog States & Handlers
   const [editingStoreKey, setEditingStoreKey] = React.useState<string | null>(null);
@@ -888,6 +894,69 @@ function App() {
   const totalInventory = products.reduce((total, product) => total + product.inventory, 0);
   const openAbandonedCarts = abandonedCarts.filter((cart) => cart.status === "Open");
   const recoveredAbandonedCarts = abandonedCarts.filter((cart) => cart.status === "Recovered");
+  const adminContactCount = dbContacts.filter((contact) => contact.role === "admin").length;
+
+  const changeContactRole = async (email: string, role: "customer" | "admin") => {
+    if (email.toLowerCase() === adminEmail.toLowerCase() && role !== "admin") {
+      setNotice("The primary admin email must remain an admin.");
+      return;
+    }
+    try {
+      const response = await updateContactRole(email, role);
+      setDbContacts((current) =>
+        current.map((contact) => (contact.email === email ? { ...contact, ...response.contact, role } : contact)),
+      );
+      setNotice(`${email} is now a ${role}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? `Role update failed: ${error.message}` : "Role update failed.");
+    }
+  };
+
+  const addCustomerUser = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const email = newCustomerEmail.trim().toLowerCase();
+    const name = newCustomerName.trim() || "Customer";
+    if (!email) return;
+    try {
+      const response = await createContact({
+        email,
+        customerName: name,
+        source: "admin",
+        role: newCustomerRole,
+      });
+      const contact = {
+        ...response.contact,
+        email,
+        customerName: response.contact?.customerName || name,
+        address: response.contact?.address || "Added from Admin Customers",
+        lastOrderId: response.contact?.lastOrderId || null,
+        role: response.contact?.role || newCustomerRole,
+        updatedAt: response.contact?.updatedAt || new Date().toISOString(),
+      };
+      setDbContacts((current) => [contact, ...current.filter((item) => item.email !== email)]);
+      setNewCustomerEmail("");
+      setNewCustomerName("");
+      setNewCustomerRole("customer");
+      setNotice(`${email} added as ${contact.role}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? `Customer add failed: ${error.message}` : "Customer add failed.");
+    }
+  };
+
+  const removeContact = async (email: string) => {
+    if (email.toLowerCase() === adminEmail.toLowerCase()) {
+      setNotice("The primary admin email cannot be removed.");
+      return;
+    }
+    if (!window.confirm(`Remove ${email} from the customer directory? This also removes their saved profile data.`)) return;
+    try {
+      await deleteContact(email);
+      setDbContacts((current) => current.filter((contact) => contact.email !== email));
+      setNotice(`${email} removed from the customer directory.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? `Customer removal failed: ${error.message}` : "Customer removal failed.");
+    }
+  };
 
   const saveProduct = async (form: ProductForm) => {
     if (editingProduct) {
@@ -1658,10 +1727,57 @@ function App() {
               </div>
               <div className="queue-list">
                 <QueueRow label="Database leads & customers" value={dbContacts.length.toString()} />
+                <QueueRow label="Admin users" value={adminContactCount.toString()} />
                 <QueueRow label="LocalStorage emails" value={marketingLeads.length.toString()} />
                 <QueueRow label="Open abandoned carts" value={openAbandonedCarts.length.toString()} />
                 <QueueRow label="Recovered carts" value={recoveredAbandonedCarts.length.toString()} />
               </div>
+            </article>
+
+            <article className="panel" id="customer-add">
+              <div className="panel-header">
+                <div>
+                  <p>User management</p>
+                  <h2>Add customer or admin</h2>
+                </div>
+                <Plus size={22} />
+              </div>
+              <form onSubmit={addCustomerUser} style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) minmax(180px, 0.8fr) minmax(140px, 0.5fr) auto', gap: '10px', alignItems: 'end', marginTop: '16px' }}>
+                <label style={{ display: 'grid', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Email</span>
+                  <input
+                    type="email"
+                    value={newCustomerEmail}
+                    onChange={(event) => setNewCustomerEmail(event.target.value)}
+                    placeholder="customer@example.com"
+                    required
+                    style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                  />
+                </label>
+                <label style={{ display: 'grid', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Name</span>
+                  <input
+                    value={newCustomerName}
+                    onChange={(event) => setNewCustomerName(event.target.value)}
+                    placeholder="Customer name"
+                    style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                  />
+                </label>
+                <label style={{ display: 'grid', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Role</span>
+                  <select
+                    value={newCustomerRole}
+                    onChange={(event) => setNewCustomerRole(event.target.value as "customer" | "admin")}
+                    style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                  >
+                    <option value="customer">Customer</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </label>
+                <button type="submit" className="primary" style={{ minHeight: '40px', borderRadius: '8px', border: 'none', background: '#176c61', color: 'white', fontWeight: 700, padding: '0 14px', cursor: 'pointer' }}>
+                  Add User
+                </button>
+              </form>
             </article>
 
             <article className="panel wide" id="customer-directory">
@@ -1680,13 +1796,15 @@ function App() {
                       <th>Customer name</th>
                       <th>Fulfillment address / Source</th>
                       <th>Last Order ID</th>
+                      <th>Role</th>
                       <th>Capture Date</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dbContacts.length === 0 ? (
                       <tr>
-                        <td colSpan={5}>No customer profiles in database yet. Try checking out on the storefront or subscribing to the email wheel!</td>
+                        <td colSpan={7}>No customer profiles in database yet. Try checking out on the storefront or subscribing to the email wheel!</td>
                       </tr>
                     ) : dbContacts.map((contact) => (
                       <tr key={contact.email}>
@@ -1694,7 +1812,28 @@ function App() {
                         <td>{contact.customerName}</td>
                         <td className="hook">{contact.address}</td>
                         <td><strong>{contact.lastOrderId || "None"}</strong></td>
+                        <td>
+                          <select
+                            className={`status-select ${contact.role === "admin" ? "active" : "review"}`}
+                            value={contact.role || "customer"}
+                            onChange={(event) => changeContactRole(contact.email, event.target.value as "customer" | "admin")}
+                            disabled={contact.email?.toLowerCase() === adminEmail.toLowerCase()}
+                          >
+                            <option value="customer">Customer</option>
+                            <option value="admin">Admin</option>
+                          </select>
+                        </td>
                         <td>{formatDate(contact.updatedAt)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            onClick={() => removeContact(contact.email)}
+                            disabled={contact.email?.toLowerCase() === adminEmail.toLowerCase()}
+                            style={{ padding: '6px 10px', borderRadius: '6px', border: '1px solid #fca5a5', background: '#fef2f2', color: '#dc2626', fontSize: '12px', fontWeight: 700, cursor: contact.email?.toLowerCase() === adminEmail.toLowerCase() ? 'not-allowed' : 'pointer', opacity: contact.email?.toLowerCase() === adminEmail.toLowerCase() ? 0.55 : 1 }}
+                          >
+                            Remove
+                          </button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -3642,6 +3781,15 @@ function Storefront({
         const profileRes = await fetch(`/api/customers/${encodeURIComponent(currentUser.email)}/profile`, { headers: adminHeaders });
         if (profileRes.ok) {
           const profile = await profileRes.json();
+          const profileIsAdmin = profile.role === "admin" || currentUser.email.toLowerCase() === adminEmail.toLowerCase();
+          if (profileIsAdmin !== Boolean(currentUser.isAdmin)) {
+            const nextUser = { ...currentUser, isAdmin: profileIsAdmin };
+            setCurrentUser(nextUser);
+            localStorage.setItem("p4tp_customer", JSON.stringify(nextUser));
+            if (profileIsAdmin) {
+              localStorage.setItem(adminSessionKey, JSON.stringify({ email: currentUser.email, signedInAt: new Date().toISOString() }));
+            }
+          }
           setPreferences(profile.preferences || {});
           
           const savedCart = profile.savedCart || {};

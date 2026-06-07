@@ -196,6 +196,11 @@ const contactInputSchema = z.object({
   customerName: z.string().optional(),
   niche: z.string().optional(),
   source: z.string().optional(),
+  role: z.enum(["customer", "admin"]).optional(),
+});
+
+const contactRoleSchema = z.object({
+  role: z.enum(["customer", "admin"]),
 });
 
 // App initialization
@@ -208,12 +213,18 @@ function requireAdmin(request: express.Request, response: express.Response, next
   const email = String(request.header("x-admin-email") || "");
   const password = String(request.header("x-admin-password") || "");
 
-  if (email.toLowerCase() !== adminEmail.toLowerCase() || password !== adminPassword) {
+  if (!isAdminRequest(request)) {
     response.status(401).json({ error: "Admin authentication required" });
     return;
   }
 
   next();
+}
+
+function isAdminRequest(request: express.Request) {
+  const email = String(request.header("x-admin-email") || "");
+  const password = String(request.header("x-admin-password") || "");
+  return email.toLowerCase() === adminEmail.toLowerCase() && password === adminPassword;
 }
 
 // REST API Endpoints
@@ -348,17 +359,24 @@ app.post("/api/contacts", async (request, response) => {
   const email = input.email.trim().toLowerCase();
   const customerName = input.customerName?.trim() || "Subscriber";
   const source = input.source || "popup";
+  const allowedRole = isAdminRequest(request) ? input.role : undefined;
 
   if (usePostgres) {
-    await pool.query(
+    const existingResult = await pool.query("select payload from contacts where email = $1", [email]);
+    const existingPayload = existingResult.rows[0]?.payload || {};
+    const payload = { ...existingPayload, email, customerName, source, role: allowedRole || existingPayload.role || "customer" };
+    const result = await pool.query(
       `insert into contacts (email, customer_name, address, payload)
        values ($1, $2, $3, $4)
        on conflict (email) do update set
          customer_name = excluded.customer_name,
          payload = excluded.payload,
-         updated_at = now()`,
-      [email, customerName, `Subscribed via ${source}`, { email, customerName, source }],
+         updated_at = now()
+       returning email, customer_name as "customerName", address, last_order_id as "lastOrderId", updated_at as "updatedAt", payload`,
+      [email, customerName, `Subscribed via ${source}`, payload],
     );
+    response.json({ ok: true, contact: { ...result.rows[0], role: payload.role } });
+    return;
   } else {
     const db = readDb();
     const existing = db.contacts[email] || {};
@@ -367,14 +385,114 @@ app.post("/api/contacts", async (request, response) => {
       customerName: existing.customerName || customerName,
       address: existing.address || `Subscribed via ${source}`,
       lastOrderId: existing.lastOrderId || null,
-      payload: { email, customerName, source },
+      role: allowedRole || existing.role || "customer",
+      payload: { email, customerName, source, role: allowedRole || existing.role || "customer" },
       createdAt: existing.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
     writeDb(db);
+    response.json({ ok: true, contact: db.contacts[email] });
+    return;
   }
+});
 
-  response.json({ ok: true });
+app.patch("/api/contacts/:email/role", requireAdmin, async (request, response) => {
+  try {
+    const email = request.params.email.trim().toLowerCase();
+    const { role } = contactRoleSchema.parse(request.body);
+
+    if (usePostgres) {
+      const existing = await pool.query("select payload from contacts where email = $1", [email]);
+      if (existing.rowCount === 0) {
+        response.status(404).json({ error: "Customer not found" });
+        return;
+      }
+
+      const payload = {
+        ...(existing.rows[0].payload || {}),
+        email,
+        role,
+        updatedAt: new Date().toISOString(),
+      };
+      const result = await pool.query(
+        `update contacts
+         set payload = $2, updated_at = now()
+         where email = $1
+         returning email, customer_name as "customerName", address, last_order_id as "lastOrderId", updated_at as "updatedAt", payload`,
+        [email, payload],
+      );
+      response.json({ contact: { ...result.rows[0], role: payload.role } });
+      return;
+    }
+
+    const db = readDb();
+    const existing = db.contacts[email];
+    if (!existing) {
+      response.status(404).json({ error: "Customer not found" });
+      return;
+    }
+    db.contacts[email] = {
+      ...existing,
+      role,
+      payload: { ...(existing.payload || {}), role },
+      updatedAt: new Date().toISOString(),
+    };
+    if (db.customers[email]) {
+      db.customers[email] = {
+        ...db.customers[email],
+        role,
+        updatedAt: new Date().toISOString(),
+      };
+    }
+    writeDb(db);
+    response.json({ contact: db.contacts[email] });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to update customer role" });
+  }
+});
+
+app.delete("/api/contacts/:email", requireAdmin, async (request, response) => {
+  try {
+    const email = request.params.email.trim().toLowerCase();
+    if (email === adminEmail.toLowerCase()) {
+      response.status(400).json({ error: "The configured primary admin cannot be removed from the customer directory." });
+      return;
+    }
+
+    if (usePostgres) {
+      const client = await pool.connect();
+      try {
+        await client.query("begin");
+        await client.query("delete from orders where customer_email = $1", [email]);
+        const result = await client.query("delete from contacts where email = $1 returning email", [email]);
+        if (result.rowCount === 0) {
+          await client.query("rollback");
+          response.status(404).json({ error: "Customer not found" });
+          return;
+        }
+        await client.query("commit");
+      } catch (error) {
+        await client.query("rollback");
+        throw error;
+      } finally {
+        client.release();
+      }
+      response.json({ ok: true, message: "Customer removed" });
+      return;
+    }
+
+    const db = readDb();
+    if (!db.contacts[email]) {
+      response.status(404).json({ error: "Customer not found" });
+      return;
+    }
+    delete db.contacts[email];
+    if (db.customers[email]) delete db.customers[email];
+    writeDb(db);
+    response.json({ ok: true, message: "Customer removed" });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to remove customer" });
+  }
 });
 
 // Stripe Checkout Session Integration
@@ -3324,6 +3442,8 @@ app.post("/api/customers/:email/profile", async (request, response) => {
     const { preferences, savedCart, name } = request.body;
 
     if (usePostgres) {
+      const existingResult = await pool.query("select payload from contacts where email = $1", [email]);
+      const existingPayload = existingResult.rows[0]?.payload || {};
       await pool.query(
         `insert into contacts (email, customer_name, address, payload)
          values ($1, $2, $3, $4)
@@ -3335,7 +3455,7 @@ app.post("/api/customers/:email/profile", async (request, response) => {
           email, 
           name || "Customer", 
           preferences?.address || "Collected by Portal", 
-          { email, name, preferences, savedCart, updatedAt: new Date().toISOString() }
+          { ...existingPayload, email, name, preferences, savedCart, role: existingPayload.role || "customer", updatedAt: new Date().toISOString() }
         ]
       );
     } else {
@@ -3355,6 +3475,7 @@ app.post("/api/customers/:email/profile", async (request, response) => {
         customerName: name || existing.name || db.contacts[email]?.customerName || "Customer",
         address: preferences?.address || db.contacts[email]?.address || "Subscribed via Account Portal",
         lastOrderId: db.contacts[email]?.lastOrderId || null,
+        role: db.contacts[email]?.role || existing.role || "customer",
         updatedAt: new Date().toISOString()
       };
       writeDb(db);
@@ -4048,6 +4169,9 @@ async function upsertOrderDb(order: any) {
     const client = await pool.connect();
     try {
       await client.query("begin");
+      const existingContact = await client.query("select payload from contacts where email = $1", [order.email]);
+      const existingPayload = existingContact.rows[0]?.payload || {};
+      const contactPayload = { ...existingPayload, ...order, role: existingPayload.role || "customer" };
       await client.query(
         `insert into contacts (email, customer_name, address, last_order_id, payload)
          values ($1, $2, $3, $4, $5)
@@ -4057,7 +4181,7 @@ async function upsertOrderDb(order: any) {
            last_order_id = excluded.last_order_id,
            payload = excluded.payload,
            updated_at = now()`,
-        [order.email, order.customerName, order.address, order.id, order],
+        [order.email, order.customerName, order.address, order.id, contactPayload],
       );
       await client.query(
         `insert into orders (id, customer_email, subtotal, status, created_at, payload)
@@ -4087,7 +4211,8 @@ async function upsertOrderDb(order: any) {
       customerName: order.customerName,
       address: order.address,
       lastOrderId: order.id,
-      payload: order,
+      role: db.contacts[order.email.toLowerCase()]?.role || "customer",
+      payload: { ...order, role: db.contacts[order.email.toLowerCase()]?.role || "customer" },
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     };
@@ -4099,10 +4224,17 @@ async function upsertOrderDb(order: any) {
 async function getContactsDb() {
   if (usePostgres) {
     const result = await pool.query(
-      `select email, customer_name as "customerName", address, last_order_id as "lastOrderId", updated_at as "updatedAt" 
+      `select email, customer_name as "customerName", address, last_order_id as "lastOrderId", updated_at as "updatedAt", payload
        from contacts order by updated_at desc`
     );
-    return result.rows;
+    return result.rows.map((row) => ({
+      email: row.email,
+      customerName: row.customerName,
+      address: row.address,
+      lastOrderId: row.lastOrderId,
+      role: row.payload?.role || (row.email.toLowerCase() === adminEmail.toLowerCase() ? "admin" : "customer"),
+      updatedAt: row.updatedAt,
+    }));
   } else {
     const db = readDb();
     return Object.values(db.contacts)
@@ -4111,6 +4243,7 @@ async function getContactsDb() {
         customerName: c.customerName,
         address: c.address,
         lastOrderId: c.lastOrderId || null,
+        role: c.role || c.payload?.role || (String(c.email || "").toLowerCase() === adminEmail.toLowerCase() ? "admin" : "customer"),
         updatedAt: c.updatedAt
       }))
       .sort((a: any, b: any) => b.updatedAt.localeCompare(a.updatedAt));

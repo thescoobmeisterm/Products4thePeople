@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.4.0 — 2026-06-07
+
+### Added
+- Added Admin Customers user management for creating customer/admin users, changing roles, and removing users from the customer directory.
+- Added admin contact role and delete API endpoints with role preservation across newsletter, profile, and order updates.
+- Added storefront profile role syncing so promoted users can receive admin access after sign-in.
+
 ## v1.3.2 — 2026-06-05
 
 ### Added

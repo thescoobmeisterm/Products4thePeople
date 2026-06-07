@@ -191,6 +191,26 @@ export async function getContacts() {
   return apiFetch<{ contacts: any[] }>("/contacts");
 }
 
+export async function createContact(input: { email: string; customerName?: string; source?: string; role?: "customer" | "admin" }) {
+  return apiFetch<{ contact: any }>("/contacts", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function updateContactRole(email: string, role: "customer" | "admin") {
+  return apiFetch<{ contact: any }>(`/contacts/${encodeURIComponent(email)}/role`, {
+    method: "PATCH",
+    body: JSON.stringify({ role }),
+  });
+}
+
+export async function deleteContact(email: string) {
+  return apiFetch<{ ok: boolean; message: string }>(`/contacts/${encodeURIComponent(email)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function testApi() {
   const healthUrl = apiBaseUrl === "/api" ? "/health" : `${apiBaseUrl.replace(/\/api$/, "")}/health`;
   const response = await fetch(healthUrl);
