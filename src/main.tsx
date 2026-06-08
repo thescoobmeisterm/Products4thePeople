@@ -3490,6 +3490,10 @@ function Storefront({
     }
   });
   const [isAuthOpen, setIsAuthOpen] = React.useState(false);
+  const [authEmail, setAuthEmail] = React.useState("");
+  const [authPasswordInput, setAuthPasswordInput] = React.useState("");
+  const [authName, setAuthName] = React.useState("");
+  const [authError, setAuthError] = React.useState("");
   const [isPortalOpen, setIsPortalOpen] = React.useState(false);
   const [isTrackOrderOpen, setIsTrackOrderOpen] = React.useState(false);
   const [trackOrderId, setTrackOrderId] = React.useState("");
@@ -4163,21 +4167,41 @@ function Storefront({
     }
   };
 
-  const handleMockLogin = (emailInput: string, nameInput: string) => {
-    const cleanEmail = emailInput.trim().toLowerCase();
-    const cleanName = nameInput.trim() || "Customer";
-    if (!isValidEmail(cleanEmail)) return;
+  const handleEmailPasswordLogin = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const cleanEmail = authEmail.trim().toLowerCase();
+    const cleanName = authName.trim() || cleanEmail.split("@")[0] || "Customer";
+    const isPrimaryAdmin = cleanEmail === adminEmail.toLowerCase();
+
+    if (!isValidEmail(cleanEmail)) {
+      setAuthError("Enter a valid email address.");
+      return;
+    }
+
+    if (!authPasswordInput.trim()) {
+      setAuthError("Enter your password.");
+      return;
+    }
+
+    if (isPrimaryAdmin && authPasswordInput !== adminPassword) {
+      setAuthError("Admin password does not match the configured admin credentials.");
+      return;
+    }
 
     const user = {
       email: cleanEmail,
       name: cleanName,
       avatar: "", // empty will fall back to SVG initials
-      isAdmin: cleanEmail === adminEmail.toLowerCase(),
+      isAdmin: isPrimaryAdmin,
     };
 
     setCurrentUser(user);
     localStorage.setItem("p4tp_customer", JSON.stringify(user));
     setIsAuthOpen(false);
+    setAuthEmail("");
+    setAuthPasswordInput("");
+    setAuthName("");
+    setAuthError("");
     
     // If logging in as admin, also sync admin authed session!
     if (user.isAdmin) {
@@ -5399,67 +5423,37 @@ function Storefront({
                 <div id="google-signin-btn" style={{ minHeight: '44px' }}></div>
                 {!(import.meta.env.VITE_GOOGLE_CLIENT_ID || (window as any).VITE_GOOGLE_CLIENT_ID) && (
                   <p className="auth-info-note">
-                    Live Google OAuth is inactive (no <code>VITE_GOOGLE_CLIENT_ID</code> in environment). Using Google Auth simulator.
+                    Live Google OAuth is inactive. Use email and password sign-in below.
                   </p>
                 )}
               </div>
 
               <div className="auth-divider">
-                <span>or continue with a demo profile</span>
+                <span>Email sign in</span>
               </div>
 
-              {/* Demo Logins */}
-              <div className="demo-users-grid">
-                <button
-                  type="button"
-                  className="demo-user-card"
-                  onClick={() => handleMockLogin("jane@example.com", "Jane Customer")}
-                >
-                  <div className="demo-avatar" style={{ background: config.soft, color: config.accent }}>JC</div>
-                  <div className="demo-details">
-                    <strong>Jane Customer</strong>
-                    <span>jane@example.com</span>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  className="demo-user-card"
-                  onClick={() => handleMockLogin(adminEmail, "Admin Developer")}
-                >
-                  <div className="demo-avatar" style={{ background: "#fee2e2", color: "#ef4444" }}>AD</div>
-                  <div className="demo-details">
-                    <strong>Admin Developer</strong>
-                    <span>{adminEmail}</span>
-                  </div>
-                </button>
-              </div>
-
-              <div className="auth-divider">
-                <span>or sign in with any email</span>
-              </div>
-
-              {/* Custom login form */}
               <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const target = e.currentTarget;
-                  const emailVal = (target.elements.namedItem("customEmail") as HTMLInputElement).value;
-                  const nameVal = (target.elements.namedItem("customName") as HTMLInputElement).value;
-                  handleMockLogin(emailVal, nameVal);
-                }}
+                onSubmit={handleEmailPasswordLogin}
                 className="custom-login-form"
               >
                 <div className="input-group">
                   <label htmlFor="customName">Full Name</label>
-                  <input id="customName" name="customName" placeholder="e.g. Sarah Connor" required />
+                  <input id="customName" name="customName" value={authName} onChange={(event) => setAuthName(event.target.value)} placeholder="e.g. Sarah Connor" />
                 </div>
                 <div className="input-group">
                   <label htmlFor="customEmail">Email Address</label>
-                  <input id="customEmail" name="customEmail" type="email" placeholder="e.g. sarah@example.com" required />
+                  <input id="customEmail" name="customEmail" type="email" value={authEmail} onChange={(event) => setAuthEmail(event.target.value)} placeholder="e.g. sarah@example.com" required />
                 </div>
+                <div className="input-group">
+                  <label htmlFor="customPassword">Password</label>
+                  <input id="customPassword" name="customPassword" type="password" value={authPasswordInput} onChange={(event) => setAuthPasswordInput(event.target.value)} placeholder="Enter your password" required />
+                </div>
+                {authError && <div className="auth-error" role="alert">{authError}</div>}
+                <p className="auth-info-note">
+                  Use your configured admin email and password for admin access. Customer accounts can sign in with email and password until Google OAuth is connected.
+                </p>
                 <button type="submit" className="primary full" style={{ minHeight: '44px' }}>
-                  🔑 Sign In with Simulated Credentials
+                  Sign In
                 </button>
               </form>
             </div>

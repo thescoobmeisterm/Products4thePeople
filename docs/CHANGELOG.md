@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.4.2 — 2026-06-08
+
+### Changed
+- Replaced the customer portal demo profiles with email/password sign-in and kept configured admin email/password access for the admin page.
+- Removed unused demo profile styles from the storefront authentication modal.
+
 ## v1.4.1 — 2026-06-08
 
 ### Fixed
