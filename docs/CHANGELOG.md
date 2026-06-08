@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.4.1 — 2026-06-08
+
+### Fixed
+- Fixed frontend settings, checkout, customer profile, order tracking, AI, and contact calls so they use `VITE_API_BASE_URL` instead of hard-coded `/api` paths.
+- Added GitHub Pages build support for production `VITE_*` secrets, including `VITE_API_BASE_URL`, and documented the GitHub Pages plus IONOS API setup path.
+
 ## v1.4.0 — 2026-06-07
 
 ### Added

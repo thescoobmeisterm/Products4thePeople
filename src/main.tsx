@@ -247,6 +247,20 @@ const abandonedCartStorageKey = "p4tp-abandoned-carts";
 const emailPopupDismissedKey = "p4tp-email-popup-dismissed";
 const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || "admin@products4thepeople.com";
 const adminPassword = import.meta.env.VITE_ADMIN_PASSWORD || "change-this-password";
+const storefrontApiBaseUrl = (import.meta.env.VITE_API_BASE_URL || "/api").replace(/\/$/, "");
+
+function apiUrl(path: string) {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return `${storefrontApiBaseUrl}${normalized}`;
+}
+
+function adminRequestHeaders(extra: Record<string, string> = {}) {
+  return {
+    "x-admin-email": adminEmail,
+    "x-admin-password": adminPassword,
+    ...extra,
+  };
+}
 
 const marketingConfig = {
   ga4MeasurementId: import.meta.env.VITE_GA4_MEASUREMENT_ID || "",
@@ -680,13 +694,9 @@ function App() {
     setIsSavingConfig(true);
     setNotice("Saving system configurations in .env...");
     try {
-      const adminHeaders = {
-        "x-admin-email": adminEmail,
-        "x-admin-password": adminPassword,
-        "Content-Type": "application/json",
-      };
+      const adminHeaders = adminRequestHeaders({ "Content-Type": "application/json" });
       
-      const response = await fetch("/api/settings/config", {
+      const response = await fetch(apiUrl("/settings/config"), {
         method: "POST",
         headers: adminHeaders,
         body: JSON.stringify({
@@ -710,14 +720,15 @@ function App() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to save credentials.");
+        const detail = await response.text().catch(() => "");
+        throw new Error(`Failed to save credentials (${response.status}). ${detail}`.trim());
       }
 
       const data = await response.json();
       setNotice(data.message || "Configurations updated successfully!");
       
       // Refresh current config view
-      const configRes = await fetch("/api/settings/config", { headers: adminHeaders });
+      const configRes = await fetch(apiUrl("/settings/config"), { headers: adminHeaders });
       if (configRes.ok) {
         const config = await configRes.json();
         setSettingsStripeKey(config.stripeSecretKey || "");
@@ -773,11 +784,7 @@ function App() {
 
         // Fetch current system environmental configurations
         try {
-          const adminHeaders = {
-            "x-admin-email": "admin@products4thepeople.com",
-            "x-admin-password": "change-this-password",
-          };
-          const configRes = await fetch("/api/settings/config", { headers: adminHeaders });
+          const configRes = await fetch(apiUrl("/settings/config"), { headers: adminRequestHeaders() });
           if (configRes.ok && isMounted) {
             const config = await configRes.json();
             setSettingsStripeKey(config.stripeSecretKey || "");
@@ -1089,7 +1096,7 @@ function App() {
     setMarketingLeads((current) => upsertMarketingLead(current, { ...lead, email: normalizedEmail }));
     
     try {
-      await fetch("/api/contacts", {
+      await fetch(apiUrl("/contacts"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -2822,12 +2829,9 @@ function AiStudioDialog({
     setLoading(true);
     setOutput("");
     try {
-      const adminHeaders = {
-        "x-admin-email": "admin@products4thepeople.com",
-        "x-admin-password": "change-this-password",
-      };
+      const adminHeaders = adminRequestHeaders();
       
-      const response = await fetch("/api/ai/generate", {
+      const response = await fetch(apiUrl("/ai/generate"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -3768,17 +3772,14 @@ function Storefront({
 
     const loadCustomerData = async () => {
       try {
-        const adminHeaders = {
-          "x-admin-email": "admin@products4thepeople.com",
-          "x-admin-password": "change-this-password",
-        };
+        const adminHeaders = adminRequestHeaders();
 
         // Pre-fill checkout form inputs with logged in profile credentials
         setEmail(currentUser.email);
         setCustomerName(currentUser.name);
 
         // Fetch saved profile & cart from database
-        const profileRes = await fetch(`/api/customers/${encodeURIComponent(currentUser.email)}/profile`, { headers: adminHeaders });
+        const profileRes = await fetch(apiUrl(`/customers/${encodeURIComponent(currentUser.email)}/profile`), { headers: adminHeaders });
         if (profileRes.ok) {
           const profile = await profileRes.json();
           const profileIsAdmin = profile.role === "admin" || currentUser.email.toLowerCase() === adminEmail.toLowerCase();
@@ -3807,7 +3808,7 @@ function Storefront({
         }
 
         // Fetch order history from database
-        const ordersRes = await fetch(`/api/orders/customer/${encodeURIComponent(currentUser.email)}`, { headers: adminHeaders });
+        const ordersRes = await fetch(apiUrl(`/orders/customer/${encodeURIComponent(currentUser.email)}`), { headers: adminHeaders });
         if (ordersRes.ok) {
           const data = await ordersRes.json();
           setCustomerOrders(data.orders || []);
@@ -3826,12 +3827,8 @@ function Storefront({
     
     const syncCart = async () => {
       try {
-        const adminHeaders = {
-          "x-admin-email": "admin@products4thepeople.com",
-          "x-admin-password": "change-this-password",
-          "Content-Type": "application/json",
-        };
-        await fetch(`/api/customers/${encodeURIComponent(currentUser.email)}/profile`, {
+        const adminHeaders = adminRequestHeaders({ "Content-Type": "application/json" });
+        await fetch(apiUrl(`/customers/${encodeURIComponent(currentUser.email)}/profile`), {
           method: "POST",
           headers: adminHeaders,
           body: JSON.stringify({
@@ -3913,7 +3910,7 @@ function Storefront({
       setCheckoutStatus("confirming");
       try {
         const pendingOrder = readPendingCheckout();
-        const response = await fetch(`/api/checkout-session?session_id=${encodeURIComponent(sessionId)}`);
+        const response = await fetch(apiUrl(`/checkout-session?session_id=${encodeURIComponent(sessionId)}`));
         if (!response.ok) throw new Error("Could not verify Stripe payment status.");
         const session = (await response.json()) as { paymentStatus?: Order["paymentStatus"]; customerEmail?: string };
 
@@ -4128,12 +4125,8 @@ function Storefront({
 
   const syncProfileToBackend = async (email: string, name: string, preferences: any, savedCart: any) => {
     try {
-      const adminHeaders = {
-        "x-admin-email": "admin@products4thepeople.com",
-        "x-admin-password": "change-this-password",
-        "Content-Type": "application/json",
-      };
-      await fetch(`/api/customers/${encodeURIComponent(email)}/profile`, {
+      const adminHeaders = adminRequestHeaders({ "Content-Type": "application/json" });
+      await fetch(apiUrl(`/customers/${encodeURIComponent(email)}/profile`), {
         method: "POST",
         headers: adminHeaders,
         body: JSON.stringify({ name, preferences, savedCart }),
@@ -4222,11 +4215,7 @@ function Storefront({
     setTrackingLoading(true);
     setTrackingOrderResult(null);
     try {
-      const adminHeaders = {
-        "x-admin-email": "admin@products4thepeople.com",
-        "x-admin-password": "change-this-password",
-      };
-      const response = await fetch(`/api/orders/${encodeURIComponent(trackOrderId.trim())}`, { headers: adminHeaders });
+      const response = await fetch(apiUrl(`/orders/${encodeURIComponent(trackOrderId.trim())}`), { headers: adminRequestHeaders() });
       if (!response.ok) {
         throw new Error("Order not found. Please double-check your code.");
       }
@@ -4275,7 +4264,7 @@ function Storefront({
     setCheckoutStatus("redirecting");
     setConfirmation("");
     try {
-      const response = await fetch("/api/create-checkout-session", {
+      const response = await fetch(apiUrl("/create-checkout-session"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -7659,7 +7648,7 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
       setNotice(res.message);
       
       // Update local catalog products list
-      const productRes = await fetch("/api/products");
+      const productRes = await fetch(apiUrl("/products"));
       if (productRes.ok) {
         const prodData = await productRes.json();
         setProducts(prodData.products || []);

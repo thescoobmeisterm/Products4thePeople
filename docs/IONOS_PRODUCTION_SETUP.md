@@ -88,6 +88,22 @@ Value: YOUR_IONOS_SERVER_IP
 
 For the setup below, you do not need a separate API subdomain because Nginx will proxy `/api` on the main domain.
 
+If you keep the frontend on GitHub Pages and run only the API on IONOS, create an API subdomain instead:
+
+```text
+Type: A
+Host: api
+Value: YOUR_IONOS_SERVER_IP
+```
+
+Then build the frontend with:
+
+```env
+VITE_API_BASE_URL=https://api.products4thepeople.com/api
+```
+
+Without this, the browser will try to save settings to `https://products4thepeople.com/api/settings/config`, which fails when the domain is served by GitHub Pages instead of your IONOS API.
+
 Check DNS from your local machine:
 
 ```bash
@@ -305,6 +321,20 @@ Important:
 - `VITE_*` variables are baked into the React build. If you change them, rebuild the frontend.
 - Non-`VITE_*` API variables need an API restart.
 - Never commit `.env`.
+
+If GitHub Pages is building your frontend, add these in GitHub under Repository Settings > Secrets and variables > Actions > Secrets:
+
+```text
+VITE_API_BASE_URL=https://api.products4thepeople.com/api
+VITE_ADMIN_EMAIL=your-admin-email@example.com
+VITE_ADMIN_PASSWORD=your-admin-password
+VITE_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+VITE_GA4_MEASUREMENT_ID=G-XXXXXXXXXX
+VITE_META_PIXEL_ID=1234567890
+VITE_TIKTOK_PIXEL_ID=XXXXXXXXXX
+```
+
+Push a new release or manually rerun the GitHub Pages workflow after adding those secrets.
 
 ---
 
@@ -785,4 +815,3 @@ Both must point to the VPS IP before Certbot can issue certificates.
 - [ ] AI key added and generators tested.
 - [ ] Analytics IDs added and verified.
 - [ ] Backup plan created.
-
