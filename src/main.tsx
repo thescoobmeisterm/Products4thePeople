@@ -3053,6 +3053,10 @@ function App() {
         <ProductDialog
           product={editingProduct}
           stores={stores}
+          mediaAssets={mediaAssets}
+          onMediaCreated={(asset) => {
+            setMediaAssets((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
+          }}
           onCancel={() => {
             setEditingProduct(null);
             setIsFormOpen(false);
@@ -3286,11 +3290,15 @@ function AiStudioDialog({
 function ProductDialog({
   product,
   stores,
+  mediaAssets,
+  onMediaCreated,
   onCancel,
   onSave,
 }: {
   product: Product | null;
   stores: Record<string, StorefrontNicheConfig>;
+  mediaAssets: MediaAsset[];
+  onMediaCreated: (asset: MediaAsset) => void;
   onCancel: () => void;
   onSave: (product: ProductForm) => void;
 }) {
@@ -3321,6 +3329,46 @@ function ProductDialog({
 
   const setField = <Key extends keyof ProductForm>(key: Key, value: ProductForm[Key]) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+  const [imageUploadFile, setImageUploadFile] = React.useState<File | null>(null);
+  const [isUploadingImage, setIsUploadingImage] = React.useState(false);
+  const [imageManagerNotice, setImageManagerNotice] = React.useState("");
+  const imageAssets = mediaAssets.filter((asset) => asset.kind === "image");
+
+  const addImageToProduct = (url: string) => {
+    const nextImages = Array.from(new Set([url, ...(form.images || [])]));
+    setField("images", nextImages);
+  };
+
+  const removeImageFromProduct = (url: string) => {
+    setField("images", (form.images || []).filter((image) => image !== url));
+  };
+
+  const uploadProductImage = async () => {
+    if (!imageUploadFile) return;
+    setIsUploadingImage(true);
+    setImageManagerNotice("");
+    try {
+      const response = await uploadMediaAsset({
+        title: `${form.name || product?.name || "Product"} image`,
+        kind: "image",
+        placement: "listing",
+        fileName: imageUploadFile.name,
+        mimeType: imageUploadFile.type || "image/jpeg",
+        dataUrl: await readFileAsDataUrl(imageUploadFile),
+        productId: product?.id,
+        caption: form.name || product?.name || undefined,
+        tag: form.niche || product?.niche || "Product",
+      });
+      onMediaCreated(response.asset);
+      addImageToProduct(response.asset.url);
+      setImageUploadFile(null);
+      setImageManagerNotice("Image uploaded and added to this product.");
+    } catch (error) {
+      setImageManagerNotice(error instanceof Error ? error.message : "Image upload failed.");
+    } finally {
+      setIsUploadingImage(false);
+    }
   };
 
   return (
@@ -3390,6 +3438,78 @@ function ProductDialog({
               }
               placeholder="One image URL per line"
             />
+          </Field>
+          <Field label="Product image upload & browser" wide>
+            <div style={{ display: 'grid', gap: '14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) auto', gap: '10px', alignItems: 'center' }}>
+                <input
+                  accept="image/*"
+                  type="file"
+                  onChange={(event) => setImageUploadFile(event.target.files?.[0] || null)}
+                  style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '9px 10px', fontSize: '13px', background: '#ffffff' }}
+                />
+                <button
+                  type="button"
+                  onClick={uploadProductImage}
+                  disabled={!imageUploadFile || isUploadingImage}
+                  style={{ border: 'none', background: '#176c61', color: '#ffffff', borderRadius: '8px', minHeight: '38px', padding: '0 14px', fontWeight: 700, cursor: !imageUploadFile || isUploadingImage ? 'not-allowed' : 'pointer', opacity: !imageUploadFile || isUploadingImage ? 0.6 : 1 }}
+                >
+                  {isUploadingImage ? "Uploading..." : "Upload"}
+                </button>
+              </div>
+              {imageManagerNotice && (
+                <div style={{ border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e40af', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', fontWeight: 600 }}>
+                  {imageManagerNotice}
+                </div>
+              )}
+              {(form.images || []).length > 0 && (
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Current product images</span>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px' }}>
+                    {(form.images || []).map((image) => (
+                      <div key={image} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
+                        <img src={image} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block', background: '#f1f5f9' }} />
+                        <button
+                          type="button"
+                          onClick={() => removeImageFromProduct(image)}
+                          style={{ width: '100%', border: 'none', borderTop: '1px solid #e2e8f0', background: '#fef2f2', color: '#dc2626', minHeight: '30px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div style={{ display: 'grid', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Browse media library</span>
+                {imageAssets.length === 0 ? (
+                  <div style={{ border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '14px', color: '#64748b', fontSize: '12px' }}>
+                    No saved image assets yet. Upload above or use the Media tab to build the library.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px', maxHeight: '260px', overflow: 'auto', paddingRight: '2px' }}>
+                    {imageAssets.map((asset) => {
+                      const isSelected = Boolean(form.images?.includes(asset.url));
+                      return (
+                        <button
+                          key={asset.id}
+                          type="button"
+                          onClick={() => addImageToProduct(asset.url)}
+                          disabled={isSelected}
+                          style={{ border: isSelected ? '2px solid #176c61' : '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff', padding: 0, cursor: isSelected ? 'default' : 'pointer', textAlign: 'left' }}
+                        >
+                          <img src={asset.url} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block', background: '#f1f5f9' }} />
+                          <span style={{ display: 'block', padding: '7px 8px', color: isSelected ? '#176c61' : '#334155', fontSize: '11.5px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {isSelected ? "Added" : asset.title}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
           </Field>
           <Field label="SEO title" wide>
             <input value={form.seoTitle || ""} onChange={(event) => setField("seoTitle", event.target.value)} />

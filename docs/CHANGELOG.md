@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.6.0 - 2026-06-09
+
+### Added
+- Added product-editor image upload controls so admins can upload an image while editing a listing and immediately add it to that product gallery.
+- Added a product-editor media-library browser for selecting existing image assets without leaving the product form.
+
 ## v1.5.0 - 2026-06-09
 
 ### Added
