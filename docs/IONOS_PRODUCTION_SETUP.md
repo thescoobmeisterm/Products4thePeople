@@ -292,6 +292,7 @@ VITE_GOOGLE_CLIENT_ID=
 OPENAI_API_KEY=
 
 PUBLIC_SITE_URL=https://products4thepeople.com
+PUBLIC_API_URL=https://products4thepeople.com
 PUBLIC_APP_BASE=/
 
 BASIC_TAX_RATE=0.06

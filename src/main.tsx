@@ -73,6 +73,11 @@ import {
   createContact,
   updateContactRole,
   deleteContact,
+  getMediaAssets,
+  getAdminMediaAssets,
+  addMediaUrl,
+  uploadMediaAsset,
+  deleteMediaAsset,
   getOpportunities,
   createOpportunity,
   getOpportunityDetails,
@@ -117,6 +122,7 @@ import {
   getSeoDashboard,
   type Article,
   type KnowledgeArticle,
+  type MediaAsset,
   type SeoPage,
   type SeoDashboardStats,
   type ApiOrder,
@@ -484,6 +490,7 @@ const navItems = [
   ["Imports", Import],
   ["Orders", ClipboardList],
   ["Customers", Users],
+  ["Media", Play],
   ["Funnels", Mail],
   ["Analytics", BarChart3],
   ["AI Studio", Bot],
@@ -526,6 +533,15 @@ function makeProduct(
     status,
     inventory,
   };
+}
+
+function readFileAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error || new Error("Failed to read file."));
+    reader.readAsDataURL(file);
+  });
 }
 
 function App() {
@@ -581,6 +597,19 @@ function App() {
   const [seoSitemapPreview, setSeoSitemapPreview] = React.useState("");
   const [seoSubTab, setSeoSubTab] = React.useState<"overview" | "articles" | "pages" | "kb" | "sitemap">("overview");
   const [dbContacts, setDbContacts] = React.useState<any[]>([]);
+  const [mediaAssets, setMediaAssets] = React.useState<MediaAsset[]>([]);
+  const [mediaTitle, setMediaTitle] = React.useState("");
+  const [mediaUrl, setMediaUrl] = React.useState("");
+  const [mediaKind, setMediaKind] = React.useState<"image" | "video">("image");
+  const [mediaPlacement, setMediaPlacement] = React.useState<"library" | "listing" | "video_section">("library");
+  const [mediaProductId, setMediaProductId] = React.useState("");
+  const [mediaHandle, setMediaHandle] = React.useState("");
+  const [mediaCaption, setMediaCaption] = React.useState("");
+  const [mediaTag, setMediaTag] = React.useState("");
+  const [mediaFile, setMediaFile] = React.useState<File | null>(null);
+  const [isSavingMedia, setIsSavingMedia] = React.useState(false);
+  const [listingMediaProductId, setListingMediaProductId] = React.useState("");
+  const [listingMediaAssetId, setListingMediaAssetId] = React.useState("");
   const [newCustomerEmail, setNewCustomerEmail] = React.useState("");
   const [newCustomerName, setNewCustomerName] = React.useState("");
   const [newCustomerRole, setNewCustomerRole] = React.useState<"customer" | "admin">("customer");
@@ -766,7 +795,7 @@ function App() {
 
     async function loadBackendData() {
       try {
-        const [productResponse, orderResponse, contactResponse] = await Promise.all([getProducts(), getOrders(), getContacts()]);
+        const [productResponse, orderResponse, contactResponse, mediaResponse] = await Promise.all([getProducts(), getOrders(), getContacts(), getMediaAssets()]);
         if (!isMounted) return;
 
         if (productResponse.products.length === 0) {
@@ -781,6 +810,7 @@ function App() {
 
         setOrders(orderResponse.orders.map(normalizeStoredOrder));
         setDbContacts(contactResponse.contacts);
+        setMediaAssets(mediaResponse.assets || []);
 
         // Fetch current system environmental configurations
         try {
@@ -947,6 +977,92 @@ function App() {
       setNotice(`${email} added as ${contact.role}.`);
     } catch (error) {
       setNotice(error instanceof Error ? `Customer add failed: ${error.message}` : "Customer add failed.");
+    }
+  };
+
+  const resetMediaForm = () => {
+    setMediaTitle("");
+    setMediaUrl("");
+    setMediaKind("image");
+    setMediaPlacement("library");
+    setMediaProductId("");
+    setMediaHandle("");
+    setMediaCaption("");
+    setMediaTag("");
+    setMediaFile(null);
+  };
+
+  const saveMediaAsset = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const title = mediaTitle.trim() || mediaFile?.name.trim();
+    if (!title || (!mediaFile && !mediaUrl.trim())) return;
+    setIsSavingMedia(true);
+    try {
+      const baseInput = {
+        title,
+        kind: mediaKind,
+        placement: mediaPlacement,
+        productId: mediaProductId || undefined,
+        handle: mediaHandle.trim() || undefined,
+        caption: mediaCaption.trim() || undefined,
+        tag: mediaTag.trim() || undefined,
+      };
+      const response = mediaFile
+        ? await uploadMediaAsset({
+            ...baseInput,
+            fileName: mediaFile.name,
+            mimeType: mediaFile.type || (mediaKind === "video" ? "video/mp4" : "image/jpeg"),
+            dataUrl: await readFileAsDataUrl(mediaFile),
+          })
+        : await addMediaUrl({
+            ...baseInput,
+            url: mediaUrl.trim(),
+          });
+      setMediaAssets((current) => [response.asset, ...current.filter((asset) => asset.id !== response.asset.id)]);
+      resetMediaForm();
+      setNotice(`${response.asset.title} added to the media library.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? `Media save failed: ${error.message}` : "Media save failed.");
+    } finally {
+      setIsSavingMedia(false);
+    }
+  };
+
+  const refreshMediaAssets = async () => {
+    try {
+      const response = await getAdminMediaAssets();
+      setMediaAssets(response.assets || []);
+      setNotice("Media library refreshed.");
+    } catch (error) {
+      setNotice(error instanceof Error ? `Media refresh failed: ${error.message}` : "Media refresh failed.");
+    }
+  };
+
+  const removeMediaAsset = async (id: string) => {
+    const asset = mediaAssets.find((item) => item.id === id);
+    if (!asset || !window.confirm(`Delete "${asset.title}" from the media library?`)) return;
+    try {
+      await deleteMediaAsset(id);
+      setMediaAssets((current) => current.filter((item) => item.id !== id));
+      setNotice(`${asset.title} deleted from the media library.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? `Media delete failed: ${error.message}` : "Media delete failed.");
+    }
+  };
+
+  const assignMediaToProduct = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const asset = mediaAssets.find((item) => item.id === listingMediaAssetId && item.kind === "image");
+    const product = products.find((item) => item.id === listingMediaProductId);
+    if (!asset || !product) return;
+    const nextImages = Array.from(new Set([asset.url, ...(product.images || [])]));
+    const updatedProduct = { ...product, images: nextImages };
+    try {
+      const response = await saveApiProduct(updatedProduct);
+      setProducts((current) => current.map((item) => (item.id === product.id ? response.product : item)));
+      setNotice(`${asset.title} added to ${product.name}.`);
+    } catch (error) {
+      setNotice(error instanceof Error ? `Listing media update failed: ${error.message}` : "Listing media update failed.");
     }
   };
 
@@ -1240,6 +1356,7 @@ function App() {
         initialMode={getStorefrontModeFromHash()}
         stores={stores}
         orders={orders}
+        mediaAssets={mediaAssets}
         onBackToAdmin={() => {
           setIsAdminAuthed(loadAdminSession());
           window.location.hash = "#dashboard";
@@ -1847,6 +1964,230 @@ function App() {
                 </table>
               </div>
             </article>
+          </div>
+        )}
+
+        {adminTab === "media" && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(320px, 0.95fr) minmax(460px, 1.25fr)', gap: '16px', alignItems: 'start' }}>
+            <article className="panel" id="media-upload">
+              <div className="panel-header">
+                <div>
+                  <p>Media manager</p>
+                  <h2>Upload or add URL</h2>
+                </div>
+                <Play size={22} />
+              </div>
+              <form onSubmit={saveMediaAsset} style={{ display: 'grid', gap: '12px', marginTop: '16px' }}>
+                <label style={{ display: 'grid', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>File upload</span>
+                  <input
+                    accept="image/*,video/*"
+                    type="file"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0] || null;
+                      setMediaFile(file);
+                      if (file) {
+                        if (!mediaTitle.trim()) setMediaTitle(file.name.replace(/\.[^.]+$/, ""));
+                        if (file.type.startsWith("video/")) setMediaKind("video");
+                        if (file.type.startsWith("image/")) setMediaKind("image");
+                      }
+                    }}
+                    style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', background: '#ffffff', fontSize: '13px' }}
+                  />
+                  <span style={{ fontSize: '11px', color: '#68777d' }}>Use this for product photos, gallery images, and short video-section clips.</span>
+                </label>
+                <label style={{ display: 'grid', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Hosted media URL</span>
+                  <input
+                    value={mediaUrl}
+                    onChange={(event) => setMediaUrl(event.target.value)}
+                    placeholder="https://..."
+                    style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                  />
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Title</span>
+                    <input
+                      value={mediaTitle}
+                      onChange={(event) => setMediaTitle(event.target.value)}
+                      placeholder="Hero demo clip"
+                      style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Kind</span>
+                    <select
+                      value={mediaKind}
+                      onChange={(event) => setMediaKind(event.target.value as "image" | "video")}
+                      style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                    >
+                      <option value="image">Image</option>
+                      <option value="video">Video</option>
+                    </select>
+                  </label>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Placement</span>
+                    <select
+                      value={mediaPlacement}
+                      onChange={(event) => setMediaPlacement(event.target.value as MediaAsset["placement"])}
+                      style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                    >
+                      <option value="library">Library only</option>
+                      <option value="listing">Product listing</option>
+                      <option value="video_section">Video section</option>
+                    </select>
+                  </label>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Product</span>
+                    <select
+                      value={mediaProductId}
+                      onChange={(event) => setMediaProductId(event.target.value)}
+                      style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                    >
+                      <option value="">No product link</option>
+                      {products.map((product) => (
+                        <option key={product.id} value={product.id}>{product.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Creator handle</span>
+                    <input
+                      value={mediaHandle}
+                      onChange={(event) => setMediaHandle(event.target.value)}
+                      placeholder="@creator"
+                      style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                    />
+                  </label>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Tag</span>
+                    <input
+                      value={mediaTag}
+                      onChange={(event) => setMediaTag(event.target.value)}
+                      placeholder="Beauty, Demo, UGC"
+                      style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                    />
+                  </label>
+                </div>
+                <label style={{ display: 'grid', gap: '6px' }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Caption</span>
+                  <textarea
+                    value={mediaCaption}
+                    onChange={(event) => setMediaCaption(event.target.value)}
+                    placeholder="Short caption for the video section or internal note."
+                    rows={3}
+                    style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', resize: 'vertical', fontFamily: 'inherit' }}
+                  />
+                </label>
+                <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <button type="button" onClick={resetMediaForm} style={{ border: '1px solid #dce3e7', background: '#ffffff', borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }}>
+                    Clear
+                  </button>
+                  <button className="primary" type="submit" disabled={isSavingMedia || (!mediaFile && !mediaUrl.trim())} style={{ border: 'none', background: '#176c61', color: '#ffffff', borderRadius: '8px', padding: '10px 16px', fontWeight: 700, cursor: 'pointer' }}>
+                    {isSavingMedia ? "Saving..." : "Save media"}
+                  </button>
+                </div>
+              </form>
+            </article>
+
+            <div style={{ display: 'grid', gap: '16px' }}>
+              <article className="panel" id="listing-media">
+                <div className="panel-header">
+                  <div>
+                    <p>Listing media</p>
+                    <h2>Add image to product gallery</h2>
+                  </div>
+                  <Package size={22} />
+                </div>
+                <form onSubmit={assignMediaToProduct} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '10px', alignItems: 'end', marginTop: '16px' }}>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Product</span>
+                    <select
+                      value={listingMediaProductId}
+                      onChange={(event) => setListingMediaProductId(event.target.value)}
+                      required
+                      style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                    >
+                      <option value="">Choose product</option>
+                      {products.map((product) => (
+                        <option key={product.id} value={product.id}>{product.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={{ display: 'grid', gap: '6px' }}>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Image asset</span>
+                    <select
+                      value={listingMediaAssetId}
+                      onChange={(event) => setListingMediaAssetId(event.target.value)}
+                      required
+                      style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
+                    >
+                      <option value="">Choose image</option>
+                      {mediaAssets.filter((asset) => asset.kind === "image").map((asset) => (
+                        <option key={asset.id} value={asset.id}>{asset.title}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <button className="primary" type="submit" style={{ border: 'none', background: '#176c61', color: '#ffffff', borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: 'pointer' }}>
+                    Attach
+                  </button>
+                </form>
+              </article>
+
+              <article className="panel wide" id="media-library">
+                <div className="panel-header">
+                  <div>
+                    <p>Media library</p>
+                    <h2>{mediaAssets.length} saved assets</h2>
+                  </div>
+                  <button type="button" onClick={refreshMediaAssets} style={{ border: '1px solid #dce3e7', background: '#ffffff', borderRadius: '8px', padding: '8px 12px', fontWeight: 700, cursor: 'pointer' }}>
+                    Refresh
+                  </button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '12px', marginTop: '16px' }}>
+                  {mediaAssets.length === 0 ? (
+                    <div style={{ gridColumn: '1 / -1', padding: '24px', border: '1px dashed #cbd5e1', borderRadius: '8px', color: '#64748b', textAlign: 'center' }}>
+                      No media assets yet. Upload a file or paste a hosted URL to start building the library.
+                    </div>
+                  ) : mediaAssets.map((asset) => {
+                    const product = asset.productId ? products.find((item) => item.id === asset.productId) : null;
+                    return (
+                      <div key={asset.id} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff', display: 'grid', gridTemplateRows: '150px auto' }}>
+                        <div style={{ background: '#0f172a', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
+                          {asset.kind === "video" ? (
+                            <video src={asset.url} controls muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <img src={asset.url} alt={asset.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          )}
+                        </div>
+                        <div style={{ padding: '12px', display: 'grid', gap: '8px' }}>
+                          <div>
+                            <strong style={{ display: 'block', fontSize: '13.5px', color: '#111827' }}>{asset.title}</strong>
+                            <span style={{ color: '#64748b', fontSize: '12px' }}>{asset.kind} / {asset.placement}{product ? ` / ${product.name}` : ""}</span>
+                          </div>
+                          {(asset.handle || asset.caption) && (
+                            <p style={{ margin: 0, color: '#475569', fontSize: '12px', lineHeight: 1.45 }}>{asset.handle ? `${asset.handle}: ` : ""}{asset.caption}</p>
+                          )}
+                          <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <a href={asset.url} target="_blank" rel="noreferrer" style={{ color: '#176c61', fontWeight: 700, fontSize: '12px', textDecoration: 'none' }}>
+                              Open
+                            </a>
+                            <button type="button" onClick={() => removeMediaAsset(asset.id)} style={{ border: '1px solid #fca5a5', background: '#fef2f2', color: '#dc2626', borderRadius: '6px', padding: '6px 10px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </article>
+            </div>
           </div>
         )}
 
@@ -3371,6 +3712,7 @@ function Storefront({
   initialMode,
   stores,
   orders,
+  mediaAssets,
   onBackToAdmin,
   onPlaceOrder,
   onCaptureLead,
@@ -3380,6 +3722,7 @@ function Storefront({
   initialMode: StorefrontMode;
   stores: Record<string, StorefrontNicheConfig>;
   orders: Order[];
+  mediaAssets: MediaAsset[];
   onBackToAdmin: () => void;
   onPlaceOrder: (order: OrderDraft) => Promise<string>;
   onCaptureLead: (lead: Omit<MarketingLead, "id" | "createdAt">) => void;
@@ -3964,6 +4307,80 @@ function Storefront({
       return matchesSubcategory && matchesSearch;
     },
   );
+  const videoSectionAssets = mediaAssets.filter((asset) => {
+    if (asset.placement !== "video_section") return false;
+    if (asset.productId) {
+      const product = products.find((item) => item.id === asset.productId);
+      return activeNiche === "general" || product?.subdomain === activeNiche;
+    }
+    return activeNiche === "general" || !asset.productId;
+  });
+  const ugcItems = videoSectionAssets.length > 0
+    ? videoSectionAssets.map((asset) => {
+        const product = asset.productId ? products.find((item) => item.id === asset.productId) : null;
+        return {
+          id: asset.id,
+          handle: asset.handle || "@products4thepeople",
+          caption: asset.caption || asset.title,
+          mediaUrl: asset.url,
+          kind: asset.kind,
+          productName: product?.name || asset.title,
+          product,
+          tag: asset.tag || product?.niche || (asset.kind === "video" ? "Video" : "Demo"),
+        };
+      })
+    : [
+        {
+          id: "ugc_1",
+          handle: "@glow_beauty_routine",
+          caption: "This LED neck lifter is now part of my morning routine.",
+          mediaUrl: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format&fit=crop&w=400&q=80",
+          kind: "image" as const,
+          productName: "LED Neck Lift Massager",
+          product: null,
+          tag: "Beauty",
+        },
+        {
+          id: "ugc_2",
+          handle: "@pup_adventure_life",
+          caption: "The portable feeding bottle is a lifesaver for road trips.",
+          mediaUrl: "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=400&q=80",
+          kind: "image" as const,
+          productName: "Portable Pet Water Bottle",
+          product: null,
+          tag: "Pets",
+        },
+        {
+          id: "ugc_3",
+          handle: "@recover_athlete_lab",
+          caption: "Soreness gone in minutes with this massage roller.",
+          mediaUrl: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=400&q=80",
+          kind: "image" as const,
+          productName: "Medusa Smart Massage Roller",
+          product: null,
+          tag: "Recovery",
+        },
+        {
+          id: "ugc_4",
+          handle: "@organized_home_nest",
+          caption: "Finally organized my kitchen drawers.",
+          mediaUrl: "https://images.unsplash.com/photo-1556911220-e15b29be8c8f?auto=format&fit=crop&w=400&q=80",
+          kind: "image" as const,
+          productName: "Drawer Organizer",
+          product: null,
+          tag: "Kitchen",
+        },
+        {
+          id: "ugc_5",
+          handle: "@detailing_car_craft",
+          caption: "Showroom finish using the microfiber spray wash.",
+          mediaUrl: "https://images.unsplash.com/photo-1507136566006-cfc505b114fc?auto=format&fit=crop&w=400&q=80",
+          kind: "image" as const,
+          productName: "Microfiber Detailing Spray Wash",
+          product: null,
+          tag: "Garage",
+        },
+      ];
   const cartItems = Object.entries(cart)
     .map(([productId, quantity]) => {
       const product = products.find((item) => item.id === productId);
@@ -4846,7 +5263,40 @@ function Storefront({
                 <h2>See It In Action</h2>
                 <p className="subtitle">Real customers, real results. Tap to shop featured gear.</p>
                 <div className="ugc-carousel">
-                  {[
+                  {videoSectionAssets.length > 0 && ugcItems.map((ugc) => {
+                    const matchedProd = ugc.product || products.find(p => p.name.toLowerCase().includes(ugc.productName.toLowerCase()) || ugc.productName.toLowerCase().includes(p.name.toLowerCase()));
+                    return (
+                      <button
+                        key={ugc.id}
+                        className="ugc-card"
+                        type="button"
+                        onClick={() => {
+                          if (matchedProd) {
+                            openProduct(matchedProd);
+                          } else {
+                            addToast(`Opening ${ugc.productName} catalog page`, "info");
+                          }
+                        }}
+                      >
+                        <span className="ugc-tag">{ugc.tag}</span>
+                        {ugc.kind === "video" ? (
+                          <video src={ugc.mediaUrl} muted playsInline preload="metadata" />
+                        ) : (
+                          <img src={ugc.mediaUrl} alt="" />
+                        )}
+                        <div className="ugc-play-overlay">
+                          <div className="ugc-play-btn">
+                            <Play size={18} fill="#11191d" style={{ marginLeft: '2px' }} />
+                          </div>
+                        </div>
+                        <div className="ugc-info">
+                          <span className="ugc-handle">{ugc.handle}</span>
+                          <span className="ugc-caption">{ugc.caption}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {videoSectionAssets.length === 0 && [
                     {
                       id: "ugc_1",
                       handle: "@glow_beauty_routine",
@@ -6882,7 +7332,7 @@ function loadMedusaConnection(): MedusaConnection {
 function isStorefrontHash(hash: string) {
   const normalized = hash.replace("#", "").toLowerCase();
   if (!normalized) return true;
-  const adminHashes = ["admin", "dashboard", "import", "orders", "customers", "funnels", "analytics", "ai", "settings", "seo-hub"];
+  const adminHashes = ["admin", "dashboard", "import", "orders", "customers", "media", "funnels", "analytics", "ai", "settings", "seo-hub"];
   const isAdmin = adminHashes.includes(normalized) || normalized.startsWith("admin-");
   return !isAdmin;
 }

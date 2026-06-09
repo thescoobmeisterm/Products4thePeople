@@ -47,6 +47,23 @@ export type ApiOrder = ApiOrderInput & {
   createdAt: string;
 };
 
+export type MediaAsset = {
+  id: string;
+  title: string;
+  url: string;
+  kind: "image" | "video";
+  placement: "library" | "listing" | "video_section";
+  productId?: string;
+  handle?: string;
+  caption?: string;
+  tag?: string;
+  mimeType?: string;
+  fileName?: string;
+  source?: "upload" | "url";
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ResearchOpportunity = {
   id: string;
   name: string;
@@ -207,6 +224,45 @@ export async function updateContactRole(email: string, role: "customer" | "admin
 
 export async function deleteContact(email: string) {
   return apiFetch<{ ok: boolean; message: string }>(`/contacts/${encodeURIComponent(email)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function getMediaAssets() {
+  return apiFetch<{ assets: MediaAsset[] }>("/media");
+}
+
+export async function getAdminMediaAssets() {
+  return apiFetch<{ assets: MediaAsset[] }>("/admin/media");
+}
+
+export async function addMediaUrl(input: Omit<MediaAsset, "id" | "createdAt" | "updatedAt" | "source">) {
+  return apiFetch<{ asset: MediaAsset }>("/admin/media/url", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function uploadMediaAsset(input: {
+  title: string;
+  kind: "image" | "video";
+  placement: "library" | "listing" | "video_section";
+  fileName: string;
+  mimeType: string;
+  dataUrl: string;
+  productId?: string;
+  handle?: string;
+  caption?: string;
+  tag?: string;
+}) {
+  return apiFetch<{ asset: MediaAsset }>("/admin/media/upload", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function deleteMediaAsset(id: string) {
+  return apiFetch<{ ok: boolean; message: string }>(`/admin/media/${encodeURIComponent(id)}`, {
     method: "DELETE",
   });
 }

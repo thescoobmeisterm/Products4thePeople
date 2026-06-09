@@ -45,6 +45,7 @@ const mockSessions = new Map<string, MockSession>();
 
 // Local JSON DB Configuration Fallback
 const DB_FILE = path.join(process.cwd(), "server", "db.json");
+const UPLOAD_DIR = path.join(process.cwd(), "server", "uploads");
 
 interface DbSchema {
   products: Record<string, any>;
@@ -61,6 +62,7 @@ interface DbSchema {
   articles?: Record<string, any>;
   knowledgeArticles?: Record<string, any>;
   seoPages?: Record<string, any>;
+  mediaAssets?: Record<string, any>;
 }
 
 function readDb(): DbSchema {
@@ -80,7 +82,8 @@ function readDb(): DbSchema {
         experimentVariants: {},
         articles: {},
         knowledgeArticles: {},
-        seoPages: {}
+        seoPages: {},
+        mediaAssets: {}
       };
     }
     const content = fs.readFileSync(DB_FILE, "utf-8");
@@ -100,6 +103,7 @@ function readDb(): DbSchema {
       articles: parsed.articles || {},
       knowledgeArticles: parsed.knowledgeArticles || {},
       seoPages: parsed.seoPages || {},
+      mediaAssets: parsed.mediaAssets || {},
     };
   } catch {
     return {
@@ -116,7 +120,8 @@ function readDb(): DbSchema {
       experimentVariants: {},
       articles: {},
       knowledgeArticles: {},
-      seoPages: {}
+      seoPages: {},
+      mediaAssets: {}
     };
   }
 }
@@ -203,10 +208,28 @@ const contactRoleSchema = z.object({
   role: z.enum(["customer", "admin"]),
 });
 
+const mediaUrlSchema = z.object({
+  title: z.string().min(1),
+  url: z.string().min(1),
+  kind: z.enum(["image", "video"]),
+  placement: z.enum(["library", "listing", "video_section"]).default("library"),
+  productId: z.string().optional(),
+  handle: z.string().optional(),
+  caption: z.string().optional(),
+  tag: z.string().optional(),
+});
+
+const mediaUploadSchema = mediaUrlSchema.extend({
+  fileName: z.string().min(1),
+  mimeType: z.string().min(1),
+  dataUrl: z.string().min(1),
+}).omit({ url: true });
+
 // App initialization
 const app = express();
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "25mb" }));
+app.use("/uploads", express.static(UPLOAD_DIR));
 
 // Auth middleware
 function requireAdmin(request: express.Request, response: express.Response, next: express.NextFunction) {
@@ -492,6 +515,98 @@ app.delete("/api/contacts/:email", requireAdmin, async (request, response) => {
     response.json({ ok: true, message: "Customer removed" });
   } catch (error) {
     response.status(500).json({ error: error instanceof Error ? error.message : "Failed to remove customer" });
+  }
+});
+
+app.get("/api/media", async (_request, response) => {
+  try {
+    const assets = await getMediaAssetsDb();
+    response.json({ assets });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to load media assets" });
+  }
+});
+
+app.get("/api/admin/media", requireAdmin, async (_request, response) => {
+  try {
+    const assets = await getMediaAssetsDb();
+    response.json({ assets });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to load media assets" });
+  }
+});
+
+app.post("/api/admin/media/url", requireAdmin, async (request, response) => {
+  try {
+    const input = mediaUrlSchema.parse(request.body);
+    const now = new Date().toISOString();
+    const asset = {
+      id: crypto.randomUUID(),
+      ...input,
+      source: "url",
+      createdAt: now,
+      updatedAt: now,
+    };
+    await upsertMediaAssetDb(asset);
+    response.status(201).json({ asset });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to add media asset" });
+  }
+});
+
+app.post("/api/admin/media/upload", requireAdmin, async (request, response) => {
+  try {
+    const input = mediaUploadSchema.parse(request.body);
+    const dataMatch = input.dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!dataMatch) {
+      response.status(400).json({ error: "Upload must be a base64 data URL." });
+      return;
+    }
+
+    const safeName = input.fileName.toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "") || "upload";
+    const ext = path.extname(safeName) || (input.kind === "video" ? ".mp4" : ".jpg");
+    const id = crypto.randomUUID();
+    const fileName = `${id}${ext}`;
+    fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+    fs.writeFileSync(path.join(UPLOAD_DIR, fileName), Buffer.from(dataMatch[2], "base64"));
+
+    const now = new Date().toISOString();
+    const asset = {
+      id,
+      title: input.title,
+      url: absoluteUploadUrl(request, fileName),
+      kind: input.kind,
+      placement: input.placement,
+      productId: input.productId,
+      handle: input.handle,
+      caption: input.caption,
+      tag: input.tag,
+      mimeType: input.mimeType,
+      fileName,
+      source: "upload",
+      createdAt: now,
+      updatedAt: now,
+    };
+    await upsertMediaAssetDb(asset);
+    response.status(201).json({ asset });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to upload media asset" });
+  }
+});
+
+app.delete("/api/admin/media/:id", requireAdmin, async (request, response) => {
+  try {
+    const asset = await deleteMediaAssetDb(request.params.id);
+    if (!asset) {
+      response.status(404).json({ error: "Media asset not found" });
+      return;
+    }
+    if (asset.source === "upload" && asset.fileName) {
+      fs.rmSync(path.join(UPLOAD_DIR, asset.fileName), { force: true });
+    }
+    response.json({ ok: true, message: "Media asset deleted" });
+  } catch (error) {
+    response.status(500).json({ error: error instanceof Error ? error.message : "Failed to delete media asset" });
   }
 });
 
@@ -4250,6 +4365,64 @@ async function getContactsDb() {
   }
 }
 
+async function getMediaAssetsDb() {
+  if (usePostgres) {
+    const result = await pool.query("select payload from media_assets order by created_at desc");
+    return result.rows.map((row) => row.payload);
+  }
+
+  const db = readDb();
+  return Object.values(db.mediaAssets || {}).sort((a: any, b: any) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
+}
+
+async function upsertMediaAssetDb(asset: any) {
+  if (usePostgres) {
+    await pool.query(
+      `insert into media_assets (id, kind, placement, product_id, payload, created_at, updated_at)
+       values ($1, $2, $3, $4, $5, $6, $7)
+       on conflict (id) do update set
+         kind = excluded.kind,
+         placement = excluded.placement,
+         product_id = excluded.product_id,
+         payload = excluded.payload,
+         updated_at = excluded.updated_at`,
+      [asset.id, asset.kind, asset.placement, asset.productId || null, asset, asset.createdAt || new Date().toISOString(), asset.updatedAt || new Date().toISOString()],
+    );
+    return;
+  }
+
+  const db = readDb();
+  if (!db.mediaAssets) db.mediaAssets = {};
+  db.mediaAssets[asset.id] = asset;
+  writeDb(db);
+}
+
+async function deleteMediaAssetDb(id: string) {
+  if (usePostgres) {
+    const result = await pool.query("delete from media_assets where id = $1 returning payload", [id]);
+    return result.rowCount ? result.rows[0].payload : null;
+  }
+
+  const db = readDb();
+  const asset = db.mediaAssets?.[id] || null;
+  if (asset && db.mediaAssets) {
+    delete db.mediaAssets[id];
+    writeDb(db);
+  }
+  return asset;
+}
+
+function absoluteUploadUrl(request: express.Request, fileName: string) {
+  const configuredBase = process.env.PUBLIC_API_URL || "";
+  if (configuredBase) {
+    return `${configuredBase.replace(/\/$/, "")}/uploads/${fileName}`;
+  }
+
+  const proto = String(request.header("x-forwarded-proto") || request.protocol || "http").split(",")[0];
+  const host = String(request.header("x-forwarded-host") || request.header("host") || `localhost:${port}`);
+  return `${proto}://${host}/uploads/${fileName}`;
+}
+
 async function migrate() {
   await pool.query(`
     create table if not exists products (
@@ -4281,6 +4454,16 @@ async function migrate() {
       status text not null,
       created_at timestamptz not null,
       payload jsonb not null
+    );
+
+    create table if not exists media_assets (
+      id uuid primary key,
+      kind text not null,
+      placement text not null default 'library',
+      product_id text,
+      payload jsonb not null,
+      created_at timestamptz not null default now(),
+      updated_at timestamptz not null default now()
     );
 
     create table if not exists product_research_opportunities (

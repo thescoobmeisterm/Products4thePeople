@@ -7,6 +7,15 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.5.0 - 2026-06-09
+
+### Added
+- Added an Admin Media tab for uploading images/videos, adding hosted media URLs, previewing saved assets, refreshing the media library, and deleting media.
+- Added backend media asset storage with PostgreSQL persistence, local fallback persistence, upload serving, and admin media API endpoints.
+- Added product listing media assignment so image assets can be attached to catalog product galleries from the admin.
+- Added storefront video-section media support so saved video-section assets replace the sample "See It In Action" carousel.
+- Added `PUBLIC_API_URL` setup guidance for production upload URLs.
+
 ## v1.4.2 — 2026-06-08
 
 ### Changed
