@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.6.1 - 2026-06-10
+
+### Changed
+- Bumped the app version so production deployment/cache behavior can be verified after disabling Plesk smart static file processing.
+
 ## v1.6.0 - 2026-06-09
 
 ### Added
