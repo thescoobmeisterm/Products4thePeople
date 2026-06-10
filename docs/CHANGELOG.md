@@ -7,6 +7,16 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.6.4 - 2026-06-10
+
+### Fixed
+- Fixed Plesk deployment EACCES permission error by setting `build.emptyOutDir: false` in Vite config so the build overwrites in-place instead of trying to delete the `dist/` directory.
+
+## v1.6.3 - 2026-06-10
+
+### Fixed
+- Fixed API product validation so automotive/DriveCraft products load from PostgreSQL instead of triggering a storefront fallback on reload.
+
 ## v1.6.2 - 2026-06-10
 
 ### Added
