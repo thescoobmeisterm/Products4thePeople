@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.6.2 - 2026-06-10
+
+### Added
+- Added a Plesk Git deployment troubleshooting guide with exact Git plugin fields, nginx proxy directives, deploy actions, verification commands, and recovery steps.
+
 ## v1.6.1 - 2026-06-10
 
 ### Changed
