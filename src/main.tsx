@@ -561,7 +561,8 @@ function normalizeMediaUrl(url?: string) {
 }
 
 function App() {
-  const [products, setProducts] = React.useState<Product[]>(seedProducts);
+  const [products, setProducts] = React.useState<Product[]>([]);
+  const [isBackendLoading, setIsBackendLoading] = React.useState(true);
   const [stores, setStores] = React.useState<Record<string, StorefrontNicheConfig>>(() => {
     try {
       const stored = localStorage.getItem("p4tp-stores-config");
@@ -666,6 +667,7 @@ function App() {
 
   // Auto-switch empty Active stores to Review status
   React.useEffect(() => {
+    if (isBackendLoading) return;
     let updated = false;
     const newStores = { ...stores };
     Object.keys(newStores).forEach((key) => {
@@ -685,7 +687,7 @@ function App() {
       setStores(newStores);
       setNotice("Notice: One or more storefronts switched from Active to Review due to having 0 active products.");
     }
-  }, [products, stores]);
+  }, [isBackendLoading, products, stores]);
   
   // AliExpress URL Importer States & Handler
   const [aliexpressUrl, setAliexpressUrl] = React.useState("");
@@ -841,9 +843,12 @@ function App() {
         setOrders(orderResponse.orders.map(normalizeStoredOrder));
         setDbContacts(contactResponse.contacts);
         setMediaAssets(mediaResponse.assets || []);
+        setIsBackendLoading(false);
 
       } catch (error) {
         if (!isMounted) return;
+        setProducts(seedProducts);
+        setIsBackendLoading(false);
         setNotice(
           error instanceof Error
             ? `Backend unavailable: ${error.message}. Showing starter catalog until the API is running.`
@@ -1352,6 +1357,20 @@ function App() {
     },
   ];
   const setupReadyCount = setupItems.filter((item) => item.ready).length;
+
+  if (view === "storefront" && isBackendLoading) {
+    return (
+      <main className="store-shell" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: '#f7f9fa', color: '#11191d', padding: '24px' }}>
+        <section style={{ display: 'grid', gap: '12px', justifyItems: 'center', textAlign: 'center' }}>
+          <Store size={34} />
+          <div>
+            <p style={{ margin: '0 0 4px', color: '#68777d', fontSize: '13px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Products4ThePeople</p>
+            <h1 style={{ margin: 0, fontSize: 'clamp(1.5rem, 4vw, 2.2rem)' }}>Loading storefront</h1>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
   if (view === "storefront") {
     return (

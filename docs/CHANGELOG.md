@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.6.9 - 2026-06-11
+
+### Fixed
+- Prevented the storefront from flashing starter placeholder products before live backend products finish loading.
+
 ## v1.6.8 - 2026-06-11
 
 ### Added
