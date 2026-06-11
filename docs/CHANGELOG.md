@@ -7,7 +7,10 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
-## v1.6.11 - 2026-06-11
+## v1.7.0 - 2026-06-11
+
+### Added
+- Added SEO article editorial controls for tone, funnel stage, target persona, and CTA style across generic and product-led article generation.
 
 ### Fixed
 - Added a Google OAuth runtime fallback so sign-in can still load the saved client ID when the newer public config route is not available on the deployed API yet.

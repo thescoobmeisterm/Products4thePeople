@@ -600,6 +600,10 @@ function App() {
   const [seoGenTopic, setSeoGenTopic] = React.useState("");
   const [seoGenKeyword, setSeoGenKeyword] = React.useState("");
   const [seoGenNiche, setSeoGenNiche] = React.useState("beauty");
+  const [seoGenTone, setSeoGenTone] = React.useState<"expert" | "friendly" | "premium" | "urgent">("expert");
+  const [seoGenFunnelStage, setSeoGenFunnelStage] = React.useState<"awareness" | "consideration" | "decision">("consideration");
+  const [seoGenPersona, setSeoGenPersona] = React.useState("");
+  const [seoGenCtaStyle, setSeoGenCtaStyle] = React.useState<"soft" | "direct" | "limited_offer">("direct");
   const [seoPageGenCategory, setSeoPageGenCategory] = React.useState("");
   const [seoPageGenKeywords, setSeoPageGenKeywords] = React.useState("");
   const [seoPageGenNiche, setSeoPageGenNiche] = React.useState("beauty");
@@ -2472,7 +2476,12 @@ function App() {
                       setSeoProductGenerating(true);
                       try {
                         if (seoProductGenType === "article") {
-                          const res = await generateArticleFromProduct(selectedProductId, seoProductGenAngle);
+                          const res = await generateArticleFromProduct(selectedProductId, seoProductGenAngle, {
+                            tone: seoGenTone,
+                            funnelStage: seoGenFunnelStage,
+                            persona: seoGenPersona,
+                            ctaStyle: seoGenCtaStyle,
+                          });
                           setSeoArticles((prev) => [res.article, ...prev]);
                           setSeoSubTab("articles");
                           setNotice(`Generated draft article: ${res.article.title}`);
@@ -2530,6 +2539,35 @@ function App() {
                         placeholder="e.g. reduce morning routine time, cleaner car interiors, easier pet grooming"
                         style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}
                       />
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Tone</span>
+                      <select value={seoGenTone} onChange={(e) => setSeoGenTone(e.target.value as typeof seoGenTone)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="expert">Expert</option>
+                        <option value="friendly">Friendly</option>
+                        <option value="premium">Premium</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Funnel Stage</span>
+                      <select value={seoGenFunnelStage} onChange={(e) => setSeoGenFunnelStage(e.target.value as typeof seoGenFunnelStage)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="awareness">Awareness</option>
+                        <option value="consideration">Consideration</option>
+                        <option value="decision">Decision</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>CTA Style</span>
+                      <select value={seoGenCtaStyle} onChange={(e) => setSeoGenCtaStyle(e.target.value as typeof seoGenCtaStyle)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="soft">Soft</option>
+                        <option value="direct">Direct</option>
+                        <option value="limited_offer">Limited offer</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Target Persona</span>
+                      <input value={seoGenPersona} onChange={(e) => setSeoGenPersona(e.target.value)} maxLength={120} placeholder="e.g. first-time skincare buyers" style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }} />
                     </label>
                     <button
                       type="submit"
@@ -2608,10 +2646,16 @@ function App() {
                       if (!seoGenTopic.trim()) return;
                       setSeoLoading(true);
                       try {
-                        const res = await generateArticle(seoGenNiche, seoGenTopic, seoGenKeyword);
+                        const res = await generateArticle(seoGenNiche, seoGenTopic, seoGenKeyword, {
+                          tone: seoGenTone,
+                          funnelStage: seoGenFunnelStage,
+                          persona: seoGenPersona,
+                          ctaStyle: seoGenCtaStyle,
+                        });
                         setSeoArticles((prev) => [res.article, ...prev]);
                         setSeoGenTopic("");
                         setSeoGenKeyword("");
+                        setSeoGenPersona("");
                       } catch (err) {
                         console.error("Article generation failed:", err);
                       } finally {
@@ -2637,6 +2681,35 @@ function App() {
                     <label style={{ display: 'grid', gap: '4px', gridColumn: '1 / -1' }}>
                       <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Topic / Prompt</span>
                       <input value={seoGenTopic} onChange={(e) => setSeoGenTopic(e.target.value)} placeholder="e.g. Benefits of LED light therapy for anti-aging" required style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }} />
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Tone</span>
+                      <select value={seoGenTone} onChange={(e) => setSeoGenTone(e.target.value as typeof seoGenTone)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="expert">Expert</option>
+                        <option value="friendly">Friendly</option>
+                        <option value="premium">Premium</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Funnel Stage</span>
+                      <select value={seoGenFunnelStage} onChange={(e) => setSeoGenFunnelStage(e.target.value as typeof seoGenFunnelStage)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="awareness">Awareness</option>
+                        <option value="consideration">Consideration</option>
+                        <option value="decision">Decision</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>CTA Style</span>
+                      <select value={seoGenCtaStyle} onChange={(e) => setSeoGenCtaStyle(e.target.value as typeof seoGenCtaStyle)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="soft">Soft</option>
+                        <option value="direct">Direct</option>
+                        <option value="limited_offer">Limited offer</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Target Persona</span>
+                      <input value={seoGenPersona} onChange={(e) => setSeoGenPersona(e.target.value)} maxLength={120} placeholder="e.g. busy pet parents" style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }} />
                     </label>
                     <button type="submit" disabled={seoLoading} className="primary" style={{ gridColumn: '1 / -1', padding: '10px', borderRadius: '8px', border: 'none', background: '#176c61', color: 'white', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>
                       {seoLoading ? 'Generating…' : 'Generate AI Article'}

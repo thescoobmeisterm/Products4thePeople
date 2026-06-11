@@ -500,6 +500,13 @@ export type SeoDashboardStats = {
   }>;
 };
 
+export type SeoEditorialControls = {
+  tone?: "expert" | "friendly" | "premium" | "urgent";
+  funnelStage?: "awareness" | "consideration" | "decision";
+  persona?: string;
+  ctaStyle?: "soft" | "direct" | "limited_offer";
+};
+
 export async function simulateExperimentTraffic(id: string) {
   return apiFetch<{ success: boolean; message: string; variants: ExperimentVariant[] }>("/admin/experiments/run-simulation", {
     method: "POST",
@@ -528,17 +535,17 @@ export async function createArticle(art: Omit<Article, "id" | "views" | "convers
   });
 }
 
-export async function generateArticle(niche: string, topic: string, keyword: string) {
+export async function generateArticle(niche: string, topic: string, keyword: string, controls: SeoEditorialControls = {}) {
   return apiFetch<{ success: boolean; article: Article }>("/admin/articles/generate", {
     method: "POST",
-    body: JSON.stringify({ niche, topic, keyword }),
+    body: JSON.stringify({ niche, topic, keyword, ...controls }),
   });
 }
 
-export async function generateArticleFromProduct(productId: string, angle: string) {
+export async function generateArticleFromProduct(productId: string, angle: string, controls: SeoEditorialControls = {}) {
   return apiFetch<{ success: boolean; article: Article }>("/admin/articles/generate-from-product", {
     method: "POST",
-    body: JSON.stringify({ productId, angle }),
+    body: JSON.stringify({ productId, angle, ...controls }),
   });
 }
 

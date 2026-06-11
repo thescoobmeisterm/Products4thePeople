@@ -1510,7 +1510,21 @@ const createExperimentSchema = z.object({
 
 const productSeoGenerationSchema = z.object({
   productId: z.string().min(1),
-  angle: z.string().optional().default("")
+  angle: z.string().optional().default(""),
+  tone: z.enum(["expert", "friendly", "premium", "urgent"]).optional().default("expert"),
+  funnelStage: z.enum(["awareness", "consideration", "decision"]).optional().default("consideration"),
+  persona: z.string().max(120).optional().default(""),
+  ctaStyle: z.enum(["soft", "direct", "limited_offer"]).optional().default("direct")
+});
+
+const articleSeoGenerationSchema = z.object({
+  niche: z.string().min(1),
+  topic: z.string().min(1),
+  keyword: z.string().min(1),
+  tone: z.enum(["expert", "friendly", "premium", "urgent"]).optional().default("expert"),
+  funnelStage: z.enum(["awareness", "consideration", "decision"]).optional().default("consideration"),
+  persona: z.string().max(120).optional().default(""),
+  ctaStyle: z.enum(["soft", "direct", "limited_offer"]).optional().default("direct")
 });
 
 function slugifySeo(value: string) {
@@ -1531,6 +1545,37 @@ function formatProductPriceRange(product: any) {
   if (!min && !max) return "competitive pricing";
   if (min === max || !max) return `$${min.toFixed(2)}`;
   return `$${min.toFixed(2)}-$${max.toFixed(2)}`;
+}
+
+function editorialToneIntro(tone: string) {
+  const intros: Record<string, string> = {
+    expert: "This guide uses a practical, evidence-minded lens so shoppers can compare options with confidence.",
+    friendly: "Think of this as a clear, no-pressure walkthrough for finding what actually fits your day.",
+    premium: "This guide focuses on higher-quality choices, cleaner routines, and products that feel worth keeping.",
+    urgent: "This guide is built for quick decisions when a shopper wants the problem solved without wasting time."
+  };
+  return intros[tone] || intros.expert;
+}
+
+function funnelStageSection(stage: string, topic: string, keyword: string) {
+  if (stage === "awareness") {
+    return `## What To Know First\nBefore comparing products, understand the problem behind **${topic}**. Shoppers in this stage are still learning the category, so the best content explains symptoms, use cases, and the practical language behind **${keyword}** searches.`;
+  }
+  if (stage === "decision") {
+    return `## How To Choose Today\nAt this stage, the right move is narrowing the shortlist. Prioritize clear pricing, simple setup, credible product images, and a checkout path that makes the **${keyword}** choice easy to complete.`;
+  }
+  return `## What To Compare\nOnce the need is clear, compare product fit, materials, expected routine impact, shipping cost, and whether each **${keyword}** option solves the specific use case instead of adding clutter.`;
+}
+
+function ctaCopy(style: string, label: string, url?: string) {
+  if (style === "soft") return url ? `Explore the details when you are ready: [View ${label}](${url}).` : `Explore the recommended options when you are ready.`;
+  if (style === "limited_offer") return url ? `Check current availability before this batch changes: [Shop ${label}](${url}).` : `Check current availability before the next batch changes.`;
+  return url ? `Compare the current details and buy here: [Shop ${label}](${url}).` : `Compare the current recommendations and choose the best fit.`;
+}
+
+function personaLine(persona: string) {
+  const target = persona.trim();
+  return target ? `This draft is written for ${target}, so the examples and buying criteria stay close to that shopper's priorities.` : "This draft is written for practical shoppers who want a clear path from research to product choice.";
 }
 
 // --- Content & SEO REST Endpoints ---
@@ -1588,11 +1633,7 @@ app.post("/api/admin/articles", requireAdmin, async (request, response) => {
 
 app.post("/api/admin/articles/generate", requireAdmin, async (request, response) => {
   try {
-    const { niche, topic, keyword } = z.object({
-      niche: z.string().min(1),
-      topic: z.string().min(1),
-      keyword: z.string().min(1)
-    }).parse(request.body);
+    const { niche, topic, keyword, tone, funnelStage, persona, ctaStyle } = articleSeoGenerationSchema.parse(request.body);
 
     const title = `The Ultimate Guide to ${topic}`;
     const slug = `${niche}-${topic.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
@@ -1615,10 +1656,16 @@ app.post("/api/admin/articles/generate", requireAdmin, async (request, response)
     const content = `
 # ${title}
 
+${editorialToneIntro(tone)}
+
+${personaLine(persona)}
+
 Welcome to our comprehensive guide on **${topic}**. If you are looking to elevate your daily routine and find the best strategies for optimization, you've come to the right place. In this article, we will break down the core mechanics, list key advantages, and help you select the right solutions—including highly recommended **${keyword}** items.
 
 ## Why ${topic} Matters
 Modern problems require modern solutions. Understanding the fundamentals of this category helps you make smarter choices, whether you are trying to improve efficiency or upgrade your lifestyle. Integrating structured solutions is the fastest way to see compound results.
+
+${funnelStageSection(funnelStage, topic, keyword)}
 
 ## Key Advantages
 1. **Enhanced Quality**: Using verified methods ensures consistent output.
@@ -1632,6 +1679,8 @@ ${productLinksList || "*No featured products in this category yet.*"}
 
 ## Summary
 By investing time in understanding ${topic}, you set yourself up for long-term success. Check out our featured products above to take action today!
+
+${ctaCopy(ctaStyle, keyword)}
     `.trim();
 
     const schemaMarkup = {
@@ -1639,6 +1688,7 @@ By investing time in understanding ${topic}, you set yourself up for long-term s
       "@type": "Article",
       "headline": title,
       "description": seoDescription,
+      "audience": persona || "Products4ThePeople shoppers",
       "author": {
         "@type": "Organization",
         "name": "Products4ThePeople"
@@ -1662,6 +1712,7 @@ By investing time in understanding ${topic}, you set yourself up for long-term s
       seo_description: seoDescription,
       keywords: `${keyword}, ${topic}, guide, organic`,
       schema_markup: schemaMarkup,
+      editorial_controls: { tone, funnelStage, persona, ctaStyle },
       views: 0,
       conversions: 0,
       revenue: 0,
@@ -1678,7 +1729,7 @@ By investing time in understanding ${topic}, you set yourself up for long-term s
 
 app.post("/api/admin/articles/generate-from-product", requireAdmin, async (request, response) => {
   try {
-    const { productId, angle } = productSeoGenerationSchema.parse(request.body);
+    const { productId, angle, tone, funnelStage, persona, ctaStyle } = productSeoGenerationSchema.parse(request.body);
     const allProducts = await getProductsDb();
     const product = allProducts.find((p: any) => p.id === productId);
     if (!product) {
@@ -1698,10 +1749,16 @@ app.post("/api/admin/articles/generate-from-product", requireAdmin, async (reque
     const content = `
 # ${title}
 
+${editorialToneIntro(tone)}
+
+${personaLine(persona)}
+
 When shoppers search for **${productAngle}**, they usually are not looking for another generic product list. They are trying to solve a specific daily friction point with something simple, useful, and fairly priced.
 
 ## The Problem
 The usual alternatives can be confusing, overpriced, or too broad for the actual need. That makes it harder to decide what is worth buying and what will sit unused after the first week.
+
+${funnelStageSection(funnelStage, productAngle, product.name)}
 
 ## The Product-Led Solution
 [${product.name}](${productUrl}) is positioned as a focused answer for this need. It sits in the ${niche} catalog with ${priceRange}, a ${productStatus} product status, and a merchandising angle built around ${product.contentAngle || productAngle}.
@@ -1715,7 +1772,7 @@ The usual alternatives can be confusing, overpriced, or too broad for the actual
 Choose ${product.name} if you want a practical option for ${productAngle} without digging through scattered marketplace listings. It is especially useful for shoppers who value fast comparison, transparent pricing, and a direct path to checkout.
 
 ## Next Step
-See the current product details, images, and availability here: [Shop ${product.name}](${productUrl}).
+${ctaCopy(ctaStyle, product.name, productUrl)}
     `.trim();
 
     const schemaMarkup = {
@@ -1723,6 +1780,7 @@ See the current product details, images, and availability here: [Shop ${product.
       "@type": "Article",
       "headline": title,
       "description": seoDescription,
+      "audience": persona || "Products4ThePeople shoppers",
       "about": {
         "@type": "Product",
         "name": product.name,
@@ -1752,6 +1810,7 @@ See the current product details, images, and availability here: [Shop ${product.
       seo_description: seoDescription,
       keywords: `${product.name}, ${productAngle}, ${niche}, product guide`,
       schema_markup: schemaMarkup,
+      editorial_controls: { tone, funnelStage, persona, ctaStyle },
       views: 0,
       conversions: 0,
       revenue: 0,
