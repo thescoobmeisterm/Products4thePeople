@@ -718,6 +718,34 @@ function App() {
     }
   };
 
+  const applySettingsConfig = (config: any) => {
+    setSettingsStripeKey(config.stripeSecretKey || "");
+    setSettingsDatabaseUrl(config.databaseUrl || "");
+    setSettingsMedusaUrl(config.medusaBackendUrl || "http://localhost:9000");
+    setSettingsMedusaKey(config.medusaAdminApiKey || "");
+    setSettingsGoogleClientId(config.googleClientId || "");
+    setSettingsOpenAiKey(config.openAiApiKey || "");
+    setSettingsAdminEmail(config.adminEmail || adminEmail);
+    setSettingsAdminPassword(config.adminPassword || "");
+    setSettingsPublicSiteUrl(config.publicSiteUrl || "");
+    setSettingsPublicAppBase(config.publicAppBase || "");
+    setSettingsGa4Id(config.ga4MeasurementId || "");
+    setSettingsMetaPixelId(config.metaPixelId || "");
+    setSettingsTiktokPixelId(config.tiktokPixelId || "");
+    setSettingsTaxRate(config.basicTaxRate || "0.06");
+    setSettingsFreeShipping(config.freeShippingThreshold || "75");
+    setSettingsFlatShipping(config.flatShipping || "7");
+    setSettingsConfigStatus(config);
+  };
+
+  const loadSettingsConfig = async () => {
+    const configRes = await fetch(apiUrl("/settings/config"), { headers: adminRequestHeaders() });
+    if (!configRes.ok) return false;
+    const config = await configRes.json();
+    applySettingsConfig(config);
+    return true;
+  };
+
   const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSavingConfig(true);
@@ -757,27 +785,7 @@ function App() {
       setNotice(data.message || "Configurations updated successfully!");
       
       // Refresh current config view
-      const configRes = await fetch(apiUrl("/settings/config"), { headers: adminHeaders });
-      if (configRes.ok) {
-        const config = await configRes.json();
-        setSettingsStripeKey(config.stripeSecretKey || "");
-        setSettingsDatabaseUrl(config.databaseUrl || "");
-        setSettingsMedusaUrl(config.medusaBackendUrl || "http://localhost:9000");
-        setSettingsMedusaKey(config.medusaAdminApiKey || "");
-        setSettingsGoogleClientId(config.googleClientId || "");
-        setSettingsOpenAiKey(config.openAiApiKey || "");
-        setSettingsAdminEmail(config.adminEmail || adminEmail);
-        setSettingsAdminPassword(config.adminPassword || "");
-        setSettingsPublicSiteUrl(config.publicSiteUrl || "");
-        setSettingsPublicAppBase(config.publicAppBase || "");
-        setSettingsGa4Id(config.ga4MeasurementId || "");
-        setSettingsMetaPixelId(config.metaPixelId || "");
-        setSettingsTiktokPixelId(config.tiktokPixelId || "");
-        setSettingsTaxRate(config.basicTaxRate || "0.06");
-        setSettingsFreeShipping(config.freeShippingThreshold || "75");
-        setSettingsFlatShipping(config.flatShipping || "7");
-        setSettingsConfigStatus(config);
-      }
+      await loadSettingsConfig();
     } catch (error) {
       setNotice(error instanceof Error ? `Config error: ${error.message}` : "Failed to save configuration.");
     } finally {
@@ -794,6 +802,12 @@ function App() {
     let isMounted = true;
 
     async function loadBackendData() {
+      try {
+        await loadSettingsConfig();
+      } catch (e) {
+        console.warn("Failed to load environment credentials from settings endpoint:", e);
+      }
+
       try {
         const [productResponse, orderResponse, contactResponse, mediaResponse] = await Promise.all([getProducts(), getOrders(), getContacts(), getMediaAssets()]);
         if (!isMounted) return;
@@ -812,32 +826,6 @@ function App() {
         setDbContacts(contactResponse.contacts);
         setMediaAssets(mediaResponse.assets || []);
 
-        // Fetch current system environmental configurations
-        try {
-          const configRes = await fetch(apiUrl("/settings/config"), { headers: adminRequestHeaders() });
-          if (configRes.ok && isMounted) {
-            const config = await configRes.json();
-            setSettingsStripeKey(config.stripeSecretKey || "");
-            setSettingsDatabaseUrl(config.databaseUrl || "");
-            setSettingsMedusaUrl(config.medusaBackendUrl || "http://localhost:9000");
-            setSettingsMedusaKey(config.medusaAdminApiKey || "");
-            setSettingsGoogleClientId(config.googleClientId || "");
-            setSettingsOpenAiKey(config.openAiApiKey || "");
-            setSettingsAdminEmail(config.adminEmail || adminEmail);
-            setSettingsAdminPassword(config.adminPassword || "");
-            setSettingsPublicSiteUrl(config.publicSiteUrl || "");
-            setSettingsPublicAppBase(config.publicAppBase || "");
-            setSettingsGa4Id(config.ga4MeasurementId || "");
-            setSettingsMetaPixelId(config.metaPixelId || "");
-            setSettingsTiktokPixelId(config.tiktokPixelId || "");
-            setSettingsTaxRate(config.basicTaxRate || "0.06");
-            setSettingsFreeShipping(config.freeShippingThreshold || "75");
-            setSettingsFlatShipping(config.flatShipping || "7");
-            setSettingsConfigStatus(config);
-          }
-        } catch (e) {
-          console.warn("Failed to load environment credentials from settings endpoint:", e);
-        }
       } catch (error) {
         if (!isMounted) return;
         setNotice(

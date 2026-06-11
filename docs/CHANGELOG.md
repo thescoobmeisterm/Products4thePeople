@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.6.6 - 2026-06-11
+
+### Fixed
+- Fixed admin settings hydration so saved `.env` values can reload even when a catalog, order, contact, or media request fails during startup.
+
 ## v1.6.5 - 2026-06-11
 
 ### Fixed
