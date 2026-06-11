@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.6.10 - 2026-06-11
+
+### Fixed
+- Fixed Google sign-in so the storefront can load the saved OAuth client ID from the API at runtime instead of requiring a frontend rebuild.
+- Added visible Google sign-in status messages when OAuth is inactive, still loading, or blocked by script/config errors.
+
 ## v1.6.9 - 2026-06-11
 
 ### Fixed

@@ -4028,6 +4028,12 @@ function Storefront({
   const [authPasswordInput, setAuthPasswordInput] = React.useState("");
   const [authName, setAuthName] = React.useState("");
   const [authError, setAuthError] = React.useState("");
+  const staticGoogleClientId = String(import.meta.env.VITE_GOOGLE_CLIENT_ID || (window as any).VITE_GOOGLE_CLIENT_ID || "");
+  const [runtimeGoogleClientId, setRuntimeGoogleClientId] = React.useState(staticGoogleClientId);
+  const [googleAuthStatus, setGoogleAuthStatus] = React.useState<"idle" | "loading" | "ready" | "inactive" | "error">(
+    staticGoogleClientId ? "idle" : "loading",
+  );
+  const [googleAuthMessage, setGoogleAuthMessage] = React.useState("");
   const [isPortalOpen, setIsPortalOpen] = React.useState(false);
   const [isTrackOrderOpen, setIsTrackOrderOpen] = React.useState(false);
   const [trackOrderId, setTrackOrderId] = React.useState("");
@@ -4703,37 +4709,98 @@ function Storefront({
 
   // Google Identity Services & Mock Authentication Helpers
   React.useEffect(() => {
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || (window as any).VITE_GOOGLE_CLIENT_ID;
-    if (!clientId) return;
+    if (!isAuthOpen) return;
+    let isMounted = true;
 
-    const script = document.createElement("script");
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
+    async function loadPublicAuthConfig() {
+      if (staticGoogleClientId) {
+        setRuntimeGoogleClientId(staticGoogleClientId);
+        return;
+      }
 
-    script.onload = () => {
+      setGoogleAuthStatus("loading");
+      try {
+        const response = await fetch(apiUrl("/public-config"));
+        if (!response.ok) throw new Error(`Public config unavailable (${response.status})`);
+        const config = await response.json();
+        if (!isMounted) return;
+
+        const clientId = String(config.googleClientId || "").trim();
+        setRuntimeGoogleClientId(clientId);
+        if (!clientId) {
+          setGoogleAuthStatus("inactive");
+          setGoogleAuthMessage("Live Google OAuth is inactive. Use email and password sign-in below.");
+        }
+      } catch (error) {
+        if (!isMounted) return;
+        setRuntimeGoogleClientId("");
+        setGoogleAuthStatus("error");
+        setGoogleAuthMessage(error instanceof Error ? error.message : "Google OAuth config could not be loaded.");
+      }
+    }
+
+    void loadPublicAuthConfig();
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthOpen, staticGoogleClientId]);
+
+  React.useEffect(() => {
+    const clientId = runtimeGoogleClientId.trim();
+    if (!isAuthOpen || !clientId) return;
+
+    setGoogleAuthStatus("loading");
+    setGoogleAuthMessage("");
+
+    const renderGoogleButton = () => {
       const google = (window as any).google;
-      if (google) {
+      const buttonTarget = document.getElementById("google-signin-btn");
+      if (!google || !buttonTarget) return;
+
+      try {
+        buttonTarget.innerHTML = "";
         google.accounts.id.initialize({
           client_id: clientId,
           callback: handleGoogleCredentialResponse,
         });
         google.accounts.id.renderButton(
-          document.getElementById("google-signin-btn"),
-          { theme: "outline", size: "large", width: "100%" }
+          buttonTarget,
+          { theme: "outline", size: "large", width: buttonTarget.offsetWidth || 320 }
+        );
+        setGoogleAuthStatus("ready");
+      } catch (error) {
+        setGoogleAuthStatus("error");
+        setGoogleAuthMessage(
+          error instanceof Error
+            ? error.message
+            : "Google sign-in could not initialize. Check the OAuth client origin in Google Cloud.",
         );
       }
     };
 
-    return () => {
-      try {
-        document.body.removeChild(script);
-      } catch {
-        // ignore
-      }
+    if ((window as any).google?.accounts?.id) {
+      renderGoogleButton();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.id = "google-identity-services";
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+
+    script.onload = renderGoogleButton;
+    script.onerror = () => {
+      setGoogleAuthStatus("error");
+      setGoogleAuthMessage("Google sign-in script could not load. Check browser blockers and network access.");
     };
-  }, [isAuthOpen]);
+
+    return () => {
+      script.onload = null;
+      script.onerror = null;
+    };
+  }, [isAuthOpen, runtimeGoogleClientId]);
 
   const syncProfileToBackend = async (email: string, name: string, preferences: any, savedCart: any) => {
     try {
@@ -6062,9 +6129,14 @@ function Storefront({
               {/* Live Google Auth Button placeholder */}
               <div className="live-google-section">
                 <div id="google-signin-btn" style={{ minHeight: '44px' }}></div>
-                {!(import.meta.env.VITE_GOOGLE_CLIENT_ID || (window as any).VITE_GOOGLE_CLIENT_ID) && (
+                {googleAuthStatus === "loading" && (
                   <p className="auth-info-note">
-                    Live Google OAuth is inactive. Use email and password sign-in below.
+                    Loading Google sign-in...
+                  </p>
+                )}
+                {(googleAuthStatus === "inactive" || googleAuthStatus === "error") && (
+                  <p className="auth-info-note">
+                    {googleAuthMessage || "Live Google OAuth is inactive. Use email and password sign-in below."}
                   </p>
                 )}
               </div>

@@ -263,6 +263,14 @@ app.get("/health", async (_request, response) => {
   });
 });
 
+app.get("/api/public-config", (_request, response) => {
+  const googleClientId = process.env.VITE_GOOGLE_CLIENT_ID || "";
+  response.json({
+    googleClientId,
+    hasGoogleClientId: Boolean(googleClientId),
+  });
+});
+
 app.get("/api/products", async (_request, response) => {
   const products = await getProductsDb();
   response.json({ products });
