@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.6.8 - 2026-06-11
+
+### Added
+- Added product-editor controls to delete uploaded image files from the server-backed media library while removing them from the product gallery.
+
 ## v1.6.7 - 2026-06-11
 
 ### Fixed

@@ -3061,6 +3061,9 @@ function App() {
           onMediaCreated={(asset) => {
             setMediaAssets((current) => [asset, ...current.filter((item) => item.id !== asset.id)]);
           }}
+          onMediaDeleted={(assetId) => {
+            setMediaAssets((current) => current.filter((item) => item.id !== assetId));
+          }}
           onCancel={() => {
             setEditingProduct(null);
             setIsFormOpen(false);
@@ -3296,6 +3299,7 @@ function ProductDialog({
   stores,
   mediaAssets,
   onMediaCreated,
+  onMediaDeleted,
   onCancel,
   onSave,
 }: {
@@ -3303,6 +3307,7 @@ function ProductDialog({
   stores: Record<string, StorefrontNicheConfig>;
   mediaAssets: MediaAsset[];
   onMediaCreated: (asset: MediaAsset) => void;
+  onMediaDeleted: (assetId: string) => void;
   onCancel: () => void;
   onSave: (product: ProductForm) => void;
 }) {
@@ -3336,8 +3341,10 @@ function ProductDialog({
   };
   const [imageUploadFile, setImageUploadFile] = React.useState<File | null>(null);
   const [isUploadingImage, setIsUploadingImage] = React.useState(false);
+  const [deletingMediaAssetId, setDeletingMediaAssetId] = React.useState("");
   const [imageManagerNotice, setImageManagerNotice] = React.useState("");
   const imageAssets = mediaAssets.filter((asset) => asset.kind === "image");
+  const findImageAssetByUrl = (url: string) => imageAssets.find((asset) => normalizeMediaUrl(asset.url) === normalizeMediaUrl(url));
 
   const addImageToProduct = (url: string) => {
     const nextImages = Array.from(new Set([normalizeMediaUrl(url), ...(form.images || []).map(normalizeMediaUrl)]));
@@ -3346,6 +3353,22 @@ function ProductDialog({
 
   const removeImageFromProduct = (url: string) => {
     setField("images", (form.images || []).filter((image) => normalizeMediaUrl(image) !== normalizeMediaUrl(url)));
+  };
+
+  const deleteImageFromServer = async (asset: MediaAsset) => {
+    if (!window.confirm(`Delete "${asset.title}" from the media library and server uploads?`)) return;
+    setDeletingMediaAssetId(asset.id);
+    setImageManagerNotice("");
+    try {
+      await deleteMediaAsset(asset.id);
+      removeImageFromProduct(asset.url);
+      onMediaDeleted(asset.id);
+      setImageManagerNotice("Image deleted from the server and removed from this product.");
+    } catch (error) {
+      setImageManagerNotice(error instanceof Error ? error.message : "Image delete failed.");
+    } finally {
+      setDeletingMediaAssetId("");
+    }
   };
 
   const uploadProductImage = async () => {
@@ -3470,18 +3493,32 @@ function ProductDialog({
                 <div style={{ display: 'grid', gap: '8px' }}>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Current product images</span>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px' }}>
-                    {(form.images || []).map((image) => (
-                      <div key={image} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
-                        <img src={normalizeMediaUrl(image)} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block', background: '#f1f5f9' }} />
-                        <button
-                          type="button"
-                          onClick={() => removeImageFromProduct(image)}
-                          style={{ width: '100%', border: 'none', borderTop: '1px solid #e2e8f0', background: '#fef2f2', color: '#dc2626', minHeight: '30px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
+                    {(form.images || []).map((image) => {
+                      const matchedAsset = findImageAssetByUrl(image);
+                      const isDeleting = matchedAsset?.id === deletingMediaAssetId;
+                      return (
+                        <div key={image} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
+                          <img src={normalizeMediaUrl(image)} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block', background: '#f1f5f9' }} />
+                          <button
+                            type="button"
+                            onClick={() => removeImageFromProduct(image)}
+                            style={{ width: '100%', border: 'none', borderTop: '1px solid #e2e8f0', background: '#f8fafc', color: '#334155', minHeight: '30px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            Remove from product
+                          </button>
+                          {matchedAsset && (
+                            <button
+                              type="button"
+                              onClick={() => deleteImageFromServer(matchedAsset)}
+                              disabled={isDeleting}
+                              style={{ width: '100%', border: 'none', borderTop: '1px solid #e2e8f0', background: '#fef2f2', color: '#dc2626', minHeight: '30px', fontSize: '12px', fontWeight: 700, cursor: isDeleting ? 'not-allowed' : 'pointer', opacity: isDeleting ? 0.65 : 1 }}
+                            >
+                              {isDeleting ? "Deleting..." : "Delete file"}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -3496,19 +3533,29 @@ function ProductDialog({
                     {imageAssets.map((asset) => {
                       const normalizedAssetUrl = normalizeMediaUrl(asset.url);
                       const isSelected = Boolean(form.images?.map(normalizeMediaUrl).includes(normalizedAssetUrl));
+                      const isDeleting = asset.id === deletingMediaAssetId;
                       return (
-                        <button
-                          key={asset.id}
-                          type="button"
-                          onClick={() => addImageToProduct(normalizedAssetUrl)}
-                          disabled={isSelected}
-                          style={{ border: isSelected ? '2px solid #176c61' : '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff', padding: 0, cursor: isSelected ? 'default' : 'pointer', textAlign: 'left' }}
-                        >
-                          <img src={normalizedAssetUrl} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block', background: '#f1f5f9' }} />
-                          <span style={{ display: 'block', padding: '7px 8px', color: isSelected ? '#176c61' : '#334155', fontSize: '11.5px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {isSelected ? "Added" : asset.title}
-                          </span>
-                        </button>
+                        <div key={asset.id} style={{ border: isSelected ? '2px solid #176c61' : '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
+                          <button
+                            type="button"
+                            onClick={() => addImageToProduct(normalizedAssetUrl)}
+                            disabled={isSelected || isDeleting}
+                            style={{ width: '100%', border: 'none', background: '#ffffff', padding: 0, cursor: isSelected || isDeleting ? 'default' : 'pointer', textAlign: 'left' }}
+                          >
+                            <img src={normalizedAssetUrl} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block', background: '#f1f5f9' }} />
+                            <span style={{ display: 'block', padding: '7px 8px', color: isSelected ? '#176c61' : '#334155', fontSize: '11.5px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {isSelected ? "Added" : asset.title}
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deleteImageFromServer(asset)}
+                            disabled={isDeleting}
+                            style={{ width: '100%', border: 'none', borderTop: '1px solid #e2e8f0', background: '#fef2f2', color: '#dc2626', minHeight: '28px', fontSize: '11.5px', fontWeight: 700, cursor: isDeleting ? 'not-allowed' : 'pointer', opacity: isDeleting ? 0.65 : 1 }}
+                          >
+                            {isDeleting ? "Deleting..." : "Delete file"}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
