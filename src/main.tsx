@@ -4720,9 +4720,17 @@ function Storefront({
 
       setGoogleAuthStatus("loading");
       try {
-        const response = await fetch(apiUrl("/public-config"));
-        if (!response.ok) throw new Error(`Public config unavailable (${response.status})`);
-        const config = await response.json();
+        let config: any = null;
+        const publicResponse = await fetch(apiUrl("/public-config"));
+        if (publicResponse.ok) {
+          config = await publicResponse.json();
+        } else if (publicResponse.status === 404) {
+          const settingsResponse = await fetch(apiUrl("/settings/config"), { headers: adminRequestHeaders() });
+          if (!settingsResponse.ok) throw new Error(`Google OAuth config unavailable (${settingsResponse.status})`);
+          config = await settingsResponse.json();
+        } else {
+          throw new Error(`Google OAuth config unavailable (${publicResponse.status})`);
+        }
         if (!isMounted) return;
 
         const clientId = String(config.googleClientId || "").trim();

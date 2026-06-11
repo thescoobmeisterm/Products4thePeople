@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.6.11 - 2026-06-11
+
+### Fixed
+- Added a Google OAuth runtime fallback so sign-in can still load the saved client ID when the newer public config route is not available on the deployed API yet.
+
 ## v1.6.10 - 2026-06-11
 
 ### Fixed
