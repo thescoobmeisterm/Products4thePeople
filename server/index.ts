@@ -151,7 +151,7 @@ const productSchema = z.object({
   medusaId: z.string().optional(),
   name: z.string().min(1),
   niche: z.string().min(1),
-  subdomain: z.enum(["beauty", "pets", "home", "fitness", "automotive"]),
+  subdomain: z.string().min(1),
   costMin: z.number(),
   costMax: z.number(),
   shippingMin: z.number(),

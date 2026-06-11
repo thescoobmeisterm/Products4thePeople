@@ -209,6 +209,20 @@ If `node_modules` is broken or root-owned, remove it:
 rm -rf /var/www/vhosts/products4thepeople.com/httpdocs/node_modules
 ```
 
+If Vite fails while copying files into `dist`, such as:
+
+```text
+EACCES: permission denied, copyfile 'public/Logos/DriveCraft_Logo.png' -> 'dist/Logos/DriveCraft_Logo.png'
+```
+
+remove the root-owned build output and fix ownership:
+
+```bash
+rm -rf /var/www/vhosts/products4thepeople.com/httpdocs/dist
+chown -R products4thepeople.c_4ix2g6d2jzv:psacln /var/www/vhosts/products4thepeople.com/httpdocs
+chmod -R u+rwX /var/www/vhosts/products4thepeople.com/httpdocs
+```
+
 Then deploy again from Plesk.
 
 ## PM2 API Commands
