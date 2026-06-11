@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.6.7 - 2026-06-11
+
+### Fixed
+- Fixed uploaded media URLs so new product image uploads use browser-safe `/uploads/` paths by default.
+- Normalized older uploaded image URLs during rendering so previously saved localhost or Plesk preview upload links can display through the production `/uploads/` proxy.
+
 ## v1.6.6 - 2026-06-11
 
 ### Fixed

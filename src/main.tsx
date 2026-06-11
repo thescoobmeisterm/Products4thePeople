@@ -544,6 +544,22 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
+function normalizeMediaUrl(url?: string) {
+  if (!url) return "";
+  const trimmed = url.trim();
+  const uploadPath = trimmed.match(/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(\/uploads\/.+)$/i)?.[1];
+  if (uploadPath) return uploadPath;
+  try {
+    const parsed = new URL(trimmed);
+    if ((parsed.hostname.endsWith(".plesk.page") || parsed.hostname === "70.35.207.102") && parsed.pathname.startsWith("/uploads/")) {
+      return parsed.pathname;
+    }
+  } catch {
+    // Relative paths are expected for local uploads.
+  }
+  return trimmed;
+}
+
 function App() {
   const [products, setProducts] = React.useState<Product[]>(seedProducts);
   const [stores, setStores] = React.useState<Record<string, StorefrontNicheConfig>>(() => {
@@ -1043,7 +1059,7 @@ function App() {
     const asset = mediaAssets.find((item) => item.id === listingMediaAssetId && item.kind === "image");
     const product = products.find((item) => item.id === listingMediaProductId);
     if (!asset || !product) return;
-    const nextImages = Array.from(new Set([asset.url, ...(product.images || [])]));
+    const nextImages = Array.from(new Set([normalizeMediaUrl(asset.url), ...(product.images || []).map(normalizeMediaUrl)]));
     const updatedProduct = { ...product, images: nextImages };
     try {
       const response = await saveApiProduct(updatedProduct);
@@ -2148,9 +2164,9 @@ function App() {
                       <div key={asset.id} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff', display: 'grid', gridTemplateRows: '150px auto' }}>
                         <div style={{ background: '#0f172a', display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
                           {asset.kind === "video" ? (
-                            <video src={asset.url} controls muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <video src={normalizeMediaUrl(asset.url)} controls muted playsInline preload="metadata" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           ) : (
-                            <img src={asset.url} alt={asset.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={normalizeMediaUrl(asset.url)} alt={asset.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           )}
                         </div>
                         <div style={{ padding: '12px', display: 'grid', gap: '8px' }}>
@@ -2162,7 +2178,7 @@ function App() {
                             <p style={{ margin: 0, color: '#475569', fontSize: '12px', lineHeight: 1.45 }}>{asset.handle ? `${asset.handle}: ` : ""}{asset.caption}</p>
                           )}
                           <div style={{ display: 'flex', gap: '8px', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <a href={asset.url} target="_blank" rel="noreferrer" style={{ color: '#176c61', fontWeight: 700, fontSize: '12px', textDecoration: 'none' }}>
+                            <a href={normalizeMediaUrl(asset.url)} target="_blank" rel="noreferrer" style={{ color: '#176c61', fontWeight: 700, fontSize: '12px', textDecoration: 'none' }}>
                               Open
                             </a>
                             <button type="button" onClick={() => removeMediaAsset(asset.id)} style={{ border: '1px solid #fca5a5', background: '#fef2f2', color: '#dc2626', borderRadius: '6px', padding: '6px 10px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>
@@ -3324,12 +3340,12 @@ function ProductDialog({
   const imageAssets = mediaAssets.filter((asset) => asset.kind === "image");
 
   const addImageToProduct = (url: string) => {
-    const nextImages = Array.from(new Set([url, ...(form.images || [])]));
+    const nextImages = Array.from(new Set([normalizeMediaUrl(url), ...(form.images || []).map(normalizeMediaUrl)]));
     setField("images", nextImages);
   };
 
   const removeImageFromProduct = (url: string) => {
-    setField("images", (form.images || []).filter((image) => image !== url));
+    setField("images", (form.images || []).filter((image) => normalizeMediaUrl(image) !== normalizeMediaUrl(url)));
   };
 
   const uploadProductImage = async () => {
@@ -3349,7 +3365,7 @@ function ProductDialog({
         tag: form.niche || product?.niche || "Product",
       });
       onMediaCreated(response.asset);
-      addImageToProduct(response.asset.url);
+      addImageToProduct(normalizeMediaUrl(response.asset.url));
       setImageUploadFile(null);
       setImageManagerNotice("Image uploaded and added to this product.");
     } catch (error) {
@@ -3456,7 +3472,7 @@ function ProductDialog({
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px' }}>
                     {(form.images || []).map((image) => (
                       <div key={image} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
-                        <img src={image} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block', background: '#f1f5f9' }} />
+                        <img src={normalizeMediaUrl(image)} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block', background: '#f1f5f9' }} />
                         <button
                           type="button"
                           onClick={() => removeImageFromProduct(image)}
@@ -3478,16 +3494,17 @@ function ProductDialog({
                 ) : (
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '10px', maxHeight: '260px', overflow: 'auto', paddingRight: '2px' }}>
                     {imageAssets.map((asset) => {
-                      const isSelected = Boolean(form.images?.includes(asset.url));
+                      const normalizedAssetUrl = normalizeMediaUrl(asset.url);
+                      const isSelected = Boolean(form.images?.map(normalizeMediaUrl).includes(normalizedAssetUrl));
                       return (
                         <button
                           key={asset.id}
                           type="button"
-                          onClick={() => addImageToProduct(asset.url)}
+                          onClick={() => addImageToProduct(normalizedAssetUrl)}
                           disabled={isSelected}
                           style={{ border: isSelected ? '2px solid #176c61' : '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff', padding: 0, cursor: isSelected ? 'default' : 'pointer', textAlign: 'left' }}
                         >
-                          <img src={asset.url} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block', background: '#f1f5f9' }} />
+                          <img src={normalizedAssetUrl} alt="" style={{ width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', display: 'block', background: '#f1f5f9' }} />
                           <span style={{ display: 'block', padding: '7px 8px', color: isSelected ? '#176c61' : '#334155', fontSize: '11.5px', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                             {isSelected ? "Added" : asset.title}
                           </span>
@@ -4430,7 +4447,7 @@ function Storefront({
           id: asset.id,
           handle: asset.handle || "@products4thepeople",
           caption: asset.caption || asset.title,
-          mediaUrl: asset.url,
+          mediaUrl: normalizeMediaUrl(asset.url),
           kind: asset.kind,
           productName: product?.name || asset.title,
           product,
@@ -7585,7 +7602,7 @@ function getProductSubcategory(product: Product) {
 }
 
 function getProductImages(product: Product) {
-  if (product.images?.length) return product.images;
+  if (product.images?.length) return product.images.map(normalizeMediaUrl).filter(Boolean);
   const fallback = productImageFallbacks[getProductSubcategory(product)] || productImageFallbacks.Featured;
   return fallback.map((url) => `${url}&auto=format&fit=crop&w=1200&q=80`);
 }

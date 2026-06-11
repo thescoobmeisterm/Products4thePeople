@@ -4412,15 +4412,13 @@ async function deleteMediaAssetDb(id: string) {
   return asset;
 }
 
-function absoluteUploadUrl(request: express.Request, fileName: string) {
+function absoluteUploadUrl(_request: express.Request, fileName: string) {
   const configuredBase = process.env.PUBLIC_API_URL || "";
-  if (configuredBase) {
+  if (configuredBase && !/^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(configuredBase.trim())) {
     return `${configuredBase.replace(/\/$/, "")}/uploads/${fileName}`;
   }
 
-  const proto = String(request.header("x-forwarded-proto") || request.protocol || "http").split(",")[0];
-  const host = String(request.header("x-forwarded-host") || request.header("host") || `localhost:${port}`);
-  return `${proto}://${host}/uploads/${fileName}`;
+  return `/uploads/${fileName}`;
 }
 
 async function migrate() {
