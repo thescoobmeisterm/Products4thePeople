@@ -269,6 +269,18 @@ function adminRequestHeaders(extra: Record<string, string> = {}) {
   };
 }
 
+function saveAdminSession(email = adminEmail) {
+  localStorage.setItem(
+    adminSessionKey,
+    JSON.stringify({ email: email.trim().toLowerCase(), isAdmin: true, signedInAt: new Date().toISOString() }),
+  );
+}
+
+function clearUnifiedAuthSession() {
+  localStorage.removeItem(adminSessionKey);
+  localStorage.removeItem("p4tp_customer");
+}
+
 const marketingConfig = {
   ga4MeasurementId: import.meta.env.VITE_GA4_MEASUREMENT_ID || "",
   metaPixelId: import.meta.env.VITE_META_PIXEL_ID || "",
@@ -1315,14 +1327,14 @@ function App() {
       return false;
     }
 
-    localStorage.setItem(adminSessionKey, JSON.stringify({ email: adminEmail, signedInAt: new Date().toISOString() }));
+    saveAdminSession(adminEmail);
     setIsAdminAuthed(true);
     setNotice("Admin session started.");
     return true;
   };
 
   const logoutAdmin = () => {
-    localStorage.removeItem(adminSessionKey);
+    clearUnifiedAuthSession();
     setIsAdminAuthed(false);
     window.location.hash = "#admin-login";
   };
@@ -4565,7 +4577,7 @@ function Storefront({
             setCurrentUser(nextUser);
             localStorage.setItem("p4tp_customer", JSON.stringify(nextUser));
             if (profileIsAdmin) {
-              localStorage.setItem(adminSessionKey, JSON.stringify({ email: currentUser.email, signedInAt: new Date().toISOString() }));
+              saveAdminSession(currentUser.email);
             }
           }
           setPreferences(profile.preferences || {});
@@ -5075,7 +5087,7 @@ function Storefront({
       addToast(`Signed in as ${user.name} via Google`, "success");
 
       if (user.isAdmin) {
-        localStorage.setItem(adminSessionKey, JSON.stringify({ email: user.email, signedInAt: new Date().toISOString() }));
+        saveAdminSession(user.email);
         addToast(`Admin authentication active! Welcome back.`, "success");
       }
     } catch (e) {
@@ -5121,7 +5133,7 @@ function Storefront({
     
     // If logging in as admin, also sync admin authed session!
     if (user.isAdmin) {
-      localStorage.setItem(adminSessionKey, JSON.stringify({ email: cleanEmail, signedInAt: new Date().toISOString() }));
+      saveAdminSession(cleanEmail);
       setConfirmation(`Admin authentication active! Welcome back.`);
     } else {
       addToast(`Signed in as ${cleanName}`, "success");
@@ -5129,8 +5141,7 @@ function Storefront({
   };
 
   const handleSignOut = () => {
-    localStorage.removeItem("p4tp_customer");
-    localStorage.removeItem(adminSessionKey);
+    clearUnifiedAuthSession();
     setCurrentUser(null);
     setCart({});
     setEmail("");
@@ -7664,9 +7675,22 @@ function normalizeStoredOrder(order: Order | Partial<Order> | ApiOrder): Order {
 function loadAdminSession() {
   try {
     const stored = localStorage.getItem(adminSessionKey);
-    if (!stored) return false;
-    const parsed = JSON.parse(stored) as { email?: string; signedInAt?: string };
-    return parsed.email === adminEmail && Boolean(parsed.signedInAt);
+    if (stored) {
+      const parsed = JSON.parse(stored) as { email?: string; signedInAt?: string; isAdmin?: boolean };
+      if (Boolean(parsed.signedInAt) && (parsed.email?.toLowerCase() === adminEmail.toLowerCase() || parsed.isAdmin)) {
+        return true;
+      }
+    }
+
+    const customerStored = localStorage.getItem("p4tp_customer");
+    if (!customerStored) return false;
+    const customer = JSON.parse(customerStored) as { email?: string; isAdmin?: boolean };
+    const customerIsAdmin = customer.isAdmin || customer.email?.toLowerCase() === adminEmail.toLowerCase();
+    if (customerIsAdmin && customer.email) {
+      saveAdminSession(customer.email);
+      return true;
+    }
+    return false;
   } catch {
     return false;
   }

@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.9.1 - 2026-06-12
+
+### Fixed
+- Unified storefront and admin authentication so Google-signed-in admins can enter the admin portal without a second login screen.
+- Updated admin sign-out to clear both the admin session and storefront customer session.
+
 ## v1.9.0 - 2026-06-12
 
 ### Added
