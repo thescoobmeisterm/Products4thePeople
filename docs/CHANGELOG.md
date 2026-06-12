@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.10.0 - 2026-06-12
+
+### Added
+- Added ten new sourced products across beauty, pets, fitness, and home to the starter catalog seed data.
+- Added a dedicated live-catalog import CSV for pushing the new product batch into the production API catalog.
+- Added publish/unpublish workflows for SEO category pages and knowledge base entries, including draft-only public visibility and sitemap filtering.
+
 ## v1.9.1 - 2026-06-12
 
 ### Fixed

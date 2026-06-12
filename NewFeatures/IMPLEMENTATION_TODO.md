@@ -20,7 +20,7 @@ Testing key:
 ## Current Baseline
 
 - Current app version at audit time: `1.6.10`
-- Latest implementation batch started: `1.9.0`
+- Latest implementation batch started: `1.10.0`
 - Working tree at audit time: clean
 - Implemented foundation: storefront/admin MVP, product CRUD, orders, customers, media library,
   Stripe/Medusa settings, Google sign-in support, Product Research MVP, Experimentation MVP,
@@ -46,8 +46,8 @@ SEO tracking, and dashboard stats.
   - `[x]` Article, KB, and SEO page admin lists
   - `[x]` SEO dashboard metrics
   - `[x]` Add keyword/status/filter controls across all content lists
-  - `[ ]` Add publish/unpublish workflow for SEO pages and KB articles
-  - Test: `[x]` Build `[x]` Typecheck `[ ]` API `[x]` Manual
+  - `[x]` Add publish/unpublish workflow for SEO pages and KB articles
+  - Test: `[x]` Build `[x]` Typecheck `[x]` API `[x]` Manual
 
 - `[~]` Programmatic SEO
   - `[x]` Category SEO page generation

@@ -2029,7 +2029,7 @@ app.get("/api/seo-pages", async (request, response) => {
   try {
     const all = await getSeoPagesDb();
     const niche = request.query.niche as string;
-    let list = all;
+    let list = all.filter((s: any) => !s.status || s.status === "published");
     if (niche && niche !== "general" && niche !== "all") {
       list = list.filter((s: any) => s.niche === niche);
     }
@@ -2042,7 +2042,7 @@ app.get("/api/seo-pages", async (request, response) => {
 app.get("/api/seo-pages/:slug", async (request, response) => {
   try {
     const page = await getSeoPageBySlugDb(request.params.slug);
-    if (!page) {
+    if (!page || (page.status && page.status !== "published")) {
       response.status(404).json({ error: "SEO landing page not found" });
       return;
     }
@@ -2066,10 +2066,41 @@ app.post("/api/admin/seo-pages", requireAdmin, async (request, response) => {
   try {
     const page = request.body;
     if (!page.id) page.id = crypto.randomUUID();
+    page.status = page.status || "draft";
     page.created_at = new Date().toISOString();
     page.updated_at = new Date().toISOString();
     await upsertSeoPageDb(page);
     response.status(201).json({ page });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.patch("/api/admin/seo-pages/:id", requireAdmin, async (request, response) => {
+  try {
+    const page = await getSeoPageByIdDb(request.params.id);
+    if (!page) {
+      response.status(404).json({ error: "SEO page not found" });
+      return;
+    }
+
+    const updates = request.body;
+    let publishedAt = page.published_at || null;
+    if (updates.status === "published" && page.status !== "published") {
+      publishedAt = new Date().toISOString();
+    }
+    if (updates.status === "draft") {
+      publishedAt = null;
+    }
+
+    const updatedPage = {
+      ...page,
+      ...updates,
+      published_at: publishedAt,
+      updated_at: new Date().toISOString()
+    };
+    await upsertSeoPageDb(updatedPage);
+    response.json({ page: updatedPage });
   } catch (error: any) {
     response.status(500).json({ error: error.message });
   }
@@ -2113,6 +2144,7 @@ Explore our premier selection of **${categoryName}** specifically optimized for 
       seo_title: seoTitle,
       seo_description: seoDescription,
       schema_markup: schemaMarkup,
+      status: "draft",
       views: 0,
       conversions: 0,
       revenue: 0,
@@ -2194,6 +2226,7 @@ Use this page to explain the problem, answer buying questions, and send ready sh
       seo_title: `${product.name} for ${productAngle} | Products4ThePeople`,
       seo_description: seoDescription,
       schema_markup: schemaMarkup,
+      status: "draft",
       views: 0,
       conversions: 0,
       revenue: 0,
@@ -2255,8 +2288,9 @@ app.get("/sitemap.xml", async (_request, response) => {
       xml += `  </url>\n`;
     }
 
-    // Programmatic Pages
-    for (const page of seoPages) {
+    // Programmatic Pages (Published only; legacy pages without status remain visible)
+    const publishedSeoPages = seoPages.filter((page: any) => !page.status || page.status === "published");
+    for (const page of publishedSeoPages) {
       xml += `  <url>\n`;
       xml += `    <loc>https://products4thepeople.com/#c/${page.slug}</loc>\n`;
       xml += `    <changefreq>weekly</changefreq>\n`;
@@ -4323,8 +4357,8 @@ async function upsertSeoPageDb(page: any) {
     await pool.query(
       `insert into seo_pages (
         id, title, slug, niche, category_name, description, seo_title, 
-        seo_description, schema_markup, views, conversions, revenue, created_at, updated_at
-      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        seo_description, schema_markup, status, views, conversions, revenue, published_at, created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        on conflict (id) do update set
          title = excluded.title,
          slug = excluded.slug,
@@ -4334,15 +4368,19 @@ async function upsertSeoPageDb(page: any) {
          seo_title = excluded.seo_title,
          seo_description = excluded.seo_description,
          schema_markup = excluded.schema_markup,
+         status = excluded.status,
          views = excluded.views,
          conversions = excluded.conversions,
          revenue = excluded.revenue,
+         published_at = excluded.published_at,
          updated_at = now()`,
       [
         page.id, page.title, page.slug, page.niche, page.category_name, page.description,
         page.seo_title || null, page.seo_description || null,
         page.schema_markup ? (typeof page.schema_markup === 'string' ? page.schema_markup : JSON.stringify(page.schema_markup)) : null,
+        page.status || 'draft',
         page.views || 0, page.conversions || 0, page.revenue || 0,
+        page.published_at || null,
         page.created_at || new Date().toISOString(), page.updated_at || new Date().toISOString()
       ]
     );
@@ -4795,12 +4833,19 @@ async function migrate() {
       seo_title text,
       seo_description text,
       schema_markup jsonb,
+      status text not null default 'published',
       views integer not null default 0,
       conversions integer not null default 0,
       revenue numeric not null default 0,
+      published_at timestamptz,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
+  `);
+
+  await pool.query(`
+    alter table seo_pages add column if not exists status text not null default 'published';
+    alter table seo_pages add column if not exists published_at timestamptz;
   `);
 }
 

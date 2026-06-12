@@ -474,12 +474,14 @@ export type SeoPage = {
   niche: string;
   category_name: string;
   description: string;
+  status?: "draft" | "published";
   seo_title?: string;
   seo_description?: string;
   schema_markup?: any;
   views: number;
   conversions: number;
   revenue: number;
+  published_at?: string;
   created_at: string;
   updated_at: string;
 };
@@ -614,6 +616,13 @@ export async function createSeoPage(page: Omit<SeoPage, "id" | "views" | "conver
   return apiFetch<{ page: SeoPage }>("/admin/seo-pages", {
     method: "POST",
     body: JSON.stringify(page),
+  });
+}
+
+export async function updateSeoPage(id: string, updates: Partial<SeoPage>) {
+  return apiFetch<{ page: SeoPage }>(`/admin/seo-pages/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify(updates),
   });
 }
 

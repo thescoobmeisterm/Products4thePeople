@@ -119,6 +119,7 @@ import {
   createSeoPage,
   generateSeoPage,
   generateSeoPageFromProduct,
+  updateSeoPage,
   trackSeoHit,
   getSeoDashboard,
   type Article,
@@ -473,6 +474,7 @@ const seedProducts: Product[] = [
   makeProduct("LED Neck Mask", "Beauty", "beauty", 15, 30, 6, 10, 69, 129, "60-70%", 7, "https://www.aliexpress.us/w/wholesale-led-neck-mask.html", "Anti-aging neck care", "Review", 94),
   makeProduct("Blackhead Vacuum", "Beauty", "beauty", 7, 15, 4, 7, 34, 69, "60-75%", 8, "https://www.aliexpress.us/w/wholesale-blackhead-remover-vacuum.html", "Satisfying pore cleaning demo", "Draft", 132),
   makeProduct("Eye Patches", "Beauty", "beauty", 2, 6, 2, 5, 19, 39, "70-85%", 9, "https://www.aliexpress.us/w/wholesale-eye-patches.html", "Morning glow-up routine", "Active", 475),
+  makeProduct("13-Piece Makeup Brush Set", "Beauty", "beauty", 4.9, 4.9, 2.99, 2.99, 17.99, 17.99, "$10.10 est.", 10, "https://www.aliexpress.us/item/3256811770072335.html", "Soft full-face brush set for foundation contour blush highlight and eyeshadow", "Active", 180),
   makeProduct("Dog Water Bottle", "Pets", "pets", 3, 8, 3, 6, 19, 39, "70-85%", 1, "https://www.aliexpress.us/w/wholesale-dog-water-bottle.html", "Every dog owner needs this", "Active", 392),
   makeProduct("Calming Dog Bed", "Pets", "pets", 12, 25, 8, 20, 49, 99, "55-70%", 2, "https://www.aliexpress.us/w/wholesale-calming-dog-bed.html", "Help anxious pets relax", "Active", 88),
   makeProduct("Pet Hair Remover Roller", "Pets", "pets", 2, 6, 3, 6, 19, 34, "70-85%", 3, "https://www.aliexpress.us/w/wholesale-pet-hair-remover.html", "Remove fur instantly", "Active", 305),
@@ -482,13 +484,22 @@ const seedProducts: Product[] = [
   makeProduct("Lick Mat", "Pets", "pets", 2, 6, 3, 5, 19, 34, "70-85%", 7, "https://www.aliexpress.us/w/wholesale-dog-lick-mat.html", "Calm dogs with enrichment", "Active", 274),
   makeProduct("Cat Laser Toy", "Pets", "pets", 2, 7, 3, 5, 19, 39, "70-85%", 8, "https://www.aliexpress.us/w/wholesale-cat-laser-toy.html", "Keep cats entertained", "Review", 219),
   makeProduct("Dog Paw Cleaner", "Pets", "pets", 3, 8, 3, 6, 19, 39, "70-85%", 9, "https://www.aliexpress.us/w/wholesale-dog-paw-cleaner.html", "Stop muddy paw prints", "Active", 333),
+  makeProduct("Extra Large Plush Dog Bed", "Pets", "pets", 36.9, 36.9, 0, 0, 52.99, 52.99, "$30.17 est.", 11, "https://www.aliexpress.us/item/3256811658856601.html", "Oversized plush bed mat for large dogs crates kennels and cozy living-room naps", "Active", 80),
+  makeProduct("Spin Carpet Cat Scratching Post", "Pets", "pets", 12.16, 12.16, 0, 0, 23.99, 23.99, "$11.83 est.", 12, "https://www.aliexpress.us/item/3256805622822820.html", "Wooden climbing frame with sisal scratching and a rotating play ball", "Active", 120),
+  makeProduct("Dog Training Waist Treat Bag", "Pets", "pets", 6.61, 6.61, 0, 0, 13.78, 13.78, "$7.12 est.", 13, "https://www.aliexpress.us/item/3256807361435225.html", "Hands-free treat pouch for walks outdoor training and quick rewards", "Active", 220),
+  makeProduct("Pet Hair Shedding Comb", "Pets", "pets", 8.06, 8.06, 0, 0, 14.99, 14.99, "$6.93 est.", 14, "https://www.aliexpress.us/item/3256811756959518.html", "Detangling grooming brush for loose fur undercoat knots and mats", "Active", 190),
+  makeProduct("Cotton Rope Cat Hammock", "Pets", "pets", 30.83, 30.83, 0, 0, 55.87, 55.87, "$25.04 est.", 15, "https://www.aliexpress.us/item/3256811371082916.html", "Hand-woven hanging cat hammock for elevated lounging in multi-cat homes", "Active", 75),
   makeProduct("Posture Corrector", "Fitness", "fitness", 5, 10, 2, 5, 34, 39, "70-80%", 1, "https://www.aliexpress.us/w/wholesale-posture-corrector.html", "Desk posture reset in 5 minutes a day", "Active", 188),
   makeProduct("Resistance Bands", "Fitness", "fitness", 2, 5, 2, 4, 24, 29, "80-85%", 2, "https://www.aliexpress.us/w/wholesale-resistance-bands.html", "Cardio and strength anywhere", "Active", 250),
   makeProduct("Smart Jump Rope", "Fitness", "fitness", 6, 12, 3, 6, 34, 39, "65-75%", 3, "https://www.aliexpress.us/w/wholesale-smart-jump-rope.html", "Cardio with automatic app jump tracking", "Active", 112),
+  makeProduct("Mini Percussion Massage Gun", "Fitness", "fitness", 41.02, 41.02, 0, 0, 60.89, 60.89, "$19.87 est.", 4, "https://www.aliexpress.us/item/3256811844401796.html", "Portable handheld massage gun for back neck shoulder leg and post-workout recovery", "Active", 95),
+  makeProduct("Mouth Tape Sleep Strips", "Fitness", "fitness", 2.57, 7.25, 4.36, 4.36, 22.99, 32.87, "$20.42-$25.62 est.", 5, "https://www.aliexpress.us/item/3256812145970867.html", "Travel-friendly sleep strips that support gentle nasal-breathing routines", "Active", 260),
+  makeProduct("Resistance Bands With Handles", "Fitness", "fitness", 5.64, 5.64, 2.99, 2.99, 25.6, 25.6, "$18.97 est.", 6, "https://www.aliexpress.us/item/3256811825124429.html", "Handled workout bands for at-home strength training and compact travel workouts", "Active", 210),
   makeProduct("Pet Dental Kit", "Pets", "pets", 3, 6, 2, 4, 29, 34, "75-80%", 10, "https://www.aliexpress.us/w/wholesale-pet-dental-kit.html", "Fresh pet breath and healthy gums", "Active", 145),
   makeProduct("Sunset Lamp", "Home", "home", 3, 5, 2, 4, 19, 24, "70-80%", 1, "https://www.aliexpress.us/w/wholesale-sunset-lamp.html", "Bring atmospheric sunset colors into your bedroom", "Active", 220),
   makeProduct("Flame Diffuser", "Home", "home", 6, 12, 3, 6, 34, 39, "65-75%", 2, "https://www.aliexpress.us/w/wholesale-flame-diffuser.html", "Ultrasonic cool mist with realistic flame lighting", "Active", 130),
   makeProduct("Self-Wringing Mop", "Home", "home", 5, 10, 3, 6, 29, 34, "65-75%", 3, "https://www.aliexpress.us/w/wholesale-flat-mop-hands-free.html", "Hands-free self-wringing floor mop", "Active", 95),
+  makeProduct("48-Piece Food Storage Containers", "Home", "home", 18.28, 18.28, 0, 0, 35, 35, "$16.73 est.", 4, "https://www.aliexpress.us/item/3256810417338983.html", "Kitchen container set for pantry prep leftovers and cleaner food storage", "Active", 140),
   makeProduct("Ceramic Wax Spray", "Automotive", "automotive", 4, 10, 3, 6, 29, 39, "60-70%", 1, "https://www.aliexpress.us/w/wholesale-ceramic-wax-spray.html", "Mirror-like shine and water beading", "Active", 180),
   makeProduct("Microfiber Wash Mitt", "Automotive", "automotive", 1, 3, 2, 4, 14, 19, "70-80%", 2, "https://www.aliexpress.us/w/wholesale-microfiber-wash-mitt.html", "Scratch-free car wash experience", "Active", 350),
   makeProduct("Interior Cleaner Wipes", "Automotive", "automotive", 2, 5, 2, 4, 19, 29, "65-75%", 3, "https://www.aliexpress.us/w/wholesale-interior-detailing-wipes.html", "Restore showroom matte look to dashboard", "Active", 240),
@@ -752,12 +763,14 @@ function App() {
 
   const seoFilteredPages = React.useMemo(() => {
     return seoPages.filter((page) => {
-      const searchable = [page.title, page.slug, page.category_name, page.description, page.seo_title, page.seo_description, page.niche].filter(Boolean).join(" ").toLowerCase();
+      const pageStatus = page.status || "published";
+      const searchable = [page.title, page.slug, page.category_name, page.description, page.seo_title, page.seo_description, page.niche, pageStatus].filter(Boolean).join(" ").toLowerCase();
       const matchesQuery = !normalizedSeoQuery || searchable.includes(normalizedSeoQuery);
       const matchesNiche = seoFilterNiche === "all" || page.niche === seoFilterNiche;
-      return matchesQuery && matchesNiche;
+      const matchesStatus = seoFilterStatus === "all" || pageStatus === seoFilterStatus;
+      return matchesQuery && matchesNiche && matchesStatus;
     });
-  }, [normalizedSeoQuery, seoPages, seoFilterNiche]);
+  }, [normalizedSeoQuery, seoPages, seoFilterNiche, seoFilterStatus]);
 
   const seoFilteredKbArticles = React.useMemo(() => {
     return seoKbArticles.filter((kb) => {
@@ -3001,7 +3014,7 @@ function App() {
                     </div>
                     <Layers size={22} />
                   </div>
-                  {renderSeoContentFilters({ resultCount: seoFilteredPages.length, totalCount: seoPages.length, showStatus: false })}
+                  {renderSeoContentFilters({ resultCount: seoFilteredPages.length, totalCount: seoPages.length })}
                   {seoPages.length === 0 ? (
                     <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px' }}>No category pages generated yet.</p>
                   ) : seoFilteredPages.length === 0 ? (
@@ -3014,22 +3027,45 @@ function App() {
                             <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Title</th>
                             <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Slug</th>
                             <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Niche</th>
+                            <th style={{ textAlign: 'left', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Status</th>
                             <th style={{ textAlign: 'right', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Views</th>
                             <th style={{ textAlign: 'right', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Conv.</th>
+                            <th style={{ textAlign: 'right', padding: '10px 12px', color: '#64748b', fontWeight: 600 }}>Actions</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {seoFilteredPages.map((page) => (
-                            <tr key={page.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                              <td style={{ padding: '10px 12px', fontWeight: 500 }}>{page.title}</td>
-                              <td style={{ padding: '10px 12px' }}>
-                                <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>/c/{page.slug}</code>
-                              </td>
-                              <td style={{ padding: '10px 12px', color: '#64748b' }}>{page.niche}</td>
-                              <td style={{ padding: '10px 12px', textAlign: 'right' }}>{page.views}</td>
-                              <td style={{ padding: '10px 12px', textAlign: 'right' }}>{page.conversions}</td>
-                            </tr>
-                          ))}
+                          {seoFilteredPages.map((page) => {
+                            const pageStatus = page.status || "published";
+                            return (
+                              <tr key={page.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{ padding: '10px 12px', fontWeight: 500 }}>{page.title}</td>
+                                <td style={{ padding: '10px 12px' }}>
+                                  <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>/c/{page.slug}</code>
+                                </td>
+                                <td style={{ padding: '10px 12px', color: '#64748b' }}>{page.niche}</td>
+                                <td style={{ padding: '10px 12px' }}>
+                                  <span style={{ background: pageStatus === 'published' ? '#dcfce7' : '#fef3c7', color: pageStatus === 'published' ? '#166534' : '#92400e', padding: '2px 8px', borderRadius: '4px', fontSize: '11.5px', fontWeight: 600 }}>{pageStatus}</span>
+                                </td>
+                                <td style={{ padding: '10px 12px', textAlign: 'right' }}>{page.views}</td>
+                                <td style={{ padding: '10px 12px', textAlign: 'right' }}>{page.conversions}</td>
+                                <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                                  <button type="button" onClick={async () => {
+                                    try {
+                                      const nextStatus = pageStatus === 'published' ? 'draft' : 'published';
+                                      const res = await updateSeoPage(page.id, { status: nextStatus, published_at: nextStatus === 'published' ? new Date().toISOString() : undefined });
+                                      setSeoPages((prev) => prev.map((p) => p.id === page.id ? res.page : p));
+                                      setNotice(`${nextStatus === 'published' ? 'Published' : 'Unpublished'} SEO page: ${res.page.title}`);
+                                    } catch (err) {
+                                      console.error(err);
+                                      setNotice(err instanceof Error ? `SEO page status update failed: ${err.message}` : "SEO page status update failed.");
+                                    }
+                                  }} style={{ padding: '4px 12px', borderRadius: '6px', border: pageStatus === 'published' ? '1px solid #f59e0b' : '1px solid #176c61', background: pageStatus === 'published' ? '#fffbeb' : '#f0fdf4', color: pageStatus === 'published' ? '#92400e' : '#176c61', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                                    {pageStatus === 'published' ? 'Unpublish' : 'Publish'}
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -3119,7 +3155,23 @@ function App() {
                         <div key={kb.id} style={{ padding: '14px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                             <strong style={{ fontSize: '14px' }}>{kb.title}</strong>
-                            <span style={{ background: kb.category === 'faq' ? '#dbeafe' : kb.category === 'tutorial' ? '#fef3c7' : '#f3e8ff', color: kb.category === 'faq' ? '#1e40af' : kb.category === 'tutorial' ? '#92400e' : '#7c3aed', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>{kb.category}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                              <span style={{ background: kb.status === 'published' ? '#dcfce7' : '#fef3c7', color: kb.status === 'published' ? '#166534' : '#92400e', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>{kb.status}</span>
+                              <span style={{ background: kb.category === 'faq' ? '#dbeafe' : kb.category === 'tutorial' ? '#fef3c7' : '#f3e8ff', color: kb.category === 'faq' ? '#1e40af' : kb.category === 'tutorial' ? '#92400e' : '#7c3aed', padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600 }}>{kb.category}</span>
+                              <button type="button" onClick={async () => {
+                                try {
+                                  const nextStatus = kb.status === 'published' ? 'draft' : 'published';
+                                  const res = await updateKbArticle(kb.id, { status: nextStatus });
+                                  setSeoKbArticles((prev) => prev.map((entry) => entry.id === kb.id ? res.article : entry));
+                                  setNotice(`${nextStatus === 'published' ? 'Published' : 'Unpublished'} KB entry: ${res.article.title}`);
+                                } catch (err) {
+                                  console.error(err);
+                                  setNotice(err instanceof Error ? `KB status update failed: ${err.message}` : "KB status update failed.");
+                                }
+                              }} style={{ padding: '3px 9px', borderRadius: '6px', border: kb.status === 'published' ? '1px solid #f59e0b' : '1px solid #176c61', background: kb.status === 'published' ? '#fffbeb' : '#f0fdf4', color: kb.status === 'published' ? '#92400e' : '#176c61', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}>
+                                {kb.status === 'published' ? 'Unpublish' : 'Publish'}
+                              </button>
+                            </div>
                           </div>
                           <p style={{ fontSize: '13px', color: '#64748b', margin: 0, lineHeight: '1.5' }}>{kb.content.substring(0, 200)}{kb.content.length > 200 ? '…' : ''}</p>
                         </div>
