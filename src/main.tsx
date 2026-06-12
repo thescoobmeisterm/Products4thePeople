@@ -619,6 +619,10 @@ function App() {
   const [kbNewNiche, setKbNewNiche] = React.useState("beauty");
   const [seoSitemapPreview, setSeoSitemapPreview] = React.useState("");
   const [seoSubTab, setSeoSubTab] = React.useState<"overview" | "articles" | "pages" | "kb" | "sitemap">("overview");
+  const [seoFilterQuery, setSeoFilterQuery] = React.useState("");
+  const [seoFilterNiche, setSeoFilterNiche] = React.useState("all");
+  const [seoFilterStatus, setSeoFilterStatus] = React.useState("all");
+  const [seoFilterKbCategory, setSeoFilterKbCategory] = React.useState("all");
   const [dbContacts, setDbContacts] = React.useState<any[]>([]);
   const [mediaAssets, setMediaAssets] = React.useState<MediaAsset[]>([]);
   const [mediaTitle, setMediaTitle] = React.useState("");
@@ -722,6 +726,109 @@ function App() {
   const [settingsFlatShipping, setSettingsFlatShipping] = React.useState("7");
   const [settingsConfigStatus, setSettingsConfigStatus] = React.useState<Record<string, any>>({});
   const [isSavingConfig, setIsSavingConfig] = React.useState(false);
+
+  const normalizedSeoQuery = seoFilterQuery.trim().toLowerCase();
+  const seoFilteredArticles = React.useMemo(() => {
+    return seoArticles.filter((art) => {
+      const searchable = [art.title, art.slug, art.summary, art.content, art.keywords, art.niche, art.status].filter(Boolean).join(" ").toLowerCase();
+      const matchesQuery = !normalizedSeoQuery || searchable.includes(normalizedSeoQuery);
+      const matchesNiche = seoFilterNiche === "all" || art.niche === seoFilterNiche;
+      const matchesStatus = seoFilterStatus === "all" || art.status === seoFilterStatus;
+      return matchesQuery && matchesNiche && matchesStatus;
+    });
+  }, [normalizedSeoQuery, seoArticles, seoFilterNiche, seoFilterStatus]);
+
+  const seoFilteredPages = React.useMemo(() => {
+    return seoPages.filter((page) => {
+      const searchable = [page.title, page.slug, page.category_name, page.description, page.seo_title, page.seo_description, page.niche].filter(Boolean).join(" ").toLowerCase();
+      const matchesQuery = !normalizedSeoQuery || searchable.includes(normalizedSeoQuery);
+      const matchesNiche = seoFilterNiche === "all" || page.niche === seoFilterNiche;
+      return matchesQuery && matchesNiche;
+    });
+  }, [normalizedSeoQuery, seoPages, seoFilterNiche]);
+
+  const seoFilteredKbArticles = React.useMemo(() => {
+    return seoKbArticles.filter((kb) => {
+      const searchable = [kb.title, kb.slug, kb.content, kb.category, kb.niche, kb.status].filter(Boolean).join(" ").toLowerCase();
+      const matchesQuery = !normalizedSeoQuery || searchable.includes(normalizedSeoQuery);
+      const matchesNiche = seoFilterNiche === "all" || kb.niche === seoFilterNiche;
+      const matchesStatus = seoFilterStatus === "all" || kb.status === seoFilterStatus;
+      const matchesCategory = seoFilterKbCategory === "all" || kb.category === seoFilterKbCategory;
+      return matchesQuery && matchesNiche && matchesStatus && matchesCategory;
+    });
+  }, [normalizedSeoQuery, seoFilterKbCategory, seoFilterNiche, seoFilterStatus, seoKbArticles]);
+
+  const renderSeoContentFilters = ({
+    resultCount,
+    totalCount,
+    showStatus = true,
+    showKbCategory = false,
+  }: {
+    resultCount: number;
+    totalCount: number;
+    showStatus?: boolean;
+    showKbCategory?: boolean;
+  }) => (
+    <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1.6fr) repeat(auto-fit, minmax(150px, 1fr))', gap: '10px', alignItems: 'end', margin: '14px 0', padding: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+      <label style={{ display: 'grid', gap: '4px' }}>
+        <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Search content</span>
+        <input
+          value={seoFilterQuery}
+          onChange={(e) => setSeoFilterQuery(e.target.value)}
+          placeholder="Title, slug, keyword, content..."
+          style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}
+        />
+      </label>
+      <label style={{ display: 'grid', gap: '4px' }}>
+        <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Niche</span>
+        <select value={seoFilterNiche} onChange={(e) => setSeoFilterNiche(e.target.value)} style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}>
+          <option value="all">All niches</option>
+          <option value="beauty">Beauty</option>
+          <option value="pets">Pets</option>
+          <option value="home">Home</option>
+          <option value="fitness">Fitness</option>
+          <option value="automotive">Automotive</option>
+        </select>
+      </label>
+      {showStatus && (
+        <label style={{ display: 'grid', gap: '4px' }}>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Status</span>
+          <select value={seoFilterStatus} onChange={(e) => setSeoFilterStatus(e.target.value)} style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}>
+            <option value="all">All statuses</option>
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+            <option value="archived">Archived</option>
+          </select>
+        </label>
+      )}
+      {showKbCategory && (
+        <label style={{ display: 'grid', gap: '4px' }}>
+          <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Category</span>
+          <select value={seoFilterKbCategory} onChange={(e) => setSeoFilterKbCategory(e.target.value)} style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '13px' }}>
+            <option value="all">All categories</option>
+            <option value="faq">FAQ</option>
+            <option value="tutorial">Tutorial</option>
+            <option value="product_guide">Product Guide</option>
+          </select>
+        </label>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 700 }}>{resultCount} / {totalCount}</span>
+        <button
+          type="button"
+          onClick={() => {
+            setSeoFilterQuery("");
+            setSeoFilterNiche("all");
+            setSeoFilterStatus("all");
+            setSeoFilterKbCategory("all");
+          }}
+          style={{ padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#fff', color: '#475569', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+        >
+          Reset
+        </button>
+      </div>
+    </div>
+  );
 
   const handleImportAliexpress = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -2723,12 +2830,15 @@ function App() {
                   <div className="panel-header">
                     <div>
                       <p>Content Library</p>
-                      <h2>Articles ({seoArticles.length})</h2>
+                      <h2>Articles ({seoFilteredArticles.length}/{seoArticles.length})</h2>
                     </div>
                     <BookOpen size={22} />
                   </div>
+                  {renderSeoContentFilters({ resultCount: seoFilteredArticles.length, totalCount: seoArticles.length })}
                   {seoArticles.length === 0 ? (
                     <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px' }}>No articles yet. Generate your first one above.</p>
+                  ) : seoFilteredArticles.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px' }}>No articles match the current filters.</p>
                   ) : (
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13.5px' }}>
@@ -2742,7 +2852,7 @@ function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {seoArticles.map((art) => (
+                          {seoFilteredArticles.map((art) => (
                             <tr key={art.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                               <td style={{ padding: '10px 12px', fontWeight: 500 }}>{art.title}</td>
                               <td style={{ padding: '10px 12px', color: '#64748b' }}>{art.niche}</td>
@@ -2875,12 +2985,15 @@ function App() {
                   <div className="panel-header">
                     <div>
                       <p>Landing Pages</p>
-                      <h2>Category Pages ({seoPages.length})</h2>
+                      <h2>Category Pages ({seoFilteredPages.length}/{seoPages.length})</h2>
                     </div>
                     <Layers size={22} />
                   </div>
+                  {renderSeoContentFilters({ resultCount: seoFilteredPages.length, totalCount: seoPages.length, showStatus: false })}
                   {seoPages.length === 0 ? (
                     <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px' }}>No category pages generated yet.</p>
+                  ) : seoFilteredPages.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px' }}>No category pages match the current filters.</p>
                   ) : (
                     <div style={{ overflowX: 'auto' }}>
                       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13.5px' }}>
@@ -2894,7 +3007,7 @@ function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {seoPages.map((page) => (
+                          {seoFilteredPages.map((page) => (
                             <tr key={page.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                               <td style={{ padding: '10px 12px', fontWeight: 500 }}>{page.title}</td>
                               <td style={{ padding: '10px 12px' }}>
@@ -2979,15 +3092,18 @@ function App() {
                   <div className="panel-header">
                     <div>
                       <p>Knowledge Base</p>
-                      <h2>Entries ({seoKbArticles.length})</h2>
+                      <h2>Entries ({seoFilteredKbArticles.length}/{seoKbArticles.length})</h2>
                     </div>
                     <BookOpen size={22} />
                   </div>
+                  {renderSeoContentFilters({ resultCount: seoFilteredKbArticles.length, totalCount: seoKbArticles.length, showKbCategory: true })}
                   {seoKbArticles.length === 0 ? (
                     <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px' }}>No knowledge base entries yet.</p>
+                  ) : seoFilteredKbArticles.length === 0 ? (
+                    <p style={{ textAlign: 'center', color: '#94a3b8', padding: '30px' }}>No knowledge base entries match the current filters.</p>
                   ) : (
                     <div style={{ display: 'grid', gap: '10px', marginTop: '12px' }}>
-                      {seoKbArticles.map((kb) => (
+                      {seoFilteredKbArticles.map((kb) => (
                         <div key={kb.id} style={{ padding: '14px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
                             <strong style={{ fontSize: '14px' }}>{kb.title}</strong>

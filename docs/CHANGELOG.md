@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.9.0 - 2026-06-12
+
+### Added
+- Added reusable SEO Hub filters for article, category page, and knowledge base lists with search, niche, status, category, reset controls, and filtered counts.
+
 ## v1.8.0 - 2026-06-12
 
 ### Added
