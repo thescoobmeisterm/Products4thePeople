@@ -444,6 +444,7 @@ export type Article = {
   seo_description?: string;
   keywords?: string;
   schema_markup?: any;
+  editorial_controls?: SeoEditorialControls;
   views: number;
   conversions: number;
   revenue: number;
@@ -507,6 +508,8 @@ export type SeoEditorialControls = {
   ctaStyle?: "soft" | "direct" | "limited_offer";
 };
 
+export type SeoArticleImproveMode = "improve" | "regenerate";
+
 export async function simulateExperimentTraffic(id: string) {
   return apiFetch<{ success: boolean; message: string; variants: ExperimentVariant[] }>("/admin/experiments/run-simulation", {
     method: "POST",
@@ -553,6 +556,13 @@ export async function updateArticle(id: string, updates: Partial<Article>) {
   return apiFetch<{ article: Article }>(`/admin/articles/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(updates),
+  });
+}
+
+export async function improveArticle(id: string, mode: SeoArticleImproveMode, controls: SeoEditorialControls = {}) {
+  return apiFetch<{ success: boolean; article: Article }>(`/admin/articles/${encodeURIComponent(id)}/improve`, {
+    method: "POST",
+    body: JSON.stringify({ mode, ...controls }),
   });
 }
 

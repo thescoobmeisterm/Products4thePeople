@@ -1527,6 +1527,14 @@ const articleSeoGenerationSchema = z.object({
   ctaStyle: z.enum(["soft", "direct", "limited_offer"]).optional().default("direct")
 });
 
+const articleImproveSchema = z.object({
+  mode: z.enum(["improve", "regenerate"]).optional().default("improve"),
+  tone: z.enum(["expert", "friendly", "premium", "urgent"]).optional().default("expert"),
+  funnelStage: z.enum(["awareness", "consideration", "decision"]).optional().default("consideration"),
+  persona: z.string().max(120).optional().default(""),
+  ctaStyle: z.enum(["soft", "direct", "limited_offer"]).optional().default("direct")
+});
+
 function slugifySeo(value: string) {
   return value
     .toLowerCase()
@@ -1576,6 +1584,62 @@ function ctaCopy(style: string, label: string, url?: string) {
 function personaLine(persona: string) {
   const target = persona.trim();
   return target ? `This draft is written for ${target}, so the examples and buying criteria stay close to that shopper's priorities.` : "This draft is written for practical shoppers who want a clear path from research to product choice.";
+}
+
+function stripLeadingArticleTitle(content: string, title: string) {
+  const normalizedTitle = title.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return content
+    .replace(new RegExp(`^#\\s+${normalizedTitle}\\s*`, "i"), "")
+    .trim();
+}
+
+function buildImprovedArticleContent(article: any, controls: z.infer<typeof articleImproveSchema>) {
+  const keyword = String(article.keywords || article.title || "recommended products").split(",")[0].trim();
+  const summary = article.summary || `A practical guide for ${article.title}.`;
+  const originalCore = stripLeadingArticleTitle(article.content || "", article.title);
+
+  if (controls.mode === "regenerate") {
+    return `
+# ${article.title}
+
+${editorialToneIntro(controls.tone)}
+
+${personaLine(controls.persona)}
+
+${summary}
+
+## What Changed In This Draft
+This regenerated version tightens the article around a clearer buying journey, sharper internal-link intent, and a stronger next step for shoppers.
+
+${funnelStageSection(controls.funnelStage, article.title, keyword)}
+
+## Buying Criteria
+1. **Problem fit:** Make sure the recommendation solves one specific customer pain point.
+2. **Ease of decision:** Keep comparison points clear enough for a shopper to act without extra research.
+3. **Conversion path:** Connect education directly to the product or collection that best matches the search intent.
+
+## Recommended Next Step
+${ctaCopy(controls.ctaStyle, keyword)}
+    `.trim();
+  }
+
+  return `
+# ${article.title}
+
+${editorialToneIntro(controls.tone)}
+
+${personaLine(controls.persona)}
+
+## Editorial Upgrade
+This improved draft keeps the original article direction while sharpening its audience, buying criteria, and conversion path.
+
+${funnelStageSection(controls.funnelStage, article.title, keyword)}
+
+${originalCore}
+
+## Stronger Next Step
+${ctaCopy(controls.ctaStyle, keyword)}
+    `.trim();
 }
 
 // --- Content & SEO REST Endpoints ---
@@ -1820,6 +1884,44 @@ ${ctaCopy(ctaStyle, product.name, productUrl)}
 
     await upsertArticleDb(newArticle);
     response.json({ success: true, article: newArticle });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/articles/:id/improve", requireAdmin, async (request, response) => {
+  try {
+    const art = await getArticleByIdDb(request.params.id);
+    if (!art) {
+      response.status(404).json({ error: "Article not found" });
+      return;
+    }
+    if (art.status !== "draft") {
+      response.status(400).json({ error: "Only draft articles can be regenerated or improved." });
+      return;
+    }
+
+    const controls = articleImproveSchema.parse(request.body);
+    const now = new Date().toISOString();
+    const schemaMarkup = typeof art.schema_markup === "string" ? JSON.parse(art.schema_markup || "{}") : (art.schema_markup || {});
+    const updatedArt = {
+      ...art,
+      content: buildImprovedArticleContent(art, controls),
+      summary: controls.mode === "regenerate"
+        ? `Regenerated draft for ${art.title} with ${controls.tone} tone and ${controls.funnelStage} funnel intent.`
+        : `Improved draft for ${art.title} with clearer ${controls.funnelStage} intent and conversion guidance.`,
+      schema_markup: {
+        ...schemaMarkup,
+        audience: controls.persona || schemaMarkup.audience || "Products4ThePeople shoppers",
+        editorial_controls: controls,
+        dateModified: now
+      },
+      editorial_controls: controls,
+      updated_at: now
+    };
+
+    await upsertArticleDb(updatedArt);
+    response.json({ success: true, article: updatedArt });
   } catch (error: any) {
     response.status(500).json({ error: error.message });
   }

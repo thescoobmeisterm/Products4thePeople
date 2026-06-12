@@ -20,7 +20,7 @@ Testing key:
 ## Current Baseline
 
 - Current app version at audit time: `1.6.10`
-- Latest implementation batch started: `1.7.0`
+- Latest implementation batch started: `1.8.0`
 - Working tree at audit time: clean
 - Implemented foundation: storefront/admin MVP, product CRUD, orders, customers, media library,
   Stripe/Medusa settings, Google sign-in support, Product Research MVP, Experimentation MVP,
@@ -38,7 +38,7 @@ SEO tracking, and dashboard stats.
   - `[x]` Article generation endpoint
   - `[x]` Product-led article generation endpoint
   - `[x]` Add richer editorial controls: tone, funnel stage, target persona, CTA style
-  - `[ ]` Add regenerate/improve actions for existing drafts
+  - `[x]` Add regenerate/improve actions for existing drafts
   - Test: `[x]` Build `[x]` Typecheck `[x]` API `[x]` Manual
 
 - `[~]` SEO Hub

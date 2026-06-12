@@ -107,6 +107,7 @@ import {
   generateArticle,
   generateArticleFromProduct,
   updateArticle,
+  improveArticle,
   deleteArticle,
   getKbArticles,
   getAdminKbArticles,
@@ -597,6 +598,7 @@ function App() {
   const [seoPages, setSeoPages] = React.useState<SeoPage[]>([]);
   const [seoDashboard, setSeoDashboard] = React.useState<SeoDashboardStats | null>(null);
   const [seoLoading, setSeoLoading] = React.useState(false);
+  const [seoImprovingArticleId, setSeoImprovingArticleId] = React.useState("");
   const [seoGenTopic, setSeoGenTopic] = React.useState("");
   const [seoGenKeyword, setSeoGenKeyword] = React.useState("");
   const [seoGenNiche, setSeoGenNiche] = React.useState("beauty");
@@ -2750,12 +2752,54 @@ function App() {
                               <td style={{ padding: '10px 12px', textAlign: 'right' }}>{art.views}</td>
                               <td style={{ padding: '10px 12px', textAlign: 'right', display: 'flex', gap: '6px', justifyContent: 'flex-end' }}>
                                 {art.status === 'draft' && (
-                                  <button type="button" onClick={async () => {
-                                    try {
-                                      const res = await updateArticle(art.id, { status: 'published', published_at: new Date().toISOString() });
-                                      setSeoArticles((prev) => prev.map((a) => a.id === art.id ? res.article : a));
-                                    } catch (err) { console.error(err); }
-                                  }} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid #176c61', background: '#f0fdf4', color: '#176c61', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Publish</button>
+                                  <>
+                                    <button type="button" disabled={Boolean(seoImprovingArticleId)} onClick={async () => {
+                                      setSeoImprovingArticleId(`${art.id}:improve`);
+                                      try {
+                                        const res = await improveArticle(art.id, "improve", {
+                                          tone: seoGenTone,
+                                          funnelStage: seoGenFunnelStage,
+                                          persona: seoGenPersona,
+                                          ctaStyle: seoGenCtaStyle,
+                                        });
+                                        setSeoArticles((prev) => prev.map((a) => a.id === art.id ? res.article : a));
+                                        setNotice(`Improved draft: ${res.article.title}`);
+                                      } catch (err) {
+                                        console.error(err);
+                                        setNotice(err instanceof Error ? `Draft improvement failed: ${err.message}` : "Draft improvement failed.");
+                                      } finally {
+                                        setSeoImprovingArticleId("");
+                                      }
+                                    }} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid #7c3aed', background: '#f5f3ff', color: '#6d28d9', fontSize: '12px', fontWeight: 600, cursor: seoImprovingArticleId ? 'not-allowed' : 'pointer', opacity: seoImprovingArticleId === `${art.id}:improve` ? 0.65 : 1 }}>
+                                      {seoImprovingArticleId === `${art.id}:improve` ? 'Improving...' : 'Improve'}
+                                    </button>
+                                    <button type="button" disabled={Boolean(seoImprovingArticleId)} onClick={async () => {
+                                      setSeoImprovingArticleId(`${art.id}:regenerate`);
+                                      try {
+                                        const res = await improveArticle(art.id, "regenerate", {
+                                          tone: seoGenTone,
+                                          funnelStage: seoGenFunnelStage,
+                                          persona: seoGenPersona,
+                                          ctaStyle: seoGenCtaStyle,
+                                        });
+                                        setSeoArticles((prev) => prev.map((a) => a.id === art.id ? res.article : a));
+                                        setNotice(`Regenerated draft: ${res.article.title}`);
+                                      } catch (err) {
+                                        console.error(err);
+                                        setNotice(err instanceof Error ? `Draft regeneration failed: ${err.message}` : "Draft regeneration failed.");
+                                      } finally {
+                                        setSeoImprovingArticleId("");
+                                      }
+                                    }} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid #2563eb', background: '#eff6ff', color: '#1d4ed8', fontSize: '12px', fontWeight: 600, cursor: seoImprovingArticleId ? 'not-allowed' : 'pointer', opacity: seoImprovingArticleId === `${art.id}:regenerate` ? 0.65 : 1 }}>
+                                      {seoImprovingArticleId === `${art.id}:regenerate` ? 'Regenerating...' : 'Regenerate'}
+                                    </button>
+                                    <button type="button" onClick={async () => {
+                                      try {
+                                        const res = await updateArticle(art.id, { status: 'published', published_at: new Date().toISOString() });
+                                        setSeoArticles((prev) => prev.map((a) => a.id === art.id ? res.article : a));
+                                      } catch (err) { console.error(err); }
+                                    }} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid #176c61', background: '#f0fdf4', color: '#176c61', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>Publish</button>
+                                  </>
                                 )}
                                 <button type="button" onClick={async () => {
                                   try {

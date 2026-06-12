@@ -1,5 +1,5 @@
 /** Canonical app version - bump on every release per agents/AGENT_VERSIONING_RELEASE_PROTOCOL.md */
-export const APP_VERSION = "1.7.0";
+export const APP_VERSION = "1.8.0";
 
 /** ISO-8601 timestamp of the last release */
-export const APP_UPDATED_AT = "2026-06-11T14:17:43-04:00";
+export const APP_UPDATED_AT = "2026-06-12T17:20:31-04:00";

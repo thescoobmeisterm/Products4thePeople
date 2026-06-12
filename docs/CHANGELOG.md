@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.8.0 - 2026-06-12
+
+### Added
+- Added draft-only SEO article Improve and Regenerate actions with backend validation, editorial control support, and refreshed schema metadata.
+
 ## v1.7.0 - 2026-06-11
 
 ### Added
