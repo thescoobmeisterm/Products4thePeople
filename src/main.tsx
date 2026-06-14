@@ -646,6 +646,8 @@ function App() {
   const [seoFilterNiche, setSeoFilterNiche] = React.useState("all");
   const [seoFilterStatus, setSeoFilterStatus] = React.useState("all");
   const [seoFilterKbCategory, setSeoFilterKbCategory] = React.useState("all");
+  const [seoPreviewPageId, setSeoPreviewPageId] = React.useState("");
+  const [seoPreviewedPageIds, setSeoPreviewedPageIds] = React.useState<string[]>([]);
   const [dbContacts, setDbContacts] = React.useState<any[]>([]);
   const [mediaAssets, setMediaAssets] = React.useState<MediaAsset[]>([]);
   const [mediaTitle, setMediaTitle] = React.useState("");
@@ -3036,34 +3038,83 @@ function App() {
                         <tbody>
                           {seoFilteredPages.map((page) => {
                             const pageStatus = page.status || "published";
+                            const canonicalUrl = `https://products4thepeople.com/#/c/${page.slug}`;
+                            const schemaPreview = page.schema_markup
+                              ? JSON.stringify(page.schema_markup, null, 2)
+                              : "{}";
+                            const seoTitle = page.seo_title || page.title;
+                            const seoDescription = page.seo_description || page.description;
+                            const hasPreviewed = seoPreviewedPageIds.includes(page.id);
+                            const isPreviewOpen = seoPreviewPageId === page.id;
+                            const canPublish = pageStatus === "published" || hasPreviewed;
                             return (
-                              <tr key={page.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                <td style={{ padding: '10px 12px', fontWeight: 500 }}>{page.title}</td>
-                                <td style={{ padding: '10px 12px' }}>
-                                  <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>/c/{page.slug}</code>
-                                </td>
-                                <td style={{ padding: '10px 12px', color: '#64748b' }}>{page.niche}</td>
-                                <td style={{ padding: '10px 12px' }}>
-                                  <span style={{ background: pageStatus === 'published' ? '#dcfce7' : '#fef3c7', color: pageStatus === 'published' ? '#166534' : '#92400e', padding: '2px 8px', borderRadius: '4px', fontSize: '11.5px', fontWeight: 600 }}>{pageStatus}</span>
-                                </td>
-                                <td style={{ padding: '10px 12px', textAlign: 'right' }}>{page.views}</td>
-                                <td style={{ padding: '10px 12px', textAlign: 'right' }}>{page.conversions}</td>
-                                <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                                  <button type="button" onClick={async () => {
-                                    try {
-                                      const nextStatus = pageStatus === 'published' ? 'draft' : 'published';
-                                      const res = await updateSeoPage(page.id, { status: nextStatus, published_at: nextStatus === 'published' ? new Date().toISOString() : undefined });
-                                      setSeoPages((prev) => prev.map((p) => p.id === page.id ? res.page : p));
-                                      setNotice(`${nextStatus === 'published' ? 'Published' : 'Unpublished'} SEO page: ${res.page.title}`);
-                                    } catch (err) {
-                                      console.error(err);
-                                      setNotice(err instanceof Error ? `SEO page status update failed: ${err.message}` : "SEO page status update failed.");
-                                    }
-                                  }} style={{ padding: '4px 12px', borderRadius: '6px', border: pageStatus === 'published' ? '1px solid #f59e0b' : '1px solid #176c61', background: pageStatus === 'published' ? '#fffbeb' : '#f0fdf4', color: pageStatus === 'published' ? '#92400e' : '#176c61', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
-                                    {pageStatus === 'published' ? 'Unpublish' : 'Publish'}
-                                  </button>
-                                </td>
-                              </tr>
+                              <React.Fragment key={page.id}>
+                                <tr style={{ borderBottom: isPreviewOpen ? 'none' : '1px solid #f1f5f9' }}>
+                                  <td style={{ padding: '10px 12px', fontWeight: 500 }}>{page.title}</td>
+                                  <td style={{ padding: '10px 12px' }}>
+                                    <code style={{ background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', fontSize: '12px' }}>/c/{page.slug}</code>
+                                  </td>
+                                  <td style={{ padding: '10px 12px', color: '#64748b' }}>{page.niche}</td>
+                                  <td style={{ padding: '10px 12px' }}>
+                                    <span style={{ background: pageStatus === 'published' ? '#dcfce7' : '#fef3c7', color: pageStatus === 'published' ? '#166534' : '#92400e', padding: '2px 8px', borderRadius: '4px', fontSize: '11.5px', fontWeight: 600 }}>{pageStatus}</span>
+                                  </td>
+                                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{page.views}</td>
+                                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>{page.conversions}</td>
+                                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                                    <div style={{ display: 'flex', gap: '6px', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                                      <button type="button" onClick={() => {
+                                        setSeoPreviewPageId((current) => current === page.id ? "" : page.id);
+                                        setSeoPreviewedPageIds((prev) => prev.includes(page.id) ? prev : [...prev, page.id]);
+                                      }} style={{ padding: '4px 12px', borderRadius: '6px', border: '1px solid #2563eb', background: isPreviewOpen ? '#dbeafe' : '#eff6ff', color: '#1d4ed8', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                                        {isPreviewOpen ? 'Hide Preview' : 'Preview'}
+                                      </button>
+                                      <button type="button" disabled={!canPublish} title={!canPublish ? "Preview canonical, meta, and schema before publishing." : undefined} onClick={async () => {
+                                        if (!canPublish) {
+                                          setNotice("Preview canonical, meta, and schema before publishing this SEO page.");
+                                          return;
+                                        }
+                                        try {
+                                          const nextStatus = pageStatus === 'published' ? 'draft' : 'published';
+                                          const res = await updateSeoPage(page.id, { status: nextStatus, published_at: nextStatus === 'published' ? new Date().toISOString() : undefined });
+                                          setSeoPages((prev) => prev.map((p) => p.id === page.id ? res.page : p));
+                                          setNotice(`${nextStatus === 'published' ? 'Published' : 'Unpublished'} SEO page: ${res.page.title}`);
+                                        } catch (err) {
+                                          console.error(err);
+                                          setNotice(err instanceof Error ? `SEO page status update failed: ${err.message}` : "SEO page status update failed.");
+                                        }
+                                      }} style={{ padding: '4px 12px', borderRadius: '6px', border: pageStatus === 'published' ? '1px solid #f59e0b' : '1px solid #176c61', background: !canPublish ? '#f8fafc' : pageStatus === 'published' ? '#fffbeb' : '#f0fdf4', color: !canPublish ? '#94a3b8' : pageStatus === 'published' ? '#92400e' : '#176c61', fontSize: '12px', fontWeight: 600, cursor: canPublish ? 'pointer' : 'not-allowed' }}>
+                                        {!canPublish ? 'Preview First' : pageStatus === 'published' ? 'Unpublish' : 'Publish'}
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                                {isPreviewOpen && (
+                                  <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                    <td colSpan={7} style={{ padding: '0 12px 14px' }}>
+                                      <div style={{ display: 'grid', gap: '12px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '14px' }}>
+                                        <div style={{ display: 'grid', gap: '6px' }}>
+                                          <strong style={{ fontSize: '13px', color: '#0f172a' }}>Publish Preview</strong>
+                                          <code style={{ display: 'block', background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '6px', padding: '8px', fontSize: '12px', color: '#334155', overflowX: 'auto' }}>Canonical: {canonicalUrl}</code>
+                                        </div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1fr)', gap: '12px' }}>
+                                          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px' }}>
+                                            <p style={{ margin: '0 0 4px', color: '#64748b', fontSize: '12px', fontWeight: 700 }}>Meta Title ({seoTitle.length}/60)</p>
+                                            <p style={{ margin: 0, color: '#0f172a', fontSize: '13px', lineHeight: 1.4 }}>{seoTitle}</p>
+                                          </div>
+                                          <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '10px' }}>
+                                            <p style={{ margin: '0 0 4px', color: '#64748b', fontSize: '12px', fontWeight: 700 }}>Meta Description ({seoDescription.length}/160)</p>
+                                            <p style={{ margin: 0, color: '#0f172a', fontSize: '13px', lineHeight: 1.4 }}>{seoDescription}</p>
+                                          </div>
+                                        </div>
+                                        <div>
+                                          <p style={{ margin: '0 0 4px', color: '#64748b', fontSize: '12px', fontWeight: 700 }}>Schema Markup</p>
+                                          <pre style={{ margin: 0, maxHeight: '180px', overflow: 'auto', background: '#0f172a', color: '#e2e8f0', borderRadius: '8px', padding: '12px', fontSize: '12px', lineHeight: 1.5 }}>{schemaPreview}</pre>
+                                        </div>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                )}
+                              </React.Fragment>
                             );
                           })}
                         </tbody>

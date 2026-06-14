@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.11.0 - 2026-06-14
+
+### Added
+- Added SEO page publish previews with canonical URL, meta title/description length checks, and formatted schema markup.
+- Added a preview-first guard before publishing draft programmatic SEO pages from the admin SEO Hub.
+
 ## v1.10.0 - 2026-06-12
 
 ### Added

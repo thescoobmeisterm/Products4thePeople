@@ -20,7 +20,7 @@ Testing key:
 ## Current Baseline
 
 - Current app version at audit time: `1.6.10`
-- Latest implementation batch started: `1.10.0`
+- Latest implementation batch started: `1.11.0`
 - Working tree at audit time: clean
 - Implemented foundation: storefront/admin MVP, product CRUD, orders, customers, media library,
   Stripe/Medusa settings, Google sign-in support, Product Research MVP, Experimentation MVP,
@@ -53,8 +53,8 @@ SEO tracking, and dashboard stats.
   - `[x]` Category SEO page generation
   - `[x]` Product-led sales page generation
   - `[ ]` Add bulk page generation by niche/category/product collection
-  - `[ ]` Add canonical/meta/schema previews before publishing
-  - Test: `[ ]` Build `[ ]` Typecheck `[ ]` API `[ ]` Manual
+  - `[x]` Add canonical/meta/schema previews before publishing
+  - Test: `[x]` Build `[x]` Typecheck `[x]` API `[x]` Manual
 
 - `[~]` Knowledge Base
   - `[x]` KB storage and admin list
