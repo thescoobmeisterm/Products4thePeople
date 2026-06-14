@@ -38,6 +38,8 @@ import {
   MessageSquare,
   Play,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   Star,
   TrendingUp,
@@ -46,6 +48,7 @@ import {
   AlertTriangle,
   Eye,
   Layers,
+  ZoomIn,
 } from "lucide-react";
 import {
   listMedusaOrders,
@@ -7181,6 +7184,145 @@ function ProductQuickView({
   );
 }
 
+function ProductCoverflowGallery({ product, images }: { product: Product; images: string[] }) {
+  const [activeImage, setActiveImage] = React.useState(0);
+  const [isZoomOpen, setIsZoomOpen] = React.useState(false);
+  const totalImages = images.length;
+
+  React.useEffect(() => {
+    setActiveImage(0);
+    setIsZoomOpen(false);
+  }, [product.id]);
+
+  React.useEffect(() => {
+    if (!isZoomOpen) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsZoomOpen(false);
+      if (event.key === "ArrowLeft") setActiveImage((current) => (current - 1 + totalImages) % totalImages);
+      if (event.key === "ArrowRight") setActiveImage((current) => (current + 1) % totalImages);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isZoomOpen, totalImages]);
+
+  const goToImage = (index: number) => setActiveImage((index + totalImages) % totalImages);
+  const goToPrevious = () => goToImage(activeImage - 1);
+  const goToNext = () => goToImage(activeImage + 1);
+
+  return (
+    <>
+      <div className="product-gallery coverflow-gallery">
+        <div className="coverflow-stage" aria-label={`${product.name} image gallery`}>
+          {images.map((image, index) => {
+            const distance = index - activeImage;
+            const absDistance = Math.abs(distance);
+            const isActive = index === activeImage;
+            return (
+              <button
+                aria-label={`View ${product.name} image ${index + 1}`}
+                className={`coverflow-card${isActive ? " active" : ""}`}
+                key={`${product.id}-${image}-${index}`}
+                onClick={() => isActive ? setIsZoomOpen(true) : goToImage(index)}
+                style={{
+                  transform: `translateX(${distance * 42}%) translateZ(${-absDistance * 84}px) rotateY(${distance * -34}deg) scale(${isActive ? 1 : Math.max(0.72, 0.88 - absDistance * 0.05)})`,
+                  zIndex: 20 - absDistance,
+                  opacity: absDistance > 3 ? 0 : 1,
+                  pointerEvents: absDistance > 3 ? "none" : "auto"
+                }}
+                type="button"
+              >
+                <img src={image} alt={isActive ? product.name : ""} />
+              </button>
+            );
+          })}
+          {totalImages > 1 && (
+            <>
+              <button className="coverflow-nav prev" type="button" onClick={(event) => { event.stopPropagation(); goToPrevious(); }} aria-label="Previous image">
+                <ChevronLeft size={20} />
+              </button>
+              <button className="coverflow-nav next" type="button" onClick={(event) => { event.stopPropagation(); goToNext(); }} aria-label="Next image">
+                <ChevronRight size={20} />
+              </button>
+            </>
+          )}
+          <button className="coverflow-zoom" type="button" onClick={(event) => { event.stopPropagation(); setIsZoomOpen(true); }} aria-label="Open larger image viewer">
+            <ZoomIn size={18} />
+            <span>Zoom</span>
+          </button>
+        </div>
+
+        <div className="coverflow-filmstrip" aria-label={`${product.name} image thumbnails`}>
+          {images.map((image, index) => (
+            <button
+              className={activeImage === index ? "active" : ""}
+              key={`${product.id}-thumb-${image}-${index}`}
+              type="button"
+              onClick={() => goToImage(index)}
+              aria-label={`Select image ${index + 1}`}
+            >
+              <img src={image} alt="" />
+            </button>
+          ))}
+        </div>
+        <div className="coverflow-counter" aria-live="polite">
+          {activeImage + 1} / {totalImages}
+        </div>
+      </div>
+
+      {isZoomOpen && (
+        <div className="modal-backdrop image-viewer-backdrop" role="presentation" onClick={() => setIsZoomOpen(false)}>
+          <div
+            className="image-viewer-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="image-viewer-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="image-viewer-header">
+              <div>
+                <p>Gallery</p>
+                <h2 id="image-viewer-title">{product.name}</h2>
+              </div>
+              <button type="button" onClick={() => setIsZoomOpen(false)} aria-label="Close image viewer">
+                <X size={20} />
+              </button>
+            </div>
+            <div className="image-viewer-stage">
+              {totalImages > 1 && (
+                <button className="image-viewer-nav prev" type="button" onClick={goToPrevious} aria-label="Previous image">
+                  <ChevronLeft size={24} />
+                </button>
+              )}
+              <img src={images[activeImage]} alt={product.name} />
+              {totalImages > 1 && (
+                <button className="image-viewer-nav next" type="button" onClick={goToNext} aria-label="Next image">
+                  <ChevronRight size={24} />
+                </button>
+              )}
+            </div>
+            <div className="image-viewer-footer">
+              <span>{activeImage + 1} of {totalImages}</span>
+              <div>
+                {images.map((image, index) => (
+                  <button
+                    className={activeImage === index ? "active" : ""}
+                    key={`${product.id}-zoom-thumb-${image}-${index}`}
+                    type="button"
+                    onClick={() => goToImage(index)}
+                    aria-label={`Select large image ${index + 1}`}
+                  >
+                    <img src={image} alt="" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ProductDetailPage({
   product,
   products,
@@ -7210,7 +7352,6 @@ function ProductDetailPage({
   getAverageRating: (product: Product) => number;
   onAddReview: (productId: string, review: ProductReview) => void;
 }) {
-  const [activeImage, setActiveImage] = React.useState(0);
   const [activeAccordion, setActiveAccordion] = React.useState<"benefits" | "reviews" | "faq" | null>("benefits");
   const [showSticky, setShowSticky] = React.useState(false);
 
@@ -7228,10 +7369,6 @@ function ProductDetailPage({
 
   const reviewsList = getReviewsList(product);
   const averageRating = getAverageRating(product);
-
-  React.useEffect(() => {
-    setActiveImage(0);
-  }, [product.id]);
 
   React.useEffect(() => {
     const handleScroll = () => {
@@ -7292,23 +7429,7 @@ function ProductDetailPage({
       </button>
 
       <div className="product-detail-grid">
-        <div className="product-gallery">
-          <div className="gallery-main">
-            <img src={images[activeImage]} alt={product.name} />
-          </div>
-          <div className="gallery-thumbs" aria-label={`${product.name} image gallery`}>
-            {images.map((image, index) => (
-              <button
-                className={activeImage === index ? "active" : ""}
-                key={`${product.id}-${image}`}
-                type="button"
-                onClick={() => setActiveImage(index)}
-              >
-                <img src={image} alt="" />
-              </button>
-            ))}
-          </div>
-        </div>
+        <ProductCoverflowGallery product={product} images={images} />
 
         <div className="product-detail-copy">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

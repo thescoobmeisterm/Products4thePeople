@@ -20,7 +20,7 @@ Testing key:
 ## Current Baseline
 
 - Current app version at audit time: `1.6.10`
-- Latest implementation batch started: `1.11.0`
+- Latest implementation batch started: `1.12.0`
 - Working tree at audit time: clean
 - Implemented foundation: storefront/admin MVP, product CRUD, orders, customers, media library,
   Stripe/Medusa settings, Google sign-in support, Product Research MVP, Experimentation MVP,
@@ -130,11 +130,12 @@ Several conversion UX pieces exist, but the full storefront conversion layer is 
 - `[~]` Product Page Optimization
   - `[x]` Product detail pages
   - `[x]` Product media galleries
+  - `[x]` Cover Flow gallery and zoom modal for multi-image listings
   - `[ ]` Benefits block from product metadata
   - `[ ]` Product FAQ block
   - `[ ]` Reviews system and review summary
   - `[ ]` Product video section tied to media library
-  - Test: `[ ]` Build `[ ]` Typecheck `[ ]` API `[ ]` Manual
+  - Test: `[x]` Build `[x]` Typecheck `[ ]` API `[x]` Manual
 
 - `[~]` Cart & Checkout Improvements
   - `[x]` Cart drawer

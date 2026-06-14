@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.12.0 - 2026-06-14
+
+### Added
+- Added a Cover Flow-style product image gallery for listing pages with animated image selection, thumbnail filmstrip, and gallery counter.
+- Added a larger modal image viewer with zoom, previous/next controls, thumbnail navigation, and keyboard support.
+
 ## v1.11.0 - 2026-06-14
 
 ### Added
