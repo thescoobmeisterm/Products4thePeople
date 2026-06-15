@@ -194,6 +194,7 @@ const orderItemSchema = z.object({
   name: z.string().min(1),
   quantity: z.number().int().positive(),
   price: z.number().nonnegative(),
+  variations: z.string().optional(),
 });
 
 const createOrderSchema = z.object({

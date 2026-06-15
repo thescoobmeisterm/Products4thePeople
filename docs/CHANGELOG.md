@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.17.0 - 2026-06-15
+
+### Added
+- Added product variation support (e.g. colors, sizes) to the product model and admin editor.
+- Storefront product pages now allow users to select variations, dynamically updating the product image gallery.
+- Cart and checkout processes now properly support composite variation keys, mapping selected variations to order items.
+
 ## v1.16.2 - 2026-06-15
 
 ### Fixed

@@ -165,6 +165,7 @@ type Product = {
   productHighlights?: ProductHighlight[];
   faqs?: ProductFaq[];
   reviews?: ProductReview[];
+  variations?: ProductVariation[];
   seoTitle?: string;
   seoDescription?: string;
   source?: "seed" | "local" | "medusa";
@@ -184,6 +185,18 @@ type ProductFaq = {
   answer: string;
 };
 
+type ProductVariationOption = {
+  id: string;
+  value: string;
+  imageIndex?: number;
+};
+
+type ProductVariation = {
+  id: string;
+  label: string;
+  options: ProductVariationOption[];
+};
+
 type Order = {
   id: string;
   customerName: string;
@@ -194,6 +207,7 @@ type Order = {
     name: string;
     quantity: number;
     price: number;
+    variations?: string;
   }>;
   subtotal: number;
   shipping: number;
@@ -3850,6 +3864,75 @@ function ProductDialog({
     setField("faqs", productFaqs.filter((_faq, faqIndex) => faqIndex !== index));
   };
 
+  const productVariations = form.variations || [];
+
+  const addVariation = () => {
+    setField("variations", [
+      ...productVariations,
+      {
+        id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `var_${Date.now()}`,
+        label: "",
+        options: [],
+      },
+    ]);
+  };
+
+  const removeVariation = (index: number) => {
+    setField("variations", productVariations.filter((_, i) => i !== index));
+  };
+
+  const updateVariationLabel = (index: number, label: string) => {
+    setField(
+      "variations",
+      productVariations.map((v, i) => (i === index ? { ...v, label } : v)),
+    );
+  };
+
+  const addVariationOption = (variationIndex: number) => {
+    setField(
+      "variations",
+      productVariations.map((v, i) => {
+        if (i !== variationIndex) return v;
+        return {
+          ...v,
+          options: [
+            ...v.options,
+            {
+              id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `opt_${Date.now()}_${Math.random().toString(36).substring(7)}`,
+              value: "",
+            },
+          ],
+        };
+      }),
+    );
+  };
+
+  const removeVariationOption = (variationIndex: number, optionIndex: number) => {
+    setField(
+      "variations",
+      productVariations.map((v, i) => {
+        if (i !== variationIndex) return v;
+        return {
+          ...v,
+          options: v.options.filter((_, j) => j !== optionIndex),
+        };
+      }),
+    );
+  };
+
+  const updateVariationOption = (variationIndex: number, optionIndex: number, field: "value" | "imageIndex", value: any) => {
+    setField(
+      "variations",
+      productVariations.map((v, i) => {
+        if (i !== variationIndex) return v;
+        return {
+          ...v,
+          options: v.options.map((opt, j) => (j === optionIndex ? { ...opt, [field]: value } : opt)),
+        };
+      }),
+    );
+  };
+
   const uploadProductImage = async () => {
     if (imageUploadFiles.length === 0) return;
     setIsUploadingImage(true);
@@ -3914,7 +3997,14 @@ function ProductDialog({
               answer: faq.answer.trim(),
             }))
             .filter((faq) => faq.question && faq.answer);
-          if (form.name.trim()) onSave({ ...form, name: form.name.trim(), trustBadges, productHighlights, faqs, reviews });
+          const variations = productVariations
+            .map((v) => ({
+              ...v,
+              label: v.label.trim(),
+              options: v.options.filter(opt => opt.value.trim()).map(opt => ({ ...opt, value: opt.value.trim() }))
+            }))
+            .filter((v) => v.label && v.options.length > 0);
+          if (form.name.trim()) onSave({ ...form, name: form.name.trim(), trustBadges, productHighlights, faqs, reviews, variations });
         }}
       >
         <div className="modal-header">
@@ -4147,6 +4237,61 @@ function ProductDialog({
                     <div className="product-review-editor-actions">
                       <span />
                       <button type="button" onClick={() => removeFaq(index)}>Remove FAQ</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="field wide-field">
+            <span>Product Variations (Optional)</span>
+            <div className="product-review-editor">
+              <div className="product-review-editor-header">
+                <p>Add product variations like Color or Size. Only configure options that are available.</p>
+                <button type="button" onClick={addVariation}>Add variation</button>
+              </div>
+              <div className="product-review-editor-list">
+                {productVariations.map((variation, varIndex) => (
+                  <div className="product-review-editor-card" key={variation.id || varIndex} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div className="product-review-editor-row">
+                      <label>
+                        <span>Variation Type (e.g. Color)</span>
+                        <input value={variation.label} onChange={(event) => updateVariationLabel(varIndex, event.target.value)} placeholder="Color" />
+                      </label>
+                      <div className="product-review-editor-actions" style={{ alignSelf: 'flex-end', marginTop: 'auto' }}>
+                        <button type="button" onClick={() => removeVariation(varIndex)}>Remove variation</button>
+                      </div>
+                    </div>
+                    
+                    <div style={{ marginLeft: '16px', borderLeft: '2px solid #eaeaea', paddingLeft: '16px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#52636a' }}>Options</span>
+                        <button type="button" onClick={() => addVariationOption(varIndex)} style={{ fontSize: '0.75rem', padding: '4px 8px' }}>+ Add option</button>
+                      </div>
+                      {variation.options.map((option, optIndex) => (
+                        <div key={option.id || optIndex} className="product-review-editor-row" style={{ alignItems: 'flex-end' }}>
+                          <label>
+                            <span>Value (e.g. Red)</span>
+                            <input value={option.value} onChange={(event) => updateVariationOption(varIndex, optIndex, "value", event.target.value)} placeholder="Red" />
+                          </label>
+                          <label>
+                            <span>Link to image</span>
+                            <select 
+                              value={option.imageIndex !== undefined ? option.imageIndex : ""} 
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                updateVariationOption(varIndex, optIndex, "imageIndex", val === "" ? undefined : Number(val));
+                              }}
+                            >
+                              <option value="">No specific image</option>
+                              {(form.images || []).map((_, imgIdx) => (
+                                <option key={imgIdx} value={imgIdx}>Image {imgIdx + 1}</option>
+                              ))}
+                            </select>
+                          </label>
+                          <button type="button" onClick={() => removeVariationOption(varIndex, optIndex)} style={{ padding: '8px', marginBottom: '4px' }}>Remove</button>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -5194,12 +5339,14 @@ function Storefront({
           tag: "Garage",
         },
       ];
-  const cartItems = Object.entries(cart)
-    .map(([productId, quantity]) => {
+  const cartItemsMapped = Object.entries(cart)
+    .map(([cartKey, quantity]) => {
+      const [productId, variationsStr] = cartKey.split('|', 2);
       const product = products.find((item) => item.id === productId);
-      return product ? { product, quantity } : null;
-    })
-    .filter((item): item is { product: Product; quantity: number } => {
+      return product ? { product, quantity, cartKey, variationsStr } : null;
+    });
+  const cartItems = cartItemsMapped
+    .filter((item): item is NonNullable<typeof cartItemsMapped[number]> => {
       if (!item) return false;
       if (activeNiche !== "general" && item.product.subdomain !== activeNiche) return false;
       return true;
@@ -5248,12 +5395,21 @@ function Storefront({
         name: item.product.name,
         quantity: item.quantity,
         price: item.product.retailMin,
+        variations: item.variationsStr,
       })),
     });
   }, [activeNiche, cartItems, customerName, email, onCaptureAbandonedCart, subtotal]);
 
-  const addToCart = (productId: string, quantity = 1) => {
-    setCart((current) => ({ ...current, [productId]: (current[productId] ?? 0) + Math.max(1, quantity) }));
+  const addToCart = (productId: string, quantity = 1, variations?: Record<string, string>) => {
+    let cartKey = productId;
+    if (variations && Object.keys(variations).length > 0) {
+      const varStr = Object.entries(variations)
+        .sort(([k1], [k2]) => k1.localeCompare(k2))
+        .map(([k, v]) => `${k}:${v}`)
+        .join('|');
+      cartKey = `${productId}|${varStr}`;
+    }
+    setCart((current) => ({ ...current, [cartKey]: (current[cartKey] ?? 0) + Math.max(1, quantity) }));
     const product = products.find((item) => item.id === productId);
     if (product) {
       trackMarketingEvent("add_to_cart", {
@@ -5287,11 +5443,11 @@ function Storefront({
     window.location.hash = `#product/${product.id}`;
   };
 
-  const setQuantity = (productId: string, quantity: number) => {
+  const setQuantity = (cartKey: string, quantity: number) => {
     setCart((current) => {
       const next = { ...current };
-      if (quantity <= 0) delete next[productId];
-      else next[productId] = quantity;
+      if (quantity <= 0) delete next[cartKey];
+      else next[cartKey] = quantity;
       return next;
     });
   };
@@ -5568,6 +5724,7 @@ function Storefront({
         name: item.product.name,
         quantity: item.quantity,
         price: item.product.retailMin,
+        variations: item.variationsStr,
       })),
     };
 
@@ -7220,12 +7377,17 @@ function Storefront({
                 </div>
               ) : (
                 <div className="cart-drawer-lines">
-                  {cartItems.map(({ product, quantity }) => (
-                    <div className="cart-drawer-line" key={product.id}>
+                  {cartItems.map(({ product, quantity, cartKey, variationsStr }) => (
+                    <div className="cart-drawer-line" key={cartKey}>
                       <div className="wishlist-item-info" style={{ flex: 1, minWidth: 0 }}>
                         <strong style={{ fontSize: '0.9rem', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {product.name}
                         </strong>
+                        {variationsStr && (
+                          <div style={{ fontSize: '0.75rem', color: '#8c9ba5', margin: '2px 0 4px' }}>
+                            {variationsStr.split('|').map(v => v.replace(':', ': ')).join(', ')}
+                          </div>
+                        )}
                         <span style={{ fontSize: '0.8rem', color: '#52636a' }}>{money(product.retailMin)} each</span>
                       </div>
                       
@@ -7235,14 +7397,14 @@ function Storefront({
                           min="0"
                           type="number"
                           value={quantity}
-                          onChange={(event) => setQuantity(product.id, Number(event.target.value))}
+                          onChange={(event) => setQuantity(cartKey, Number(event.target.value))}
                           style={{ width: '48px', padding: '4px', textAlign: 'center', borderRadius: '6px', border: '1px solid #e5eaee' }}
                         />
                         <button
                           type="button"
                           className="remove-btn"
-                          onClick={() => setQuantity(product.id, 0)}
-                          aria-label={`Remove ${product.name}`}
+                          onClick={() => setQuantity(cartKey, 0)}
+                          aria-label={`Remove ${product.name} from cart`}
                         >
                           <Trash2 size={16} />
                         </button>
@@ -7488,10 +7650,16 @@ function FormattedText({ text, className }: { text: string; className: string })
   );
 }
 
-function ProductCoverflowGallery({ product, images }: { product: Product; images: string[] }) {
+function ProductCoverflowGallery({ product, images, externalActiveIndex }: { product: Product; images: string[]; externalActiveIndex?: number | null }) {
   const [activeImage, setActiveImage] = React.useState(0);
   const [isZoomOpen, setIsZoomOpen] = React.useState(false);
   const totalImages = images.length;
+
+  React.useEffect(() => {
+    if (typeof externalActiveIndex === "number" && externalActiveIndex >= 0 && externalActiveIndex < totalImages) {
+      setActiveImage(externalActiveIndex);
+    }
+  }, [externalActiveIndex, totalImages]);
 
   React.useEffect(() => {
     setActiveImage(0);
@@ -7649,7 +7817,7 @@ function ProductDetailPage({
   onBack: () => void;
   onOpenProduct: (product: Product) => void;
   onQuantityChange: (quantity: number) => void;
-  onAddToCart: (quantity: number) => void;
+  onAddToCart: (quantity: number, variations?: Record<string, string>) => void;
   isWishlisted: boolean;
   onToggleWishlist: () => void;
   getReviewsList: (product: Product) => ProductReview[];
@@ -7665,6 +7833,10 @@ function ProductDetailPage({
   const [formRating, setFormRating] = React.useState(5);
   const [formAuthor, setFormAuthor] = React.useState("");
   const [formText, setFormText] = React.useState("");
+
+  const [selectedVariations, setSelectedVariations] = React.useState<Record<string, string>>({});
+  const [variationError, setVariationError] = React.useState(false);
+  const [activeImageIndex, setActiveImageIndex] = React.useState<number | null>(null);
 
   const images = getProductImages(product);
   const subcategory = getProductSubcategory(product);
@@ -7726,6 +7898,28 @@ function ProductDetailPage({
     setActiveAccordion("reviews");
   };
 
+  const handleVariationSelect = (variationId: string, optionId: string, imageIndex?: number) => {
+    setSelectedVariations(prev => ({ ...prev, [variationId]: optionId }));
+    setVariationError(false);
+    if (typeof imageIndex === 'number') {
+      setActiveImageIndex(imageIndex);
+    }
+  };
+
+  const handleAddToCartClick = () => {
+    const requiredVariations = product.variations?.filter(v => v.options.length > 0) || [];
+    const missingSelections = requiredVariations.some(v => !selectedVariations[v.id]);
+    
+    if (missingSelections) {
+      setVariationError(true);
+      return;
+    }
+    
+    // Only pass the selected values if there are variations
+    const selection = Object.keys(selectedVariations).length > 0 ? selectedVariations : undefined;
+    onAddToCart(quantity, selection);
+  };
+
   // Calculate review percentages for bar graphs
   const totalReviewsCount = reviewsList.length;
   const ratingDistribution = [0, 0, 0, 0, 0]; // Index 0 represents 5 stars, index 4 represents 1 star
@@ -7743,7 +7937,7 @@ function ProductDetailPage({
       </button>
 
       <div className="product-detail-grid">
-        <ProductCoverflowGallery product={product} images={images} />
+        <ProductCoverflowGallery product={product} images={images} externalActiveIndex={activeImageIndex} />
 
         <div className="product-detail-copy">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -7784,6 +7978,42 @@ function ProductDetailPage({
             <small>{product.inventory} in stock</small>
           </div>
 
+          {(product.variations || []).filter(v => v.options.length > 0).map(variation => (
+            <div key={variation.id} className="variation-selector" style={{ marginBottom: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#1a1f24' }}>{variation.label}</span>
+                {variationError && !selectedVariations[variation.id] && (
+                  <span style={{ color: '#e74c3c', fontSize: '0.8rem' }}>Please select a {variation.label.toLowerCase()}</span>
+                )}
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                {variation.options.map(option => {
+                  const isSelected = selectedVariations[variation.id] === option.id;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => handleVariationSelect(variation.id, option.id, option.imageIndex)}
+                      style={{
+                        padding: '8px 16px',
+                        border: `2px solid ${isSelected ? '#1a1f24' : '#e0e0e0'}`,
+                        borderRadius: '4px',
+                        background: isSelected ? '#1a1f24' : '#fff',
+                        color: isSelected ? '#fff' : '#1a1f24',
+                        cursor: 'pointer',
+                        fontSize: '0.9rem',
+                        transition: 'all 0.2s',
+                        fontWeight: isSelected ? 600 : 400
+                      }}
+                    >
+                      {option.value}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
           <div className="quantity-row">
             <span>Quantity</span>
             <div className="quantity-stepper">
@@ -7803,7 +8033,7 @@ function ProductDetailPage({
             </div>
           </div>
 
-          <button className="primary detail-cart-button" type="button" onClick={() => onAddToCart(quantity)}>
+          <button className="primary detail-cart-button" type="button" onClick={handleAddToCartClick}>
             <ShoppingCart size={18} />
             Add to cart
           </button>
