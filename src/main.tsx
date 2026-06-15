@@ -163,6 +163,7 @@ type Product = {
   images?: string[];
   trustBadges?: string[];
   productHighlights?: ProductHighlight[];
+  faqs?: ProductFaq[];
   reviews?: ProductReview[];
   seoTitle?: string;
   seoDescription?: string;
@@ -175,6 +176,12 @@ type ProductHighlight = {
   id: string;
   label: string;
   description: string;
+};
+
+type ProductFaq = {
+  id: string;
+  question: string;
+  answer: string;
 };
 
 type Order = {
@@ -3712,6 +3719,7 @@ function ProductDialog({
            images: [],
            trustBadges: [],
            productHighlights: [],
+           faqs: [],
            reviews: [],
            seoTitle: "",
            seoDescription: "",
@@ -3792,6 +3800,7 @@ function ProductDialog({
 
   const effectiveTrustBadges = form.trustBadges?.length ? form.trustBadges : getDefaultProductTrustBadges(form);
   const productHighlights = form.productHighlights?.length ? form.productHighlights : getDefaultProductHighlights(form);
+  const productFaqs = form.faqs?.length ? form.faqs : getDefaultProductFaqs();
 
   const setHighlightField = <Key extends keyof ProductHighlight>(index: number, key: Key, value: ProductHighlight[Key]) => {
     setField(
@@ -3815,6 +3824,30 @@ function ProductDialog({
 
   const removeHighlight = (index: number) => {
     setField("productHighlights", productHighlights.filter((_highlight, highlightIndex) => highlightIndex !== index));
+  };
+
+  const setFaqField = <Key extends keyof ProductFaq>(index: number, key: Key, value: ProductFaq[Key]) => {
+    setField(
+      "faqs",
+      productFaqs.map((faq, faqIndex) =>
+        faqIndex === index ? { ...faq, [key]: value } : faq,
+      ),
+    );
+  };
+
+  const addFaq = () => {
+    setField("faqs", [
+      ...productFaqs,
+      {
+        id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `faq_${Date.now()}`,
+        question: "",
+        answer: "",
+      },
+    ]);
+  };
+
+  const removeFaq = (index: number) => {
+    setField("faqs", productFaqs.filter((_faq, faqIndex) => faqIndex !== index));
   };
 
   const uploadProductImage = async () => {
@@ -3874,7 +3907,14 @@ function ProductDialog({
               description: highlight.description.trim(),
             }))
             .filter((highlight) => highlight.label && highlight.description);
-          if (form.name.trim()) onSave({ ...form, name: form.name.trim(), trustBadges, productHighlights, reviews });
+          const faqs = (form.faqs?.length ? form.faqs : getDefaultProductFaqs())
+            .map((faq) => ({
+              ...faq,
+              question: faq.question.trim(),
+              answer: faq.answer.trim(),
+            }))
+            .filter((faq) => faq.question && faq.answer);
+          if (form.name.trim()) onSave({ ...form, name: form.name.trim(), trustBadges, productHighlights, faqs, reviews });
         }}
       >
         <div className="modal-header">
@@ -4078,6 +4118,35 @@ function ProductDialog({
                     <div className="product-review-editor-actions">
                       <span />
                       <button type="button" onClick={() => removeHighlight(index)}>Remove highlight</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <div className="field wide-field">
+            <span>Product FAQs</span>
+            <div className="product-review-editor">
+              <div className="product-review-editor-header">
+                <p>Edit the product-specific questions shown in the customer product-page FAQ accordion.</p>
+                <button type="button" onClick={addFaq}>Add FAQ</button>
+              </div>
+              <div className="product-review-editor-list">
+                {productFaqs.map((faq, index) => (
+                  <div className="product-review-editor-card" key={faq.id || index}>
+                    <div className="product-review-editor-row two-column">
+                      <label>
+                        <span>Question</span>
+                        <input value={faq.question} onChange={(event) => setFaqField(index, "question", event.target.value)} placeholder="When will my order ship?" />
+                      </label>
+                      <label>
+                        <span>Answer</span>
+                        <input value={faq.answer} onChange={(event) => setFaqField(index, "answer", event.target.value)} placeholder="Orders are processed within 24-48 hours." />
+                      </label>
+                    </div>
+                    <div className="product-review-editor-actions">
+                      <span />
+                      <button type="button" onClick={() => removeFaq(index)}>Remove FAQ</button>
                     </div>
                   </div>
                 ))}
@@ -7888,18 +7957,12 @@ function ProductDetailPage({
               </button>
               {activeAccordion === "faq" && (
                 <div className="accordion-content" style={{ display: 'flex', flexDirection: 'column', gap: '10px', textAlign: 'left' }}>
-                  <div>
-                    <strong style={{ display: 'block', color: '#11191d', marginBottom: '2px' }}>When will my order ship?</strong>
-                    <span style={{ fontSize: '0.82rem' }}>All orders are processed and shipped from our fulfillment center within 24-48 hours. Shipping usually takes 3 to 7 business days.</span>
-                  </div>
-                  <div>
-                    <strong style={{ display: 'block', color: '#11191d', marginBottom: '2px' }}>How do I track my delivery?</strong>
-                    <span style={{ fontSize: '0.82rem' }}>Once shipped, you will receive a tracking reference code. You can paste this code into the Order Tracking tab in the menu to track milestones in real-time.</span>
-                  </div>
-                  <div>
-                    <strong style={{ display: 'block', color: '#11191d', marginBottom: '2px' }}>What is your return policy?</strong>
-                    <span style={{ fontSize: '0.82rem' }}>We offer a 30-day money-back guarantee. If you are not fully satisfied, return your item in original packaging for a full, hassle-free refund.</span>
-                  </div>
+                  {getProductFaqs(product).map((faq) => (
+                    <div key={faq.id}>
+                      <strong style={{ display: 'block', color: '#11191d', marginBottom: '2px' }}>{faq.question}</strong>
+                      <span style={{ fontSize: '0.82rem' }}>{faq.answer}</span>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -8538,6 +8601,37 @@ function getProductHighlights(product: Product) {
     }))
     .filter((highlight) => highlight.label && highlight.description);
   return customHighlights.length > 0 ? customHighlights : getDefaultProductHighlights(product);
+}
+
+function getDefaultProductFaqs(): ProductFaq[] {
+  return [
+    {
+      id: "shipping-window",
+      question: "When will my order ship?",
+      answer: "All orders are processed and shipped from our fulfillment center within 24-48 hours. Shipping usually takes 3 to 7 business days.",
+    },
+    {
+      id: "delivery-tracking",
+      question: "How do I track my delivery?",
+      answer: "Once shipped, you will receive a tracking reference code. You can paste this code into the Order Tracking tab in the menu to track milestones in real-time.",
+    },
+    {
+      id: "return-policy",
+      question: "What is your return policy?",
+      answer: "We offer a 30-day money-back guarantee. If you are not fully satisfied, return your item in original packaging for a full, hassle-free refund.",
+    },
+  ];
+}
+
+function getProductFaqs(product: Product) {
+  const customFaqs = (product.faqs || [])
+    .map((faq) => ({
+      ...faq,
+      question: faq.question.trim(),
+      answer: faq.answer.trim(),
+    }))
+    .filter((faq) => faq.question && faq.answer);
+  return customFaqs.length > 0 ? customFaqs : getDefaultProductFaqs();
 }
 
 function getProductSeo(product: Product) {

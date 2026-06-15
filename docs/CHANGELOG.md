@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.16.0 - 2026-06-15
+
+### Added
+- Added product-specific FAQ management to the product edit modal with editable question and answer rows.
+- Product detail FAQ accordions now render saved listing FAQs before falling back to default shipping and returns answers.
+
 ## v1.15.1 - 2026-06-15
 
 ### Fixed

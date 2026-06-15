@@ -23,6 +23,11 @@ export type ApiProduct = {
     label: string;
     description: string;
   }>;
+  faqs?: Array<{
+    id: string;
+    question: string;
+    answer: string;
+  }>;
   reviews?: Array<{
     id: string;
     author: string;

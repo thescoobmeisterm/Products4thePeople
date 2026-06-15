@@ -171,6 +171,11 @@ const productSchema = z.object({
     label: z.string().min(1),
     description: z.string().min(1),
   })).optional(),
+  faqs: z.array(z.object({
+    id: z.string().min(1),
+    question: z.string().min(1),
+    answer: z.string().min(1),
+  })).optional(),
   reviews: z.array(z.object({
     id: z.string().min(1),
     author: z.string().min(1),
