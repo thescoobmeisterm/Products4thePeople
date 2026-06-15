@@ -3721,7 +3721,8 @@ function ProductDialog({
   const setField = <Key extends keyof ProductForm>(key: Key, value: ProductForm[Key]) => {
     setForm((current) => ({ ...current, [key]: value }));
   };
-  const [imageUploadFile, setImageUploadFile] = React.useState<File | null>(null);
+  const [imageUploadFiles, setImageUploadFiles] = React.useState<File[]>([]);
+  const [imageUploadInputKey, setImageUploadInputKey] = React.useState(0);
   const [isUploadingImage, setIsUploadingImage] = React.useState(false);
   const [deletingMediaAssetId, setDeletingMediaAssetId] = React.useState("");
   const [imageManagerNotice, setImageManagerNotice] = React.useState("");
@@ -3730,6 +3731,12 @@ function ProductDialog({
 
   const addImageToProduct = (url: string) => {
     const nextImages = Array.from(new Set([normalizeMediaUrl(url), ...(form.images || []).map(normalizeMediaUrl)]));
+    setField("images", nextImages);
+  };
+
+  const addImagesToProduct = (urls: string[]) => {
+    const normalizedUrls = urls.map(normalizeMediaUrl).filter(Boolean);
+    const nextImages = Array.from(new Set([...normalizedUrls, ...(form.images || []).map(normalizeMediaUrl)]));
     setField("images", nextImages);
   };
 
@@ -3811,25 +3818,30 @@ function ProductDialog({
   };
 
   const uploadProductImage = async () => {
-    if (!imageUploadFile) return;
+    if (imageUploadFiles.length === 0) return;
     setIsUploadingImage(true);
     setImageManagerNotice("");
     try {
-      const response = await uploadMediaAsset({
-        title: `${form.name || product?.name || "Product"} image`,
-        kind: "image",
-        placement: "listing",
-        fileName: imageUploadFile.name,
-        mimeType: imageUploadFile.type || "image/jpeg",
-        dataUrl: await readFileAsDataUrl(imageUploadFile),
-        productId: product?.id,
-        caption: form.name || product?.name || undefined,
-        tag: form.niche || product?.niche || "Product",
-      });
-      onMediaCreated(response.asset);
-      addImageToProduct(normalizeMediaUrl(response.asset.url));
-      setImageUploadFile(null);
-      setImageManagerNotice("Image uploaded and added to this product.");
+      const uploadedUrls: string[] = [];
+      for (const file of imageUploadFiles) {
+        const response = await uploadMediaAsset({
+          title: `${form.name || product?.name || "Product"} image`,
+          kind: "image",
+          placement: "listing",
+          fileName: file.name,
+          mimeType: file.type || "image/jpeg",
+          dataUrl: await readFileAsDataUrl(file),
+          productId: product?.id,
+          caption: form.name || product?.name || undefined,
+          tag: form.niche || product?.niche || "Product",
+        });
+        onMediaCreated(response.asset);
+        uploadedUrls.push(response.asset.url);
+      }
+      addImagesToProduct(uploadedUrls);
+      setImageUploadFiles([]);
+      setImageUploadInputKey((current) => current + 1);
+      setImageManagerNotice(`${uploadedUrls.length} image${uploadedUrls.length === 1 ? "" : "s"} uploaded and added to this product.`);
     } catch (error) {
       setImageManagerNotice(error instanceof Error ? error.message : "Image upload failed.");
     } finally {
@@ -3929,19 +3941,26 @@ function ProductDialog({
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) auto', gap: '10px', alignItems: 'center' }}>
                 <input
                   accept="image/*"
+                  key={imageUploadInputKey}
+                  multiple
                   type="file"
-                  onChange={(event) => setImageUploadFile(event.target.files?.[0] || null)}
+                  onChange={(event) => setImageUploadFiles(Array.from(event.target.files || []))}
                   style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '9px 10px', fontSize: '13px', background: '#ffffff' }}
                 />
                 <button
                   type="button"
                   onClick={uploadProductImage}
-                  disabled={!imageUploadFile || isUploadingImage}
-                  style={{ border: 'none', background: '#176c61', color: '#ffffff', borderRadius: '8px', minHeight: '38px', padding: '0 14px', fontWeight: 700, cursor: !imageUploadFile || isUploadingImage ? 'not-allowed' : 'pointer', opacity: !imageUploadFile || isUploadingImage ? 0.6 : 1 }}
+                  disabled={imageUploadFiles.length === 0 || isUploadingImage}
+                  style={{ border: 'none', background: '#176c61', color: '#ffffff', borderRadius: '8px', minHeight: '38px', padding: '0 14px', fontWeight: 700, cursor: imageUploadFiles.length === 0 || isUploadingImage ? 'not-allowed' : 'pointer', opacity: imageUploadFiles.length === 0 || isUploadingImage ? 0.6 : 1 }}
                 >
-                  {isUploadingImage ? "Uploading..." : "Upload"}
+                  {isUploadingImage ? `Uploading ${imageUploadFiles.length}...` : imageUploadFiles.length > 1 ? `Upload ${imageUploadFiles.length}` : "Upload"}
                 </button>
               </div>
+              {imageUploadFiles.length > 1 && (
+                <span style={{ color: '#64748b', fontSize: '12px', fontWeight: 700 }}>
+                  {imageUploadFiles.length} images selected for batch upload.
+                </span>
+              )}
               {imageManagerNotice && (
                 <div style={{ border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e40af', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', fontWeight: 600 }}>
                   {imageManagerNotice}

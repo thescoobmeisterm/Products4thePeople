@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.15.0 - 2026-06-15
+
+### Added
+- Added batch product image uploads in the product edit modal so multiple selected images upload together and attach to the listing.
+
 ## v1.14.0 - 2026-06-15
 
 ### Added
