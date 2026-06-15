@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.12.2 - 2026-06-15
+
+### Fixed
+- Preserved customer-facing product description formatting for imported content angles, including paragraphs, line breaks, and simple bullet lists.
+
 ## v1.12.1 - 2026-06-15
 
 ### Fixed

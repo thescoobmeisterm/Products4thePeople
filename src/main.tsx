@@ -5732,7 +5732,7 @@ function Storefront({
                       <div className="shop-card-body">
                         <span>{product.niche}</span>
                         <h3><button type="button" onClick={() => openProduct(product)}>{product.name}</button></h3>
-                        <p>{getConsumerCopy(product)}</p>
+                        <FormattedProductCopy product={product} variant="card" />
                         <div className="shop-price">
                           <strong>{money(product.retailMin)}</strong>
                           <small>{product.inventory} in stock</small>
@@ -5843,7 +5843,7 @@ function Storefront({
                             {product.name}
                           </button>
                         </h3>
-                        <p>{getConsumerCopy(product)}</p>
+                        <FormattedProductCopy product={product} variant="card" />
                         <div className="shop-price">
                           <strong>{money(product.retailMin)}</strong>
                           <small>{product.inventory} in stock</small>
@@ -6088,7 +6088,7 @@ function Storefront({
                       {product.name}
                     </button>
                   </h3>
-                <p>{getConsumerCopy(product)}</p>
+                <FormattedProductCopy product={product} variant="card" />
                   <div className="shop-price">
                     <strong>{money(product.retailMin)}</strong>
                     <small>{product.inventory} in stock</small>
@@ -7144,9 +7144,7 @@ function ProductQuickView({
             </button>
           </div>
 
-          <p className="quick-view-lede">
-            {getConsumerCopy(product)}
-          </p>
+          <FormattedProductCopy product={product} variant="quick" />
 
           <div className="quick-view-stats">
             <span>
@@ -7180,6 +7178,47 @@ function ProductQuickView({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function FormattedProductCopy({ product, variant }: { product: Product; variant: "card" | "quick" | "detail" }) {
+  const copy = getConsumerCopy(product);
+  return <FormattedText text={copy} className={`product-copy product-copy-${variant}`} />;
+}
+
+function FormattedText({ text, className }: { text: string; className: string }) {
+  const blocks = text
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
+
+  return (
+    <div className={className}>
+      {blocks.map((block, blockIndex) => {
+        const lines = block.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+        const isList = lines.length > 1 && lines.every((line) => /^([-*•]|\d+[.)])\s+/.test(line));
+        if (isList) {
+          return (
+            <ul key={`${blockIndex}-${block.slice(0, 20)}`}>
+              {lines.map((line, lineIndex) => (
+                <li key={`${lineIndex}-${line.slice(0, 20)}`}>{line.replace(/^([-*•]|\d+[.)])\s+/, "")}</li>
+              ))}
+            </ul>
+          );
+        }
+
+        return (
+          <p key={`${blockIndex}-${block.slice(0, 20)}`}>
+            {lines.map((line, lineIndex) => (
+              <React.Fragment key={`${lineIndex}-${line.slice(0, 20)}`}>
+                {line}
+                {lineIndex < lines.length - 1 && <br />}
+              </React.Fragment>
+            ))}
+          </p>
+        );
+      })}
     </div>
   );
 }
@@ -7463,7 +7502,7 @@ function ProductDetailPage({
             </button>
           </div>
 
-          <p>{getConsumerCopy(product)}</p>
+          <FormattedProductCopy product={product} variant="detail" />
 
           <div className="detail-price-row">
             <strong>{money(product.retailMin)}</strong>
@@ -8238,6 +8277,8 @@ function getConsumerCopy(product: Product) {
   const subcategory = getProductSubcategory(product);
   const angle = product.contentAngle.trim();
   if (angle) {
+    const hasExistingFormatting = /[\r\n]|(^|\n)\s*([-*•]|\d+[.)])\s+/.test(angle);
+    if (hasExistingFormatting) return angle;
     if (product.subdomain === "beauty") return `${angle}. Easy to add to a daily routine and simple enough to demo at a glance.`;
     if (product.subdomain === "pets") return `${angle}. Built for everyday pet-owner messes, outings, and calmer routines.`;
     if (product.subdomain === "home") return `${angle}. A practical home upgrade with a clear use case and giftable price point.`;

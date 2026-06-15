@@ -1391,6 +1391,41 @@ tr:last-child td {
   line-height: 1.5;
 }
 
+.product-copy {
+  color: color-mix(in srgb, var(--store-card-text, #59676b), transparent 22%);
+  line-height: 1.55;
+}
+
+.product-copy p,
+.product-copy ul {
+  margin: 0 0 10px;
+}
+
+.product-copy p:last-child,
+.product-copy ul:last-child {
+  margin-bottom: 0;
+}
+
+.product-copy ul {
+  display: grid;
+  gap: 5px;
+  padding-left: 18px;
+}
+
+.product-copy li {
+  padding-left: 2px;
+}
+
+.product-copy-card {
+  font-size: 1rem;
+  opacity: 0.78;
+}
+
+.product-copy-card ul {
+  max-height: 7.2em;
+  overflow: hidden;
+}
+
 .shop-price {
   align-items: center;
   display: flex;
@@ -1610,6 +1645,13 @@ tr:last-child td {
   color: color-mix(in srgb, var(--store-card-text, #151f22), transparent 22%);
   font-size: 1.05rem;
   line-height: 1.6;
+}
+
+.product-copy-quick,
+.product-copy-detail {
+  color: color-mix(in srgb, var(--store-card-text, #151f22), transparent 22%);
+  font-size: 1.05rem;
+  line-height: 1.65;
 }
 
 .quick-view-stats {
