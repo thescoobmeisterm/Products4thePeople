@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.13.0 - 2026-06-15
+
+### Added
+- Added product-level review management to the admin product edit modal, including reviewer, rating, date, verified buyer, and review text controls.
+- Customer product pages now use saved product reviews before falling back to generated niche reviews.
+
 ## v1.12.2 - 2026-06-15
 
 ### Fixed

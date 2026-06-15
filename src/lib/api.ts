@@ -17,6 +17,14 @@ export type ApiProduct = {
   status: "Active" | "Review" | "Draft";
   inventory: number;
   images?: string[];
+  reviews?: Array<{
+    id: string;
+    author: string;
+    rating: number;
+    date: string;
+    text: string;
+    verified: boolean;
+  }>;
   seoTitle?: string;
   seoDescription?: string;
   source?: "seed" | "local" | "medusa";

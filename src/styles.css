@@ -786,6 +786,108 @@ tr:last-child td {
   resize: vertical;
 }
 
+.product-review-editor {
+  background: #f8fafc;
+  border: 1px solid #dce3e7;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+
+.product-review-editor-header,
+.product-review-editor-actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.product-review-editor-header p {
+  color: #64748b;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.product-review-editor button {
+  border: 0;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 800;
+  min-height: 34px;
+  padding: 8px 12px;
+}
+
+.product-review-editor-header button {
+  background: #176c61;
+  color: #ffffff;
+}
+
+.product-review-editor-list {
+  display: grid;
+  gap: 12px;
+}
+
+.product-review-editor-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.product-review-editor-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(180px, 1.4fr) minmax(150px, 1fr) minmax(110px, 0.7fr);
+}
+
+.product-review-editor label {
+  color: #52636a;
+  display: grid;
+  font-size: 0.78rem;
+  font-weight: 900;
+  gap: 6px;
+}
+
+.product-review-editor input,
+.product-review-editor select,
+.product-review-editor textarea {
+  background: #ffffff;
+  border: 1px solid #dce3e7;
+  border-radius: 8px;
+  color: #172023;
+  min-height: 38px;
+  outline: 0;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+.product-review-editor textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.product-review-editor-actions label {
+  align-items: center;
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+}
+
+.product-review-editor-actions input {
+  min-height: auto;
+  width: auto;
+}
+
+.product-review-editor-actions button {
+  background: #fef2f2;
+  color: #dc2626;
+}
+
 .storefront {
   --store-accent: #247b73;
   --store-soft: #eefaf7;
@@ -2210,8 +2312,15 @@ tr:last-child td {
   .panel-grid,
   .readiness-grid,
   .form-grid,
+  .product-review-editor-row,
   .medusa-strip {
     grid-template-columns: 1fr;
+  }
+
+  .product-review-editor-header,
+  .product-review-editor-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .storefront-header,

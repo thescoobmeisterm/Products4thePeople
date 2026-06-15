@@ -161,6 +161,7 @@ type Product = {
   status: ProductStatus;
   inventory: number;
   images?: string[];
+  reviews?: ProductReview[];
   seoTitle?: string;
   seoDescription?: string;
   source?: "seed" | "local" | "medusa";
@@ -3701,6 +3702,7 @@ function ProductDialog({
            status: "Draft",
            inventory: 0,
            images: [],
+           reviews: [],
            seoTitle: "",
            seoDescription: "",
          },
@@ -3741,6 +3743,36 @@ function ProductDialog({
     }
   };
 
+  const productReviews = form.reviews || [];
+
+  const setReviewField = <Key extends keyof ProductReview>(index: number, key: Key, value: ProductReview[Key]) => {
+    setField(
+      "reviews",
+      productReviews.map((review, reviewIndex) =>
+        reviewIndex === index ? { ...review, [key]: value } : review,
+      ),
+    );
+  };
+
+  const addReview = () => {
+    const today = new Date().toLocaleDateString("en-US", { month: "long", day: "2-digit", year: "numeric" });
+    setField("reviews", [
+      ...productReviews,
+      {
+        id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `review_${Date.now()}`,
+        author: "",
+        rating: 5,
+        date: today,
+        text: "",
+        verified: true,
+      },
+    ]);
+  };
+
+  const removeReview = (index: number) => {
+    setField("reviews", productReviews.filter((_review, reviewIndex) => reviewIndex !== index));
+  };
+
   const uploadProductImage = async () => {
     if (!imageUploadFile) return;
     setIsUploadingImage(true);
@@ -3774,7 +3806,16 @@ function ProductDialog({
         className="modal"
         onSubmit={(event) => {
           event.preventDefault();
-          if (form.name.trim()) onSave({ ...form, name: form.name.trim() });
+          const reviews = (form.reviews || [])
+            .map((review) => ({
+              ...review,
+              author: review.author.trim(),
+              date: review.date.trim(),
+              text: review.text.trim(),
+              rating: Math.min(5, Math.max(1, Number(review.rating) || 5)),
+            }))
+            .filter((review) => review.author && review.date && review.text);
+          if (form.name.trim()) onSave({ ...form, name: form.name.trim(), reviews });
         }}
       >
         <div className="modal-header">
@@ -3939,6 +3980,56 @@ function ProductDialog({
           <Field label="SEO description" wide>
             <textarea value={form.seoDescription || ""} onChange={(event) => setField("seoDescription", event.target.value)} />
           </Field>
+          <div className="field wide-field">
+            <span>Customer reviews</span>
+            <div className="product-review-editor">
+              <div className="product-review-editor-header">
+                <p>{productReviews.length ? `${productReviews.length} custom reviews will show on the customer product page.` : "No custom reviews yet. The storefront will use generated niche reviews until you add one."}</p>
+                <button type="button" onClick={addReview}>Add review</button>
+              </div>
+              {productReviews.length > 0 && (
+                <div className="product-review-editor-list">
+                  {productReviews.map((review, index) => (
+                    <div className="product-review-editor-card" key={review.id || index}>
+                      <div className="product-review-editor-row">
+                        <label>
+                          <span>Reviewer</span>
+                          <input value={review.author} onChange={(event) => setReviewField(index, "author", event.target.value)} placeholder="Sarah M." />
+                        </label>
+                        <label>
+                          <span>Date</span>
+                          <input value={review.date} onChange={(event) => setReviewField(index, "date", event.target.value)} placeholder="June 15, 2026" />
+                        </label>
+                        <label>
+                          <span>Rating</span>
+                          <select value={review.rating} onChange={(event) => setReviewField(index, "rating", Number(event.target.value))}>
+                            {[5, 4, 3, 2, 1].map((rating) => (
+                              <option key={rating} value={rating}>{rating} stars</option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                      <label className="product-review-editor-text">
+                        <span>Review text</span>
+                        <textarea value={review.text} onChange={(event) => setReviewField(index, "text", event.target.value)} placeholder="Write the customer review shown on the product page." />
+                      </label>
+                      <div className="product-review-editor-actions">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={review.verified}
+                            onChange={(event) => setReviewField(index, "verified", event.target.checked)}
+                          />
+                          Verified buyer
+                        </label>
+                        <button type="button" onClick={() => removeReview(index)}>Remove review</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="modal-actions">
@@ -4473,7 +4564,8 @@ function Storefront({
   }, [customReviews]);
 
   const getProductReviewsList = React.useCallback((product: Product) => {
-    const defaults = getDefaultReviews(product);
+    const productReviews = product.reviews || [];
+    const defaults = productReviews.length > 0 ? productReviews : getDefaultReviews(product);
     const customs = customReviews[product.id] || [];
     return [...customs, ...defaults];
   }, [customReviews]);
