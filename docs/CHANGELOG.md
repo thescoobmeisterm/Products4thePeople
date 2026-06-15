@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.15.1 - 2026-06-15
+
+### Fixed
+- Increased Cover Flow gallery sizing on product detail pages so active images can scale larger on wider browser windows.
+
 ## v1.15.0 - 2026-06-15
 
 ### Added

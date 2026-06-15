@@ -1835,7 +1835,7 @@ tr:last-child td {
 .product-detail-grid {
   display: grid;
   gap: clamp(22px, 4vw, 48px);
-  grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+  grid-template-columns: minmax(420px, 1.35fr) minmax(320px, 0.85fr);
 }
 
 .product-gallery,
@@ -1878,7 +1878,7 @@ tr:last-child td {
 
 .coverflow-stage {
   align-items: center;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 1.18 / 1;
   background:
     radial-gradient(circle at 50% 16%, color-mix(in srgb, var(--store-accent), white 76%), transparent 38%),
     linear-gradient(145deg, #fff, var(--store-soft));
@@ -1889,6 +1889,7 @@ tr:last-child td {
   overflow: hidden;
   perspective: 1100px;
   position: relative;
+  min-height: min(760px, 72vh);
 }
 
 .coverflow-card {
@@ -1907,7 +1908,7 @@ tr:last-child td {
   transform-origin: center center;
   transition: transform 280ms ease, opacity 220ms ease, box-shadow 220ms ease;
   translate: -50% -50%;
-  width: min(62%, 340px);
+  width: min(72%, 620px);
 }
 
 .coverflow-card.active {
@@ -2393,6 +2394,7 @@ tr:last-child td {
 
   .coverflow-stage {
     aspect-ratio: 4 / 5;
+    min-height: 420px;
   }
 
   .coverflow-card {
