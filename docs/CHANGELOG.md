@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.16.1 - 2026-06-15
+
+### Fixed
+- Changed product detail FAQs to a nested accordion so each question opens its answer on click.
+
 ## v1.16.0 - 2026-06-15
 
 ### Added

@@ -7657,6 +7657,7 @@ function ProductDetailPage({
   onAddReview: (productId: string, review: ProductReview) => void;
 }) {
   const [activeAccordion, setActiveAccordion] = React.useState<"benefits" | "reviews" | "faq" | null>("benefits");
+  const [activeFaqId, setActiveFaqId] = React.useState<string | null>(null);
   const [showSticky, setShowSticky] = React.useState(false);
 
   // Review form states
@@ -7673,6 +7674,7 @@ function ProductDetailPage({
 
   const reviewsList = getReviewsList(product);
   const averageRating = getAverageRating(product);
+  const productFaqs = React.useMemo(() => getProductFaqs(product), [product]);
 
   React.useEffect(() => {
     const handleScroll = () => {
@@ -7687,8 +7689,16 @@ function ProductDetailPage({
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  React.useEffect(() => {
+    setActiveFaqId(null);
+  }, [product.id]);
+
   const toggleAccordion = (section: "benefits" | "reviews" | "faq") => {
     setActiveAccordion(prev => prev === section ? null : section);
+  };
+
+  const toggleProductFaq = (faqId: string) => {
+    setActiveFaqId((current) => (current === faqId ? null : faqId));
   };
 
   const handleReviewSubmit = (e: React.FormEvent) => {
@@ -7956,13 +7966,30 @@ function ProductDetailPage({
                 {activeAccordion === "faq" ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
               </button>
               {activeAccordion === "faq" && (
-                <div className="accordion-content" style={{ display: 'flex', flexDirection: 'column', gap: '10px', textAlign: 'left' }}>
-                  {getProductFaqs(product).map((faq) => (
-                    <div key={faq.id}>
-                      <strong style={{ display: 'block', color: '#11191d', marginBottom: '2px' }}>{faq.question}</strong>
-                      <span style={{ fontSize: '0.82rem' }}>{faq.answer}</span>
-                    </div>
-                  ))}
+                <div className="accordion-content product-faq-list">
+                  {productFaqs.map((faq, index) => {
+                    const faqId = faq.id || `faq-${index}`;
+                    const isOpen = activeFaqId === faqId;
+                    return (
+                      <div className="product-faq-item" key={faqId}>
+                        <button
+                          aria-controls={`product-faq-answer-${faqId}`}
+                          aria-expanded={isOpen}
+                          className="product-faq-question"
+                          onClick={() => toggleProductFaq(faqId)}
+                          type="button"
+                        >
+                          <span>{faq.question}</span>
+                          {isOpen ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                        </button>
+                        {isOpen && (
+                          <div className="product-faq-answer" id={`product-faq-answer-${faqId}`}>
+                            {faq.answer}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

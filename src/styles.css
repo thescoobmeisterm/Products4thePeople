@@ -4153,6 +4153,51 @@ tr:last-child td {
   line-height: 1.5;
 }
 
+.product-faq-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  text-align: left;
+}
+
+.product-faq-item {
+  border: 1px solid var(--store-border, #e5eaee);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--store-card, #ffffff);
+}
+
+.product-faq-question {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: var(--store-card-text, #11191d);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 700;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 11px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.product-faq-question:hover,
+.product-faq-question:focus-visible {
+  color: var(--store-accent, #176c61);
+  outline: none;
+}
+
+.product-faq-answer {
+  border-top: 1px solid var(--store-border, #e5eaee);
+  color: #52636a;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  padding: 11px 12px 12px;
+}
+
 /* Rating Summary Dashboard */
 .reviews-summary {
   display: flex;
