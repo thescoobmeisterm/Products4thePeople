@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.13.1 - 2026-06-15
+
+### Fixed
+- Limited storefront product card descriptions to a compact preview so long formatted descriptions no longer stretch product tiles.
+
 ## v1.13.0 - 2026-06-15
 
 ### Added

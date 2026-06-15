@@ -1520,12 +1520,25 @@ tr:last-child td {
 
 .product-copy-card {
   font-size: 1rem;
+  max-height: 4.8em;
   opacity: 0.78;
+  overflow: hidden;
+  position: relative;
 }
 
-.product-copy-card ul {
-  max-height: 7.2em;
-  overflow: hidden;
+.product-copy-card::after {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--store-card-bg, #ffffff), transparent 100%),
+    var(--store-card-bg, #ffffff)
+  );
+  bottom: 0;
+  content: "";
+  height: 1.6em;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
 }
 
 .shop-price {
