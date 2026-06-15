@@ -17,6 +17,12 @@ export type ApiProduct = {
   status: "Active" | "Review" | "Draft";
   inventory: number;
   images?: string[];
+  trustBadges?: string[];
+  productHighlights?: Array<{
+    id: string;
+    label: string;
+    description: string;
+  }>;
   reviews?: Array<{
     id: string;
     author: string;

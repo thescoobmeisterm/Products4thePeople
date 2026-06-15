@@ -165,6 +165,12 @@ const productSchema = z.object({
   status: z.enum(["Active", "Review", "Draft"]),
   inventory: z.number(),
   images: z.array(z.string()).optional(),
+  trustBadges: z.array(z.string()).optional(),
+  productHighlights: z.array(z.object({
+    id: z.string().min(1),
+    label: z.string().min(1),
+    description: z.string().min(1),
+  })).optional(),
   reviews: z.array(z.object({
     id: z.string().min(1),
     author: z.string().min(1),

@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.14.0 - 2026-06-15
+
+### Added
+- Added product edit controls for listing trust badges and product highlight benefit rows.
+- Product detail pages now use saved listing badges and highlight descriptions before falling back to generated defaults.
+
 ## v1.13.1 - 2026-06-15
 
 ### Fixed

@@ -161,6 +161,8 @@ type Product = {
   status: ProductStatus;
   inventory: number;
   images?: string[];
+  trustBadges?: string[];
+  productHighlights?: ProductHighlight[];
   reviews?: ProductReview[];
   seoTitle?: string;
   seoDescription?: string;
@@ -168,6 +170,12 @@ type Product = {
 };
 
 type ProductForm = Omit<Product, "id">;
+
+type ProductHighlight = {
+  id: string;
+  label: string;
+  description: string;
+};
 
 type Order = {
   id: string;
@@ -3702,6 +3710,8 @@ function ProductDialog({
            status: "Draft",
            inventory: 0,
            images: [],
+           trustBadges: [],
+           productHighlights: [],
            reviews: [],
            seoTitle: "",
            seoDescription: "",
@@ -3773,6 +3783,33 @@ function ProductDialog({
     setField("reviews", productReviews.filter((_review, reviewIndex) => reviewIndex !== index));
   };
 
+  const effectiveTrustBadges = form.trustBadges?.length ? form.trustBadges : getDefaultProductTrustBadges(form);
+  const productHighlights = form.productHighlights?.length ? form.productHighlights : getDefaultProductHighlights(form);
+
+  const setHighlightField = <Key extends keyof ProductHighlight>(index: number, key: Key, value: ProductHighlight[Key]) => {
+    setField(
+      "productHighlights",
+      productHighlights.map((highlight, highlightIndex) =>
+        highlightIndex === index ? { ...highlight, [key]: value } : highlight,
+      ),
+    );
+  };
+
+  const addHighlight = () => {
+    setField("productHighlights", [
+      ...productHighlights,
+      {
+        id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `highlight_${Date.now()}`,
+        label: "",
+        description: "",
+      },
+    ]);
+  };
+
+  const removeHighlight = (index: number) => {
+    setField("productHighlights", productHighlights.filter((_highlight, highlightIndex) => highlightIndex !== index));
+  };
+
   const uploadProductImage = async () => {
     if (!imageUploadFile) return;
     setIsUploadingImage(true);
@@ -3815,7 +3852,17 @@ function ProductDialog({
               rating: Math.min(5, Math.max(1, Number(review.rating) || 5)),
             }))
             .filter((review) => review.author && review.date && review.text);
-          if (form.name.trim()) onSave({ ...form, name: form.name.trim(), reviews });
+          const trustBadges = (form.trustBadges?.length ? form.trustBadges : effectiveTrustBadges)
+            .map((badge) => badge.trim())
+            .filter(Boolean);
+          const productHighlights = (form.productHighlights?.length ? form.productHighlights : getDefaultProductHighlights(form))
+            .map((highlight) => ({
+              ...highlight,
+              label: highlight.label.trim(),
+              description: highlight.description.trim(),
+            }))
+            .filter((highlight) => highlight.label && highlight.description);
+          if (form.name.trim()) onSave({ ...form, name: form.name.trim(), trustBadges, productHighlights, reviews });
         }}
       >
         <div className="modal-header">
@@ -3980,6 +4027,44 @@ function ProductDialog({
           <Field label="SEO description" wide>
             <textarea value={form.seoDescription || ""} onChange={(event) => setField("seoDescription", event.target.value)} />
           </Field>
+          <Field label="Listing trust badges" wide>
+            <textarea
+              value={effectiveTrustBadges.join("\n")}
+              onChange={(event) =>
+                setField("trustBadges", event.target.value.split(/\r?\n/).map((badge) => badge.trim()).filter(Boolean))
+              }
+              placeholder="One checkmark badge per line"
+            />
+          </Field>
+          <div className="field wide-field">
+            <span>Product highlights & benefits</span>
+            <div className="product-review-editor">
+              <div className="product-review-editor-header">
+                <p>Edit the title and description shown in the customer product-page benefits accordion.</p>
+                <button type="button" onClick={addHighlight}>Add highlight</button>
+              </div>
+              <div className="product-review-editor-list">
+                {productHighlights.map((highlight, index) => (
+                  <div className="product-review-editor-card" key={highlight.id || index}>
+                    <div className="product-review-editor-row two-column">
+                      <label>
+                        <span>Highlight title</span>
+                        <input value={highlight.label} onChange={(event) => setHighlightField(index, "label", event.target.value)} placeholder="Simple setup" />
+                      </label>
+                      <label>
+                        <span>Description</span>
+                        <input value={highlight.description} onChange={(event) => setHighlightField(index, "description", event.target.value)} placeholder="Engineered for professional-grade performance and daily reliability." />
+                      </label>
+                    </div>
+                    <div className="product-review-editor-actions">
+                      <span />
+                      <button type="button" onClick={() => removeHighlight(index)}>Remove highlight</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
           <div className="field wide-field">
             <span>Customer reviews</span>
             <div className="product-review-editor">
@@ -7635,10 +7720,9 @@ function ProductDetailPage({
           </button>
 
           <div className="detail-notes">
-            {getProductBenefits(product).slice(0, 2).map((benefit) => (
+            {getProductTrustBadges(product).map((benefit) => (
               <span key={benefit}>✓ {benefit}</span>
             ))}
-            <span>✓ Secure Checkout</span>
           </div>
 
           {/* Expandable Accordion Tabs Section */}
@@ -7652,14 +7736,11 @@ function ProductDetailPage({
               {activeAccordion === "benefits" && (
                 <div className="accordion-content">
                   <ul style={{ paddingLeft: '16px', margin: '0 0 10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {getProductBenefits(product).map((benefit, i) => (
-                      <li key={i} style={{ color: '#52636a' }}>
-                        <strong>{benefit}</strong>: Engineered for professional-grade performance and daily reliability.
+                    {getProductHighlights(product).map((highlight) => (
+                      <li key={highlight.id} style={{ color: '#52636a' }}>
+                        <strong>{highlight.label}</strong>: {highlight.description}
                       </li>
                     ))}
-                    <li>
-                      <strong>Free Shipping</strong>: Automatically qualifies for free shipping (minimum $25 checkout).
-                    </li>
                   </ul>
                 </div>
               )}
@@ -8308,7 +8389,7 @@ function getSubcategories(products: Product[]) {
   return ["All", ...categories.sort((first, second) => first.localeCompare(second))];
 }
 
-function getProductSubcategory(product: Product) {
+function getProductSubcategory(product: Product | ProductForm) {
   const haystack = `${product.name} ${product.contentAngle} ${product.niche}`.toLowerCase();
 
   if (product.subdomain === "beauty") {
@@ -8383,7 +8464,7 @@ function getConsumerCopy(product: Product) {
   return "A fitness helper selected for straightforward use and clear routine support.";
 }
 
-function getProductBenefits(product: Product) {
+function getProductBenefits(product: Product | ProductForm) {
   const subcategory = getProductSubcategory(product);
   if (product.subdomain === "beauty") {
     if (subcategory === "Hair Care") return ["Protects styling time", "Low-friction morning or overnight routine", "Strong bundle fit with beauty add-ons"];
@@ -8403,6 +8484,41 @@ function getProductBenefits(product: Product) {
   if (product.subdomain === "home") return ["Simple setup", "Everyday utility", "Giftable home upgrade"];
   if (product.subdomain === "automotive") return ["Professional garage results", "Premium detailing performance", "Enthusiast trusted quality"];
   return ["Routine support", "Easy to use at home", "Clear demo potential"];
+}
+
+function getDefaultProductTrustBadges(product: Product | ProductForm) {
+  return [...getProductBenefits(product).slice(0, 2), "Secure Checkout"];
+}
+
+function getProductTrustBadges(product: Product) {
+  const customBadges = (product.trustBadges || []).map((badge) => badge.trim()).filter(Boolean);
+  return customBadges.length > 0 ? customBadges : getDefaultProductTrustBadges(product);
+}
+
+function getDefaultProductHighlights(product: Product | ProductForm): ProductHighlight[] {
+  return [
+    ...getProductBenefits(product).map((benefit) => ({
+      id: benefit.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || `highlight-${benefit.length}`,
+      label: benefit,
+      description: "Engineered for professional-grade performance and daily reliability.",
+    })),
+    {
+      id: "free-shipping",
+      label: "Free Shipping",
+      description: "Automatically qualifies for free shipping (minimum $25 checkout).",
+    },
+  ];
+}
+
+function getProductHighlights(product: Product) {
+  const customHighlights = (product.productHighlights || [])
+    .map((highlight) => ({
+      ...highlight,
+      label: highlight.label.trim(),
+      description: highlight.description.trim(),
+    }))
+    .filter((highlight) => highlight.label && highlight.description);
+  return customHighlights.length > 0 ? customHighlights : getDefaultProductHighlights(product);
 }
 
 function getProductSeo(product: Product) {
