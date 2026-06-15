@@ -1754,7 +1754,13 @@ tr:last-child td {
   box-shadow: 0 24px 58px rgba(17, 25, 29, 0.24);
 }
 
-.coverflow-card img,
+.coverflow-card img {
+  background: #f8fafc;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
 .coverflow-filmstrip img,
 .image-viewer-footer img {
   height: 100%;

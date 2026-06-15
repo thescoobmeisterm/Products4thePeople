@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.12.1 - 2026-06-15
+
+### Fixed
+- Updated Cover Flow product gallery images to show the full photo instead of cropping the image inside the card.
+
 ## v1.12.0 - 2026-06-14
 
 ### Added
