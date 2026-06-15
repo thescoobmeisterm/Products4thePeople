@@ -4164,7 +4164,7 @@ tr:last-child td {
   border: 1px solid var(--store-border, #e5eaee);
   border-radius: 8px;
   overflow: hidden;
-  background: var(--store-card, #ffffff);
+  background: var(--store-card-bg, #ffffff);
 }
 
 .product-faq-question {
@@ -4192,7 +4192,7 @@ tr:last-child td {
 
 .product-faq-answer {
   border-top: 1px solid var(--store-border, #e5eaee);
-  color: #52636a;
+  color: color-mix(in srgb, var(--store-card-text, #11191d), transparent 28%);
   font-size: 0.84rem;
   line-height: 1.5;
   padding: 11px 12px 12px;

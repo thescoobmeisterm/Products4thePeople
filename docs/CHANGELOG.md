@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.16.2 - 2026-06-15
+
+### Fixed
+- Fixed FAQ section dark theme styling so FAQ buttons use themed card background and text colors instead of hardcoded white.
+
 ## v1.16.1 - 2026-06-15
 
 ### Fixed
