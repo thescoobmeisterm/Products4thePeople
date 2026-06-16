@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.17.2 - 2026-06-16
+
+### Fixed
+- Restored the storefront top bar on product detail pages while hiding only the store hero section.
+
 ## v1.17.1 - 2026-06-16
 
 ### Fixed
