@@ -1537,6 +1537,12 @@ const productSeoGenerationSchema = z.object({
   ctaStyle: z.enum(["soft", "direct", "limited_offer"]).optional().default("direct")
 });
 
+const bulkSeoPageGenerationSchema = z.object({
+  scope: z.enum(["niche", "category", "product_collection"]),
+  niche: z.string().optional().default("all"),
+  limit: z.number().int().min(1).max(100).optional().default(25)
+});
+
 const articleSeoGenerationSchema = z.object({
   niche: z.string().min(1),
   topic: z.string().min(1),
@@ -1573,6 +1579,153 @@ function formatProductPriceRange(product: any) {
   if (!min && !max) return "competitive pricing";
   if (min === max || !max) return `$${min.toFixed(2)}`;
   return `$${min.toFixed(2)}-$${max.toFixed(2)}`;
+}
+
+function titleCase(value: string) {
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function inferSeoCollectionName(product: any) {
+  const haystack = `${product.name || ""} ${product.contentAngle || ""} ${product.niche || ""}`.toLowerCase();
+  const subdomain = resolveProductNiche(product);
+
+  if (subdomain === "beauty") {
+    if (["led", "mask", "neck"].some((term) => haystack.includes(term))) return "LED Beauty Devices";
+    if (["hair", "curl", "scalp", "satin", "wrap", "brush"].some((term) => haystack.includes(term))) return "Hair Care";
+    if (["sculpt", "ice", "roller", "massage", "gua sha"].some((term) => haystack.includes(term))) return "Facial Sculpting";
+    return "Beauty Essentials";
+  }
+  if (subdomain === "pets") {
+    if (["travel", "car", "seat", "water bottle", "outdoor"].some((term) => haystack.includes(term))) return "Travel & Adventure";
+    if (["feed", "feeder", "bowl", "bottle"].some((term) => haystack.includes(term))) return "Feeding Essentials";
+    if (["groom", "hair", "fur", "paw", "brush"].some((term) => haystack.includes(term))) return "Grooming";
+    return "Pet Wellness";
+  }
+  if (subdomain === "fitness") {
+    if (["massage", "roller", "gun", "sore", "muscle"].some((term) => haystack.includes(term))) return "Massage Recovery";
+    if (["cold", "ice", "plunge"].some((term) => haystack.includes(term))) return "Cold Therapy";
+    if (["compression", "sleeve", "wrap", "band"].some((term) => haystack.includes(term))) return "Compression";
+    return "Recovery Essentials";
+  }
+  if (subdomain === "home") {
+    if (["kitchen", "spice", "pantry", "drawer", "fridge"].some((term) => haystack.includes(term))) return "Kitchen Organization";
+    if (["closet", "hanger", "wardrobe", "shoe"].some((term) => haystack.includes(term))) return "Closet Solutions";
+    if (["bathroom", "shower", "vanity"].some((term) => haystack.includes(term))) return "Bathroom Storage";
+    return "Space Saving Products";
+  }
+  if (subdomain === "automotive") {
+    if (["clean", "wash", "detail", "wax", "towel"].some((term) => haystack.includes(term))) return "Detailing Essentials";
+    if (["organizer", "storage", "trash", "seat"].some((term) => haystack.includes(term))) return "Interior Organization";
+    return "Car Care Accessories";
+  }
+
+  return "Featured Products";
+}
+
+function buildCategorySeoPage(niche: string, categoryName: string, keywords: string, now = new Date().toISOString()) {
+  const title = `Best ${categoryName} for ${titleCase(niche)} Store`;
+  const slug = `${niche}/${slugifySeo(categoryName)}`;
+  const seoTitle = `Top Rated ${categoryName} | Shop ${niche.toUpperCase()}`;
+  const seoDescription = `Shop the best curated ${categoryName} items. Highly rated collections optimized for price, durability, and fast delivery. Includes ${keywords}.`;
+
+  const description = `
+Explore our premier selection of **${categoryName}** specifically optimized for **${niche}** enthusiasts. Each product is vetted for durability, manufacturer reliability, and customer reviews. Benefit from fast shipping and our 30-day satisfaction guarantee on every item in this collection.
+  `.trim();
+
+  return {
+    id: crypto.randomUUID(),
+    title,
+    slug,
+    niche,
+    category_name: categoryName,
+    description,
+    seo_title: seoTitle,
+    seo_description: seoDescription,
+    schema_markup: {
+      "@context": "https://schema.org",
+      "@type": "CollectionPage",
+      "name": title,
+      "description": seoDescription,
+      "publisher": {
+        "@type": "Organization",
+        "name": "Products4ThePeople"
+      }
+    },
+    status: "draft",
+    views: 0,
+    conversions: 0,
+    revenue: 0,
+    created_at: now,
+    updated_at: now
+  };
+}
+
+function buildProductSeoPage(product: any, angle = "", now = new Date().toISOString()) {
+  const niche = resolveProductNiche(product);
+  const productAngle = angle.trim() || product.contentAngle || `a practical ${niche} solution`;
+  const slug = `${niche}/${slugifySeo(product.name)}-solution`;
+  const title = `${product.name} for ${productAngle}`;
+  const productUrl = `#/product/${product.id}`;
+  const priceRange = formatProductPriceRange(product);
+  const seoDescription = `${product.name} helps solve ${productAngle}. Review benefits, pricing, and the fastest path to buy from Products4ThePeople.`;
+
+  const description = `
+## Start With the Problem
+Shoppers looking for **${productAngle}** need a clear answer, not another crowded category page. This landing page frames the decision around the outcome first, then points to the product that best fits the need.
+
+## Meet the Solution
+[${product.name}](${productUrl}) is the recommended product for this use case. It is part of the ${niche} catalog, priced at ${priceRange}, and positioned around ${product.contentAngle || productAngle}.
+
+## Why This Product Belongs on the Shortlist
+- Built around a specific customer pain point instead of a generic collection.
+- Easy to connect with organic search, ads, and email campaigns.
+- Direct product path keeps the page conversion-focused.
+
+## Buy With Context
+Use this page to explain the problem, answer buying questions, and send ready shoppers to the product detail page: [View ${product.name}](${productUrl}).
+  `.trim();
+
+  return {
+    id: crypto.randomUUID(),
+    title,
+    slug,
+    niche,
+    category_name: `${product.name} Solution`,
+    description,
+    seo_title: `${product.name} for ${productAngle} | Products4ThePeople`,
+    seo_description: seoDescription,
+    schema_markup: {
+      "@context": "https://schema.org",
+      "@type": "WebPage",
+      "name": title,
+      "description": seoDescription,
+      "mainEntity": {
+        "@type": "Product",
+        "name": product.name,
+        "url": productUrl,
+        "offers": {
+          "@type": "AggregateOffer",
+          "lowPrice": Number(product.retailMin || 0),
+          "highPrice": Number(product.retailMax || product.retailMin || 0),
+          "priceCurrency": "USD"
+        }
+      },
+      "publisher": {
+        "@type": "Organization",
+        "name": "Products4ThePeople"
+      }
+    },
+    status: "draft",
+    views: 0,
+    conversions: 0,
+    revenue: 0,
+    created_at: now,
+    updated_at: now
+  };
 }
 
 function editorialToneIntro(tone: string) {
@@ -2134,44 +2287,7 @@ app.post("/api/admin/seo-pages/generate", requireAdmin, async (request, response
       keywords: z.string().min(1)
     }).parse(request.body);
 
-    const title = `Best ${categoryName} for ${niche.charAt(0).toUpperCase() + niche.slice(1)} Store`;
-    const slug = `${niche}/${categoryName.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
-    const seoTitle = `Top Rated ${categoryName} | Shop ${niche.toUpperCase()}`;
-    const seoDescription = `Shop the best curated ${categoryName} items. Highly rated collections optimized for price, durability, and fast delivery. Includes ${keywords}.`;
-
-    const description = `
-Explore our premier selection of **${categoryName}** specifically optimized for **${niche}** enthusiasts. Each product is vetted for durability, manufacturer reliability, and customer reviews. Benefit from fast shipping and our 30-day satisfaction guarantee on every item in this collection.
-    `.trim();
-
-    const schemaMarkup = {
-      "@context": "https://schema.org",
-      "@type": "CollectionPage",
-      "name": title,
-      "description": seoDescription,
-      "publisher": {
-        "@type": "Organization",
-        "name": "Products4ThePeople"
-      }
-    };
-
-    const newPage = {
-      id: crypto.randomUUID(),
-      title,
-      slug,
-      niche,
-      category_name: categoryName,
-      description,
-      seo_title: seoTitle,
-      seo_description: seoDescription,
-      schema_markup: schemaMarkup,
-      status: "draft",
-      views: 0,
-      conversions: 0,
-      revenue: 0,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
+    const newPage = buildCategorySeoPage(niche, categoryName, keywords);
     await upsertSeoPageDb(newPage);
     response.json({ success: true, page: newPage });
   } catch (error: any) {
@@ -2191,71 +2307,82 @@ app.post("/api/admin/seo-pages/generate-from-product", requireAdmin, async (requ
 
     const niche = resolveProductNiche(product);
     const productAngle = angle.trim() || product.contentAngle || `a practical ${niche} solution`;
-    const slug = `${niche}/${slugifySeo(product.name)}-solution`;
-    const title = `${product.name} for ${productAngle}`;
-    const productUrl = `#/product/${product.id}`;
-    const priceRange = formatProductPriceRange(product);
-    const seoDescription = `${product.name} helps solve ${productAngle}. Review benefits, pricing, and the fastest path to buy from Products4ThePeople.`;
-
-    const description = `
-## Start With the Problem
-Shoppers looking for **${productAngle}** need a clear answer, not another crowded category page. This landing page frames the decision around the outcome first, then points to the product that best fits the need.
-
-## Meet the Solution
-[${product.name}](${productUrl}) is the recommended product for this use case. It is part of the ${niche} catalog, priced at ${priceRange}, and positioned around ${product.contentAngle || productAngle}.
-
-## Why This Product Belongs on the Shortlist
-- Built around a specific customer pain point instead of a generic collection.
-- Easy to connect with organic search, ads, and email campaigns.
-- Direct product path keeps the page conversion-focused.
-
-## Buy With Context
-Use this page to explain the problem, answer buying questions, and send ready shoppers to the product detail page: [View ${product.name}](${productUrl}).
-    `.trim();
-
-    const schemaMarkup = {
-      "@context": "https://schema.org",
-      "@type": "WebPage",
-      "name": title,
-      "description": seoDescription,
-      "mainEntity": {
-        "@type": "Product",
-        "name": product.name,
-        "url": productUrl,
-        "offers": {
-          "@type": "AggregateOffer",
-          "lowPrice": Number(product.retailMin || 0),
-          "highPrice": Number(product.retailMax || product.retailMin || 0),
-          "priceCurrency": "USD"
-        }
-      },
-      "publisher": {
-        "@type": "Organization",
-        "name": "Products4ThePeople"
-      }
-    };
-
-    const now = new Date().toISOString();
-    const newPage = {
-      id: crypto.randomUUID(),
-      title,
-      slug,
-      niche,
-      category_name: `${product.name} Solution`,
-      description,
-      seo_title: `${product.name} for ${productAngle} | Products4ThePeople`,
-      seo_description: seoDescription,
-      schema_markup: schemaMarkup,
-      status: "draft",
-      views: 0,
-      conversions: 0,
-      revenue: 0,
-      created_at: now,
-      updated_at: now
-    };
-
+    const newPage = buildProductSeoPage(product, productAngle);
     await upsertSeoPageDb(newPage);
     response.json({ success: true, page: newPage });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/seo-pages/generate-bulk", requireAdmin, async (request, response) => {
+  try {
+    const { scope, niche, limit } = bulkSeoPageGenerationSchema.parse(request.body);
+    const products = (await getProductsDb()).filter((product: any) => {
+      const productNiche = resolveProductNiche(product);
+      const isActive = !product.status || product.status === "Active";
+      return isActive && (niche === "all" || productNiche === niche);
+    });
+
+    const existingPages = await getSeoPagesDb();
+    const existingSlugs = new Set(existingPages.map((page: any) => page.slug));
+    const now = new Date().toISOString();
+    const candidates: any[] = [];
+
+    if (scope === "niche") {
+      const byNiche = new Map<string, any[]>();
+      products.forEach((product: any) => {
+        const productNiche = resolveProductNiche(product);
+        byNiche.set(productNiche, [...(byNiche.get(productNiche) || []), product]);
+      });
+      byNiche.forEach((items, productNiche) => {
+        const keywords = items.slice(0, 6).map((product) => product.name).join(", ");
+        candidates.push(buildCategorySeoPage(productNiche, `${titleCase(productNiche)} Best Sellers`, keywords || productNiche, now));
+      });
+    }
+
+    if (scope === "category") {
+      const byCollection = new Map<string, { niche: string; collection: string; products: any[] }>();
+      products.forEach((product: any) => {
+        const productNiche = resolveProductNiche(product);
+        const collection = inferSeoCollectionName(product);
+        const key = `${productNiche}:${collection}`;
+        const entry = byCollection.get(key) || { niche: productNiche, collection, products: [] };
+        entry.products.push(product);
+        byCollection.set(key, entry);
+      });
+      byCollection.forEach((entry) => {
+        const keywords = entry.products.slice(0, 6).map((product) => product.name).join(", ");
+        candidates.push(buildCategorySeoPage(entry.niche, entry.collection, keywords || entry.collection, now));
+      });
+    }
+
+    if (scope === "product_collection") {
+      products.forEach((product: any) => {
+        candidates.push(buildProductSeoPage(product, product.contentAngle || "", now));
+      });
+    }
+
+    const pages: any[] = [];
+    const skipped: Array<{ slug: string; reason: string }> = [];
+    for (const page of candidates) {
+      if (pages.length >= limit) break;
+      if (existingSlugs.has(page.slug)) {
+        skipped.push({ slug: page.slug, reason: "already exists" });
+        continue;
+      }
+      existingSlugs.add(page.slug);
+      await upsertSeoPageDb(page);
+      pages.push(page);
+    }
+
+    response.json({
+      success: true,
+      pages,
+      skipped,
+      generated: pages.length,
+      candidateCount: candidates.length
+    });
   } catch (error: any) {
     response.status(500).json({ error: error.message });
   }

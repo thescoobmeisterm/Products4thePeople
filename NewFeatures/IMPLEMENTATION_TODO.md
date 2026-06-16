@@ -52,7 +52,7 @@ SEO tracking, and dashboard stats.
 - `[~]` Programmatic SEO
   - `[x]` Category SEO page generation
   - `[x]` Product-led sales page generation
-  - `[ ]` Add bulk page generation by niche/category/product collection
+  - `[x]` Add bulk page generation by niche/category/product collection
   - `[x]` Add canonical/meta/schema previews before publishing
   - Test: `[x]` Build `[x]` Typecheck `[x]` API `[x]` Manual
 

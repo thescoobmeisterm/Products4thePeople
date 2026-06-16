@@ -659,6 +659,17 @@ export async function generateSeoPageFromProduct(productId: string, angle: strin
   });
 }
 
+export async function generateBulkSeoPages(input: {
+  scope: "niche" | "category" | "product_collection";
+  niche: string;
+  limit: number;
+}) {
+  return apiFetch<{ success: boolean; pages: SeoPage[]; skipped: Array<{ slug: string; reason: string }>; generated: number; candidateCount: number }>("/admin/seo-pages/generate-bulk", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 // SEO Tracking and Analytics
 export async function trackSeoHit(type: "article" | "seo_page", slug: string, action: "view" | "conversion", revenue?: number) {
   return apiFetch<{ success: boolean }>("/seo/track", {

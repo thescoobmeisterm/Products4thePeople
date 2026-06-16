@@ -122,6 +122,7 @@ import {
   createSeoPage,
   generateSeoPage,
   generateSeoPageFromProduct,
+  generateBulkSeoPages,
   updateSeoPage,
   trackSeoHit,
   getSeoDashboard,
@@ -665,6 +666,10 @@ function App() {
   const [seoPageGenCategory, setSeoPageGenCategory] = React.useState("");
   const [seoPageGenKeywords, setSeoPageGenKeywords] = React.useState("");
   const [seoPageGenNiche, setSeoPageGenNiche] = React.useState("beauty");
+  const [seoBulkGenScope, setSeoBulkGenScope] = React.useState<"niche" | "category" | "product_collection">("category");
+  const [seoBulkGenNiche, setSeoBulkGenNiche] = React.useState("all");
+  const [seoBulkGenLimit, setSeoBulkGenLimit] = React.useState(25);
+  const [seoBulkGenerating, setSeoBulkGenerating] = React.useState(false);
   const [seoProductGenId, setSeoProductGenId] = React.useState("");
   const [seoProductGenType, setSeoProductGenType] = React.useState<"article" | "sales_page">("article");
   const [seoProductGenAngle, setSeoProductGenAngle] = React.useState("");
@@ -2882,6 +2887,68 @@ function App() {
                     </label>
                     <button type="submit" disabled={seoLoading} className="primary" style={{ gridColumn: '1 / -1', padding: '10px', borderRadius: '8px', border: 'none', background: '#176c61', color: 'white', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>
                       {seoLoading ? 'Generating…' : 'Generate AI Article'}
+                    </button>
+                  </form>
+                </article>
+
+                <article className="panel" style={{ marginTop: '16px' }}>
+                  <div className="panel-header">
+                    <div>
+                      <p>Bulk Programmatic SEO</p>
+                      <h2>Generate Page Batch</h2>
+                    </div>
+                    <Sparkles size={22} />
+                  </div>
+                  <form
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      setSeoBulkGenerating(true);
+                      try {
+                        const res = await generateBulkSeoPages({
+                          scope: seoBulkGenScope,
+                          niche: seoBulkGenNiche,
+                          limit: seoBulkGenLimit,
+                        });
+                        setSeoPages((prev) => [...res.pages, ...prev]);
+                        setSeoPreviewedPageIds((prev) => [...prev, ...res.pages.map((page) => page.id)]);
+                        setNotice(`Generated ${res.generated} SEO page drafts${res.skipped.length ? ` and skipped ${res.skipped.length} existing pages` : ""}.`);
+                      } catch (err) {
+                        console.error("Bulk page generation failed:", err);
+                        setNotice(err instanceof Error ? `Bulk SEO generation failed: ${err.message}` : "Bulk SEO generation failed.");
+                      } finally {
+                        setSeoBulkGenerating(false);
+                      }
+                    }}
+                    style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 120px', gap: '12px', marginTop: '16px' }}
+                  >
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Batch Type</span>
+                      <select value={seoBulkGenScope} onChange={(e) => setSeoBulkGenScope(e.target.value as typeof seoBulkGenScope)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="category">Product categories</option>
+                        <option value="niche">Niche landing pages</option>
+                        <option value="product_collection">Product solution pages</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Niche</span>
+                      <select value={seoBulkGenNiche} onChange={(e) => setSeoBulkGenNiche(e.target.value)} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }}>
+                        <option value="all">All niches</option>
+                        <option value="beauty">Beauty</option>
+                        <option value="pets">Pets</option>
+                        <option value="home">Home</option>
+                        <option value="fitness">Fitness</option>
+                        <option value="automotive">Automotive</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '4px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Max Drafts</span>
+                      <input type="number" min={1} max={100} value={seoBulkGenLimit} onChange={(e) => setSeoBulkGenLimit(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} style={{ padding: '9px 12px', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '13.5px' }} />
+                    </label>
+                    <p style={{ gridColumn: '1 / -1', margin: 0, color: '#64748b', fontSize: '13px', lineHeight: 1.45 }}>
+                      Creates draft pages from active products and skips existing slugs. Category batches group products into SEO collections; product batches create one solution page per product.
+                    </p>
+                    <button type="submit" disabled={seoBulkGenerating} className="primary" style={{ gridColumn: '1 / -1', padding: '10px', borderRadius: '8px', border: 'none', background: '#176c61', color: 'white', fontWeight: 600, fontSize: '14px', cursor: seoBulkGenerating ? 'not-allowed' : 'pointer', opacity: seoBulkGenerating ? 0.72 : 1 }}>
+                      {seoBulkGenerating ? 'Generating batch...' : 'Generate Bulk Drafts'}
                     </button>
                   </form>
                 </article>

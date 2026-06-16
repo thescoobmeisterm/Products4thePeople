@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.18.0 - 2026-06-16
+
+### Added
+- Added bulk programmatic SEO page generation for niche landing pages, product category collections, and product solution pages.
+
 ## v1.17.2 - 2026-06-16
 
 ### Fixed
