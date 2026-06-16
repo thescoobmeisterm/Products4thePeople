@@ -952,6 +952,10 @@ tr:last-child td {
   z-index: 10;
 }
 
+.storefront-product-detail .storefront-header {
+  display: none;
+}
+
 .storefront-brand,
 .storefront-header nav {
   align-items: center;
@@ -1826,6 +1830,10 @@ tr:last-child td {
 
 .product-detail-page {
   padding: clamp(28px, 5vw, 64px) clamp(18px, 5vw, 72px) clamp(44px, 7vw, 84px);
+}
+
+.storefront-product-detail .product-detail-page {
+  padding-top: clamp(12px, 2vw, 24px);
 }
 
 .detail-back {

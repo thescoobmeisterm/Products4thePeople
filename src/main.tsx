@@ -5783,7 +5783,7 @@ function Storefront({
 
   return (
     <main
-      className={`storefront storefront-${activeNiche}`}
+      className={`storefront storefront-${activeNiche}${detailProduct ? " storefront-product-detail" : ""}`}
       style={
         {
           "--store-accent": config.accentColor,

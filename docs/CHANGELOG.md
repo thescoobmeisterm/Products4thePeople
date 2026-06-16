@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.17.1 - 2026-06-16
+
+### Fixed
+- Hid the storefront header on product detail pages and reduced top spacing so the product gallery and details are the first visible content.
+
 ## v1.17.0 - 2026-06-15
 
 ### Added
