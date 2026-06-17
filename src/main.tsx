@@ -113,6 +113,7 @@ import {
   improveArticle,
   deleteArticle,
   getKbArticles,
+  getKbArticleDetails,
   getAdminKbArticles,
   createKbArticle,
   updateKbArticle,
@@ -4893,10 +4894,11 @@ function Storefront({
   const [isCartDrawerOpen, setIsCartDrawerOpen] = React.useState(false);
 
   // SEO Content Page States
-  const [contentPage, setContentPage] = React.useState<"shop" | "blog" | "blog-detail" | "kb" | "category">("shop");
+  const [contentPage, setContentPage] = React.useState<"shop" | "blog" | "blog-detail" | "kb" | "kb-detail" | "category">("shop");
   const [blogArticles, setBlogArticles] = React.useState<Article[]>([]);
   const [currentArticle, setCurrentArticle] = React.useState<Article | null>(null);
   const [kbArticles, setKbArticles] = React.useState<KnowledgeArticle[]>([]);
+  const [currentKbArticle, setCurrentKbArticle] = React.useState<KnowledgeArticle | null>(null);
   const [currentSeoPage, setCurrentSeoPage] = React.useState<SeoPage | null>(null);
   const [kbSearchQuery, setKbSearchQuery] = React.useState("");
   const [kbExpandedId, setKbExpandedId] = React.useState<string | null>(null);
@@ -5048,6 +5050,25 @@ function Storefront({
         .catch(() => {});
       document.title = `Help Center | ${config.label}`;
       setMetaDescription(`Find answers, guides, and tutorials from ${config.label}.`);
+    } else if (contentPage === "kb-detail") {
+      const slug = window.location.hash.replace("#kb/", "");
+      getKbArticleDetails(decodeURIComponent(slug))
+        .then((res) => {
+          setCurrentKbArticle(res.article);
+          if (res.article) {
+            document.title = `${res.article.title} | ${config.label} Help Center`;
+            setMetaDescription(res.article.content.substring(0, 155));
+            injectJsonLd({
+              "@context": "https://schema.org",
+              "@type": res.article.category === "faq" ? "FAQPage" : "Article",
+              headline: res.article.title,
+              description: res.article.content.substring(0, 155),
+              dateModified: res.article.updated_at,
+              about: res.article.niche,
+            });
+          }
+        })
+        .catch(() => setCurrentKbArticle(null));
     } else if (contentPage === "category") {
       const slug = window.location.hash.replace("#c/", "");
       getSeoPageDetails(decodeURIComponent(slug))
@@ -5088,6 +5109,11 @@ function Storefront({
       // Knowledge base routes
       if (hash === "kb") {
         setContentPage("kb");
+        setDetailProductId(null);
+        return;
+      }
+      if (hash.startsWith("kb/")) {
+        setContentPage("kb-detail");
         setDetailProductId(null);
         return;
       }
@@ -6189,6 +6215,9 @@ function Storefront({
                         {kbExpandedId === kb.id && (
                           <div style={{ padding: '0 20px 20px', fontSize: '0.9rem', lineHeight: '1.7', color: 'var(--store-text, #4b5563)', whiteSpace: 'pre-wrap', borderTop: '1px solid var(--store-border, #e2e8f0)' }}>
                             <div style={{ paddingTop: '16px' }}>{kb.content}</div>
+                            <a href={`#kb/${kb.slug}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '14px', color: 'var(--store-accent, #176c61)', fontWeight: 700, textDecoration: 'none', fontSize: '0.9rem' }}>
+                              Open full article <ChevronRight size={16} />
+                            </a>
                           </div>
                         )}
                       </div>
@@ -6196,6 +6225,41 @@ function Storefront({
                 </div>
               )}
             </>
+          )}
+
+          {/* Knowledge Base Detail */}
+          {contentPage === "kb-detail" && currentKbArticle && (
+            <article>
+              <button type="button" onClick={() => { window.location.hash = '#kb'; }} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', color: 'var(--store-accent, #176c61)', cursor: 'pointer', fontSize: '0.9rem', fontWeight: 600, padding: '0', marginBottom: '20px' }}>
+                ← Back to Help Center
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--store-accent, #176c61)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{currentKbArticle.category.replace('_', ' ')}</span>
+                <span style={{ color: '#cbd5e1' }}>·</span>
+                <span style={{ fontSize: '0.8rem', color: '#94a3b8', textTransform: 'capitalize' }}>{currentKbArticle.niche}</span>
+                <span style={{ color: '#cbd5e1' }}>·</span>
+                <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{currentKbArticle.views} views</span>
+              </div>
+              <h1 style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--store-text, #111827)', margin: '0 0 18px', lineHeight: '1.25' }}>{currentKbArticle.title}</h1>
+              <div style={{ background: 'var(--store-card-bg, #fff)', border: '1px solid var(--store-border, #e2e8f0)', borderRadius: '14px', padding: '24px', fontSize: '1rem', lineHeight: '1.8', color: 'var(--store-text, #374151)', whiteSpace: 'pre-wrap' }}>
+                {currentKbArticle.content}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap', marginTop: '24px', paddingTop: '20px', borderTop: '1px solid var(--store-border, #e5eaee)' }}>
+                <button type="button" onClick={() => { window.location.hash = '#kb'; }} style={{ background: 'var(--store-card-bg, #fff)', color: 'var(--store-text, #111827)', border: '1px solid var(--store-border, #e5eaee)', padding: '10px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}>
+                  Browse Help Center
+                </button>
+                <button type="button" onClick={() => { window.location.hash = `#${getHashFromMode(activeNiche, stores)}`; }} style={{ background: 'var(--store-accent, #176c61)', color: 'white', border: 'none', padding: '10px 18px', borderRadius: '8px', cursor: 'pointer', fontWeight: 700 }}>
+                  Back to Shop
+                </button>
+              </div>
+            </article>
+          )}
+          {contentPage === "kb-detail" && !currentKbArticle && (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: '#94a3b8' }}>
+              <BookOpen size={40} style={{ marginBottom: '12px', opacity: 0.5 }} />
+              <p>Help article not found.</p>
+              <button type="button" onClick={() => { window.location.hash = '#kb'; }} style={{ marginTop: '12px', background: 'var(--store-accent, #176c61)', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600 }}>Browse Help Center</button>
+            </div>
           )}
 
           {/* Category Landing Page */}

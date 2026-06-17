@@ -58,10 +58,10 @@ SEO tracking, and dashboard stats.
 
 - `[~]` Knowledge Base
   - `[x]` KB storage and admin list
-  - `[ ]` Public KB detail pages
+  - `[x]` Public KB detail pages
   - `[ ]` KB category index/search
   - `[ ]` Internal links from product pages to relevant KB content
-  - Test: `[ ]` Build `[ ]` Typecheck `[ ]` API `[ ]` Manual
+  - Test: `[x]` Build `[x]` Typecheck `[x]` API `[x]` Manual
 
 - `[~]` Content Performance Dashboard
   - `[x]` Views, conversions, revenue, indexed URL summary

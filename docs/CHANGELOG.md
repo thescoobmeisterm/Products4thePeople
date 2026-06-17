@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.19.0 - 2026-06-17
+
+### Added
+- Added public knowledge base detail pages with shareable `#kb/<slug>` routes, SEO metadata, schema markup, and view tracking.
+
 ## v1.18.0 - 2026-06-16
 
 ### Added

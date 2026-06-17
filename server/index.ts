@@ -2154,6 +2154,22 @@ app.get("/api/kb", async (request, response) => {
   }
 });
 
+app.get("/api/kb/:slug", async (request, response) => {
+  try {
+    const article = await getKbArticleBySlugDb(request.params.slug);
+    if (!article || article.status !== "published") {
+      response.status(404).json({ error: "Knowledge base article not found" });
+      return;
+    }
+
+    const updatedArticle = { ...article, views: Number(article.views || 0) + 1 };
+    await incrementKbArticleViewsDb(article.id);
+    response.json({ article: updatedArticle });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
 // Admin KB endpoints
 app.get("/api/admin/kb", requireAdmin, async (_request, response) => {
   try {
@@ -4435,6 +4451,21 @@ async function getKbArticleBySlugDb(slug: string) {
   } else {
     const db = readDb();
     return Object.values(db.knowledgeArticles || {}).find((a: any) => a.slug === slug) || null;
+  }
+}
+
+async function incrementKbArticleViewsDb(id: string) {
+  if (usePostgres) {
+    await pool.query("update knowledge_articles set views = views + 1 where id = $1", [id]);
+  } else {
+    const db = readDb();
+    if (db.knowledgeArticles?.[id]) {
+      db.knowledgeArticles[id] = {
+        ...db.knowledgeArticles[id],
+        views: Number(db.knowledgeArticles[id].views || 0) + 1
+      };
+      writeDb(db);
+    }
   }
 }
 

@@ -599,6 +599,10 @@ export async function getKbArticles(niche?: string) {
   return apiFetch<{ articles: KnowledgeArticle[] }>(`/kb${query}`);
 }
 
+export async function getKbArticleDetails(slug: string) {
+  return apiFetch<{ article: KnowledgeArticle }>(`/kb/${encodeURIComponent(slug)}`);
+}
+
 export async function getAdminKbArticles() {
   return apiFetch<{ articles: KnowledgeArticle[] }>("/admin/kb");
 }
