@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.19.5 - 2026-06-20
+
+### Fixed
+- Rendered product listing video assets on storefront product cards and product detail pages.
+- Updated admin listing media controls so video assets are visible alongside image assets.
+
 ## v1.19.4 - 2026-06-20
 
 ### Fixed

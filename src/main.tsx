@@ -1254,9 +1254,13 @@ function App() {
 
   const assignMediaToProduct = async (event: React.FormEvent) => {
     event.preventDefault();
-    const asset = mediaAssets.find((item) => item.id === listingMediaAssetId && item.kind === "image");
+    const asset = mediaAssets.find((item) => item.id === listingMediaAssetId);
     const product = products.find((item) => item.id === listingMediaProductId);
     if (!asset || !product) return;
+    if (asset.kind !== "image") {
+      setNotice(`${asset.title} is already available on ${product.name} when it is saved with Product listing placement and this product selected.`);
+      return;
+    }
     const nextImages = Array.from(new Set([normalizeMediaUrl(asset.url), ...(product.images || []).map(normalizeMediaUrl)]));
     const updatedProduct = { ...product, images: nextImages };
     try {
@@ -2341,7 +2345,7 @@ function App() {
                 <div className="panel-header">
                   <div>
                     <p>Listing media</p>
-                    <h2>Add image to product gallery</h2>
+                    <h2>Attach media to product listing</h2>
                   </div>
                   <Package size={22} />
                 </div>
@@ -2361,16 +2365,16 @@ function App() {
                     </select>
                   </label>
                   <label style={{ display: 'grid', gap: '6px' }}>
-                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Image asset</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Media asset</span>
                     <select
                       value={listingMediaAssetId}
                       onChange={(event) => setListingMediaAssetId(event.target.value)}
                       required
                       style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px' }}
                     >
-                      <option value="">Choose image</option>
-                      {mediaAssets.filter((asset) => asset.kind === "image").map((asset) => (
-                        <option key={asset.id} value={asset.id}>{asset.title}</option>
+                      <option value="">Choose media</option>
+                      {mediaAssets.map((asset) => (
+                        <option key={asset.id} value={asset.id}>{asset.title} ({asset.kind})</option>
                       ))}
                     </select>
                   </label>
@@ -6338,9 +6342,7 @@ function Storefront({
                   })
                   .map((product) => (
                     <article className="shop-card" key={`cat-${product.id}`}>
-                      <button className="product-image product-image-button" type="button" onClick={() => openProduct(product)}>
-                        <img src={getProductImages(product)[0]} alt="" />
-                      </button>
+                      <ProductListingMediaPreview product={product} mediaAssets={mediaAssets} onClick={() => openProduct(product)} />
                       <div className="shop-card-body">
                         <span>{product.niche}</span>
                         <h3><button type="button" onClick={() => openProduct(product)}>{product.name}</button></h3>
@@ -6437,9 +6439,7 @@ function Storefront({
                       <span className="card-badge badge-best-seller">
                         🔥 {getProductSalesCount(product.id)} Sold
                       </span>
-                      <button className="product-image product-image-button" type="button" onClick={() => openProduct(product)}>
-                        <img src={getProductImages(product)[0]} alt="" />
-                      </button>
+                      <ProductListingMediaPreview product={product} mediaAssets={mediaAssets} onClick={() => openProduct(product)} />
                       <button
                         className={`wishlist-btn${wishlist.includes(product.id) ? " wishlisted" : ""}`}
                         type="button"
@@ -6682,9 +6682,7 @@ function Storefront({
                   }
                   return null;
                 })()}
-                <button className="product-image product-image-button" type="button" onClick={() => openProduct(product)}>
-                  <img src={getProductImages(product)[0]} alt="" />
-                </button>
+                <ProductListingMediaPreview product={product} mediaAssets={mediaAssets} onClick={() => openProduct(product)} />
                 <button
                   className={`wishlist-btn${wishlist.includes(product.id) ? " wishlisted" : ""}`}
                   type="button"
@@ -6857,6 +6855,7 @@ function Storefront({
         <ProductDetailPage
           product={detailProduct}
           products={products}
+          mediaAssets={mediaAssets}
           quantity={productQuantities[detailProduct.id] || 1}
           stores={stores}
           onBack={() => {
@@ -8000,9 +7999,45 @@ function ProductCoverflowGallery({ product, images, externalActiveIndex }: { pro
   );
 }
 
+function ProductListingMediaPreview({
+  product,
+  mediaAssets,
+  className = "",
+  onClick,
+}: {
+  product: Product;
+  mediaAssets: MediaAsset[];
+  className?: string;
+  onClick?: () => void;
+}) {
+  const listingMedia = getProductListingMedia(product, mediaAssets);
+  const primaryVideo = listingMedia.find((asset) => asset.kind === "video");
+  const primaryImage = listingMedia.find((asset) => asset.kind === "image");
+  const imageUrl = normalizeMediaUrl(primaryImage?.url) || getProductImages(product)[0];
+  const content = primaryVideo ? (
+    <>
+      <video src={normalizeMediaUrl(primaryVideo.url)} muted playsInline preload="metadata" />
+      <span className="listing-video-badge">Video</span>
+    </>
+  ) : (
+    <img src={imageUrl} alt="" />
+  );
+
+  if (onClick) {
+    return (
+      <button className={`product-image product-image-button ${className}`.trim()} type="button" onClick={onClick}>
+        {content}
+      </button>
+    );
+  }
+
+  return <div className={`product-image ${className}`.trim()}>{content}</div>;
+}
+
 function ProductDetailPage({
   product,
   products,
+  mediaAssets,
   quantity,
   stores,
   onBack,
@@ -8017,6 +8052,7 @@ function ProductDetailPage({
 }: {
   product: Product;
   products: Product[];
+  mediaAssets: MediaAsset[];
   quantity: number;
   stores: Record<string, StorefrontNicheConfig>;
   onBack: () => void;
@@ -8044,6 +8080,8 @@ function ProductDetailPage({
   const [activeImageIndex, setActiveImageIndex] = React.useState<number | null>(null);
 
   const images = getProductImages(product);
+  const listingMedia = getProductListingMedia(product, mediaAssets);
+  const listingVideos = listingMedia.filter((asset) => asset.kind === "video");
   const subcategory = getProductSubcategory(product);
   const activeStoreProducts = products.filter(
     (item) => item.id !== product.id && item.status === "Active" && item.subdomain === product.subdomain,
@@ -8147,7 +8185,22 @@ function ProductDetailPage({
       </button>
 
       <div className="product-detail-grid">
-        <ProductCoverflowGallery product={product} images={images} externalActiveIndex={activeImageIndex} />
+        <div>
+          <ProductCoverflowGallery product={product} images={images} externalActiveIndex={activeImageIndex} />
+          {listingVideos.length > 0 && (
+            <div className="listing-video-strip" aria-label={`${product.name} videos`}>
+              {listingVideos.map((asset) => (
+                <article className="listing-video-card" key={asset.id}>
+                  <video src={normalizeMediaUrl(asset.url)} controls playsInline preload="metadata" />
+                  <div>
+                    <strong>{asset.title}</strong>
+                    {asset.caption && <span>{asset.caption}</span>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="product-detail-copy">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -9006,6 +9059,14 @@ function getProductImages(product: Product) {
   if (product.images?.length) return product.images.map(normalizeMediaUrl).filter(Boolean);
   const fallback = productImageFallbacks[getProductSubcategory(product)] || productImageFallbacks.Featured;
   return fallback.map((url) => `${url}&auto=format&fit=crop&w=1200&q=80`);
+}
+
+function getProductListingMedia(product: Product, mediaAssets: MediaAsset[]) {
+  return mediaAssets.filter((asset) => (
+    asset.placement === "listing"
+    && asset.productId === product.id
+    && Boolean(normalizeMediaUrl(asset.url))
+  ));
 }
 
 function getConsumerCopy(product: Product) {
