@@ -605,6 +605,14 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
+const maxMediaUploadBytes = 100 * 1024 * 1024;
+
+function formatFileSize(bytes: number) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
 function normalizeMediaUrl(url?: string) {
   if (!url) return "";
   const trimmed = url.trim();
@@ -1186,6 +1194,10 @@ function App() {
     event.preventDefault();
     const title = mediaTitle.trim() || mediaFile?.name.trim();
     if (!title || (!mediaFile && !mediaUrl.trim())) return;
+    if (mediaFile && mediaFile.size > maxMediaUploadBytes) {
+      setNotice(`Media save failed: ${mediaFile.name} is ${formatFileSize(mediaFile.size)}. Upload files must be ${formatFileSize(maxMediaUploadBytes)} or smaller.`);
+      return;
+    }
     setIsSavingMedia(true);
     try {
       const baseInput = {
@@ -2208,6 +2220,12 @@ function App() {
                     type="file"
                     onChange={(event) => {
                       const file = event.target.files?.[0] || null;
+                      if (file && file.size > maxMediaUploadBytes) {
+                        event.currentTarget.value = "";
+                        setMediaFile(null);
+                        setNotice(`Media save failed: ${file.name} is ${formatFileSize(file.size)}. Upload files must be ${formatFileSize(maxMediaUploadBytes)} or smaller.`);
+                        return;
+                      }
                       setMediaFile(file);
                       if (file) {
                         if (!mediaTitle.trim()) setMediaTitle(file.name.replace(/\.[^.]+$/, ""));
@@ -2217,7 +2235,7 @@ function App() {
                     }}
                     style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', background: '#ffffff', fontSize: '13px' }}
                   />
-                  <span style={{ fontSize: '11px', color: '#68777d' }}>Use this for product photos, gallery images, and short video-section clips.</span>
+                  <span style={{ fontSize: '11px', color: '#68777d' }}>Use this for product photos, gallery images, and video-section clips up to {formatFileSize(maxMediaUploadBytes)}.</span>
                 </label>
                 <label style={{ display: 'grid', gap: '6px' }}>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Hosted media URL</span>
@@ -4024,6 +4042,11 @@ function ProductDialog({
 
   const uploadProductImage = async () => {
     if (imageUploadFiles.length === 0) return;
+    const oversizedFile = imageUploadFiles.find((file) => file.size > maxMediaUploadBytes);
+    if (oversizedFile) {
+      setImageManagerNotice(`${oversizedFile.name} is ${formatFileSize(oversizedFile.size)}. Upload files must be ${formatFileSize(maxMediaUploadBytes)} or smaller.`);
+      return;
+    }
     setIsUploadingImage(true);
     setImageManagerNotice("");
     try {

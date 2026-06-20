@@ -148,6 +148,8 @@ In **Plesk > Domains > products4thepeople.com > Apache & nginx Settings > Additi
 directives**, include these directives:
 
 ```nginx
+client_max_body_size 150m;
+
 location /api/ {
     proxy_pass http://127.0.0.1:4000/api/;
     proxy_http_version 1.1;

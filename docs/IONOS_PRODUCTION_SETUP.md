@@ -425,7 +425,7 @@ server {
     root /var/www/products4thepeople/dist;
     index index.html;
 
-    client_max_body_size 20m;
+    client_max_body_size 150m;
 
     location /api/ {
         proxy_pass http://127.0.0.1:4000/api/;

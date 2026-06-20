@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.19.4 - 2026-06-20
+
+### Fixed
+- Increased API media upload body limits for larger video uploads and added clearer oversized-upload errors.
+- Added frontend upload size validation and updated Plesk/nginx docs to use a 150 MB request body limit.
+
 ## v1.19.3 - 2026-06-20
 
 ### Fixed

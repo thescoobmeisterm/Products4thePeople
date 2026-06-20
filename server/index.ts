@@ -251,9 +251,19 @@ const mediaUploadSchema = mediaUrlSchema.extend({
 
 // App initialization
 const app = express();
+const uploadBodyLimit = process.env.UPLOAD_BODY_LIMIT || "150mb";
 app.use(cors({ origin: process.env.CORS_ORIGIN || true }));
-app.use(express.json({ limit: "25mb" }));
+app.use(express.json({ limit: uploadBodyLimit }));
+app.use(express.urlencoded({ extended: true, limit: uploadBodyLimit }));
 app.use("/uploads", express.static(UPLOAD_DIR));
+
+app.use((error: any, _request: express.Request, response: express.Response, next: express.NextFunction) => {
+  if (error?.type === "entity.too.large") {
+    response.status(413).json({ error: `Upload is too large. Current API upload limit is ${uploadBodyLimit}.` });
+    return;
+  }
+  next(error);
+});
 
 // Auth middleware
 function requireAdmin(request: express.Request, response: express.Response, next: express.NextFunction) {
