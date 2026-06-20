@@ -230,11 +230,13 @@ type MarketingLead = {
   id: string;
   email: string;
   name: string;
-  source: "popup" | "inline" | "checkout";
+  source: "popup" | "inline" | "checkout" | "wheel" | "footer";
   niche: StorefrontMode;
   createdAt: string;
+  storeLabel?: string;
   phone?: string;
   wantsSms?: boolean;
+  couponCode?: string;
 };
 
 type AbandonedCart = {
@@ -1408,8 +1410,16 @@ function App() {
           customerName: lead.name || "Subscriber",
           source: lead.source,
           niche: lead.niche,
+          storeLabel: lead.storeLabel || stores[lead.niche]?.label || titleCase(lead.niche),
+          phone: lead.phone || "",
+          wantsSms: Boolean(lead.wantsSms),
+          couponCode: lead.couponCode || "",
         }),
       });
+      const contactResponse = await getContacts().catch(() => null);
+      if (contactResponse?.contacts) {
+        setDbContacts(contactResponse.contacts);
+      }
     } catch (e) {
       console.warn("Failed to sync newsletter contact capture to API backend:", e);
     }
@@ -2121,6 +2131,10 @@ function App() {
                       <th>Email address</th>
                       <th>Customer name</th>
                       <th>Fulfillment address / Source</th>
+                      <th>Lead source</th>
+                      <th>Store</th>
+                      <th>Phone / SMS</th>
+                      <th>Coupon</th>
                       <th>Last Order ID</th>
                       <th>Role</th>
                       <th>Capture Date</th>
@@ -2130,13 +2144,20 @@ function App() {
                   <tbody>
                     {dbContacts.length === 0 ? (
                       <tr>
-                        <td colSpan={7}>No customer profiles in database yet. Try checking out on the storefront or subscribing to the email wheel!</td>
+                        <td colSpan={11}>No customer profiles in database yet. Try checking out on the storefront or subscribing to the email wheel!</td>
                       </tr>
                     ) : dbContacts.map((contact) => (
                       <tr key={contact.email}>
                         <td><strong>{contact.email}</strong></td>
                         <td>{contact.customerName}</td>
                         <td className="hook">{contact.address}</td>
+                        <td>{titleCase(contact.source || "unknown")}</td>
+                        <td>{contact.storeLabel || titleCase(contact.niche || "general")}</td>
+                        <td>
+                          {contact.phone ? <strong>{contact.phone}</strong> : "None"}
+                          {contact.wantsSms && <span style={{ display: 'block', color: '#176c61', fontSize: '11px', fontWeight: 700 }}>SMS opt-in</span>}
+                        </td>
+                        <td>{contact.couponCode || "None"}</td>
                         <td><strong>{contact.lastOrderId || "None"}</strong></td>
                         <td>
                           <select
@@ -5547,14 +5568,21 @@ function Storefront({
 
   const submitLead = (event: React.FormEvent<HTMLFormElement>, source: MarketingLead["source"]) => {
     event.preventDefault();
-    if (!isValidEmail(leadEmail)) return;
+    const cleanEmail = leadEmail.trim();
+    const cleanPhone = normalizeLeadPhone(leadPhone);
+    const leadContactEmail = isValidEmail(cleanEmail) ? cleanEmail : phoneLeadEmail(cleanPhone);
+    if (!leadContactEmail) {
+      addToast("Enter an email or phone number to join.", "error");
+      return;
+    }
 
     onCaptureLead({
-      email: leadEmail,
+      email: leadContactEmail,
       name: leadName,
       source,
       niche: activeNiche,
-      phone: leadPhone || undefined,
+      storeLabel: config.label,
+      phone: cleanPhone || undefined,
       wantsSms: wantsSms || undefined,
     });
     triggerTrack("email_capture");
@@ -5826,6 +5854,7 @@ function Storefront({
       name: customerName,
       source: "checkout",
       niche: activeNiche,
+      storeLabel: config.label,
     });
     trackMarketingEvent("begin_checkout", {
       currency: "USD",
@@ -6093,8 +6122,13 @@ function Storefront({
             value={leadEmail}
             onChange={(event) => setLeadEmail(event.target.value)}
             placeholder="Email"
-            required
             type="email"
+          />
+          <input
+            value={leadPhone}
+            onChange={(event) => setLeadPhone(event.target.value)}
+            placeholder="Phone"
+            type="tel"
           />
           <button className="primary" type="submit">
             Join
@@ -6952,23 +6986,39 @@ function Storefront({
                   <form
                     onSubmit={(event) => {
                       event.preventDefault();
-                      if (!isValidEmail(leadEmail) || !wheelResult) return;
+                      if (!wheelResult) return;
+                      const cleanEmail = leadEmail.trim();
+                      const cleanPhone = normalizeLeadPhone(leadPhone);
+                      const leadContactEmail = isValidEmail(cleanEmail) ? cleanEmail : phoneLeadEmail(cleanPhone);
+                      if (!leadContactEmail) {
+                        addToast("Enter an email or phone number to claim your discount.", "error");
+                        return;
+                      }
                       
                       onCaptureLead({
-                        email: leadEmail,
+                        email: leadContactEmail,
                         name: leadName,
-                        source: "popup",
+                        source: "wheel",
                         niche: activeNiche,
-                        phone: leadPhone || undefined,
+                        storeLabel: config.label,
+                        phone: cleanPhone || undefined,
                         wantsSms: wantsSms || undefined,
+                        couponCode: wheelResult.code !== "TRYAGAIN" ? wheelResult.code : undefined,
                       });
                       triggerTrack("email_capture");
 
                       if (wheelResult.code !== "TRYAGAIN") {
                         setAppliedCoupon(wheelResult.code);
                         setConfirmation(`Coupon ${wheelResult.code} applied! Your ${wheelResult.label} discount is active.`);
+                        addToast(`Coupon ${wheelResult.code} applied to your cart.`, "success");
+                      } else {
+                        addToast("You are on the list for the next offer drop.", "success");
                       }
 
+                      setLeadEmail("");
+                      setLeadName("");
+                      setLeadPhone("");
+                      setWantsSms(false);
                       setIsEmailPopupOpen(false);
                       localStorage.setItem(emailPopupDismissedKey, "true");
                     }}
@@ -6984,7 +7034,6 @@ function Storefront({
                       value={leadEmail}
                       onChange={(event) => setLeadEmail(event.target.value)}
                       placeholder="Email address"
-                      required
                       type="email"
                       style={{ background: '#f7f9fa' }}
                     />
@@ -7434,7 +7483,7 @@ function Storefront({
           <div className="footer-column" style={{ minWidth: '220px' }}>
             <h4>Weekly Product Drops</h4>
             <p style={{ fontSize: '0.84rem', color: '#8c9ba5' }}>Subscribe to get exclusive early launch access.</p>
-            <form onSubmit={(event) => submitLead(event, "inline")} className="footer-newsletter">
+            <form onSubmit={(event) => submitLead(event, "footer")} className="footer-newsletter">
               <input
                 value={leadEmail}
                 onChange={(event) => setLeadEmail(event.target.value)}
@@ -8519,7 +8568,17 @@ function upsertMarketingLead(current: MarketingLead[], lead: Omit<MarketingLead,
   if (existing) {
     return current.map((item) =>
       item.id === existing.id
-        ? { ...item, ...lead, name: lead.name || item.name, source: lead.source, niche: lead.niche }
+        ? {
+            ...item,
+            ...lead,
+            name: lead.name || item.name,
+            source: lead.source,
+            niche: lead.niche,
+            storeLabel: lead.storeLabel || item.storeLabel,
+            phone: lead.phone || item.phone,
+            wantsSms: lead.wantsSms ?? item.wantsSms,
+            couponCode: lead.couponCode || item.couponCode,
+          }
         : item,
     );
   }
@@ -8747,6 +8806,15 @@ function pixelStatus(pixelId: string) {
 
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function normalizeLeadPhone(phone: string) {
+  return phone.replace(/[^\d+]/g, "").trim();
+}
+
+function phoneLeadEmail(phone: string) {
+  const normalized = normalizeLeadPhone(phone).replace(/^\+/, "");
+  return normalized ? `phone-${normalized}@leads.products4thepeople.local` : "";
 }
 
 function loadMedusaConnection(): MedusaConnection {

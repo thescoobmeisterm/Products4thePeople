@@ -227,7 +227,17 @@ export async function getContacts() {
   return apiFetch<{ contacts: any[] }>("/contacts");
 }
 
-export async function createContact(input: { email: string; customerName?: string; source?: string; role?: "customer" | "admin" }) {
+export async function createContact(input: {
+  email: string;
+  customerName?: string;
+  source?: string;
+  niche?: string;
+  storeLabel?: string;
+  phone?: string;
+  wantsSms?: boolean;
+  couponCode?: string;
+  role?: "customer" | "admin";
+}) {
   return apiFetch<{ contact: any }>("/contacts", {
     method: "POST",
     body: JSON.stringify(input),

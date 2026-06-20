@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.19.1 - 2026-06-19
+
+### Fixed
+- Captured email, phone, SMS opt-in, coupon code, source, and storefront metadata for early-discount and wheel leads in the customer database.
+- Applied won spin-wheel coupon codes to cart state after successful contact submission and made wheel claims accept email or phone.
+- Added lead source, store, phone/SMS, and coupon columns to the admin customer directory.
+
 ## v1.19.0 - 2026-06-17
 
 ### Added

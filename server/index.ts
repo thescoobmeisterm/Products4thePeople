@@ -221,6 +221,10 @@ const contactInputSchema = z.object({
   customerName: z.string().optional(),
   niche: z.string().optional(),
   source: z.string().optional(),
+  storeLabel: z.string().optional(),
+  phone: z.string().optional(),
+  wantsSms: z.boolean().optional(),
+  couponCode: z.string().optional(),
   role: z.enum(["customer", "admin"]).optional(),
 });
 
@@ -410,34 +414,82 @@ app.post("/api/contacts", async (request, response) => {
   const email = input.email.trim().toLowerCase();
   const customerName = input.customerName?.trim() || "Subscriber";
   const source = input.source || "popup";
+  const niche = input.niche || "general";
+  const storeLabel = input.storeLabel || niche;
+  const phone = input.phone?.trim() || "";
+  const wantsSms = Boolean(input.wantsSms);
+  const couponCode = input.couponCode?.trim().toUpperCase() || "";
   const allowedRole = isAdminRequest(request) ? input.role : undefined;
+  const subscribedAddress = `Subscribed via ${source} (${storeLabel})`;
 
   if (usePostgres) {
     const existingResult = await pool.query("select payload from contacts where email = $1", [email]);
     const existingPayload = existingResult.rows[0]?.payload || {};
-    const payload = { ...existingPayload, email, customerName, source, role: allowedRole || existingPayload.role || "customer" };
+    const payload = {
+      ...existingPayload,
+      email,
+      customerName,
+      source,
+      niche,
+      storeLabel,
+      phone: phone || existingPayload.phone || "",
+      wantsSms: wantsSms || Boolean(existingPayload.wantsSms),
+      couponCode: couponCode || existingPayload.couponCode || "",
+      role: allowedRole || existingPayload.role || "customer",
+    };
     const result = await pool.query(
       `insert into contacts (email, customer_name, address, payload)
        values ($1, $2, $3, $4)
        on conflict (email) do update set
          customer_name = excluded.customer_name,
+         address = excluded.address,
          payload = excluded.payload,
          updated_at = now()
        returning email, customer_name as "customerName", address, last_order_id as "lastOrderId", updated_at as "updatedAt", payload`,
-      [email, customerName, `Subscribed via ${source}`, payload],
+      [email, customerName, subscribedAddress, payload],
     );
-    response.json({ ok: true, contact: { ...result.rows[0], role: payload.role } });
+    response.json({
+      ok: true,
+      contact: {
+        ...result.rows[0],
+        role: payload.role,
+        source: payload.source,
+        niche: payload.niche,
+        storeLabel: payload.storeLabel,
+        phone: payload.phone,
+        wantsSms: payload.wantsSms,
+        couponCode: payload.couponCode,
+      },
+    });
     return;
   } else {
     const db = readDb();
     const existing = db.contacts[email] || {};
+    const role = allowedRole || existing.role || existing.payload?.role || "customer";
     db.contacts[email] = {
       email,
       customerName: existing.customerName || customerName,
-      address: existing.address || `Subscribed via ${source}`,
+      address: subscribedAddress,
       lastOrderId: existing.lastOrderId || null,
-      role: allowedRole || existing.role || "customer",
-      payload: { email, customerName, source, role: allowedRole || existing.role || "customer" },
+      role,
+      source,
+      niche,
+      storeLabel,
+      phone: phone || existing.phone || existing.payload?.phone || "",
+      wantsSms: wantsSms || Boolean(existing.wantsSms || existing.payload?.wantsSms),
+      couponCode: couponCode || existing.couponCode || existing.payload?.couponCode || "",
+      payload: {
+        ...(existing.payload || {}),
+        email,
+        customerName,
+        source,
+        niche,
+        storeLabel,
+        phone: phone || existing.payload?.phone || "",
+        wantsSms: wantsSms || Boolean(existing.payload?.wantsSms),
+        couponCode: couponCode || existing.payload?.couponCode || "",
+        role,
+      },
       createdAt: existing.createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -4733,6 +4785,12 @@ async function getContactsDb() {
       address: row.address,
       lastOrderId: row.lastOrderId,
       role: row.payload?.role || (row.email.toLowerCase() === adminEmail.toLowerCase() ? "admin" : "customer"),
+      source: row.payload?.source || "",
+      niche: row.payload?.niche || "",
+      storeLabel: row.payload?.storeLabel || row.payload?.niche || "",
+      phone: row.payload?.phone || "",
+      wantsSms: Boolean(row.payload?.wantsSms),
+      couponCode: row.payload?.couponCode || "",
       updatedAt: row.updatedAt,
     }));
   } else {
@@ -4744,6 +4802,12 @@ async function getContactsDb() {
         address: c.address,
         lastOrderId: c.lastOrderId || null,
         role: c.role || c.payload?.role || (String(c.email || "").toLowerCase() === adminEmail.toLowerCase() ? "admin" : "customer"),
+        source: c.source || c.payload?.source || "",
+        niche: c.niche || c.payload?.niche || "",
+        storeLabel: c.storeLabel || c.payload?.storeLabel || c.payload?.niche || "",
+        phone: c.phone || c.payload?.phone || "",
+        wantsSms: Boolean(c.wantsSms || c.payload?.wantsSms),
+        couponCode: c.couponCode || c.payload?.couponCode || "",
         updatedAt: c.updatedAt
       }))
       .sort((a: any, b: any) => b.updatedAt.localeCompare(a.updatedAt));
