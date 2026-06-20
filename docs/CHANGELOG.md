@@ -7,6 +7,11 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.19.3 - 2026-06-20
+
+### Fixed
+- Fixed product-page lead attribution so joins, wheel claims, checkout leads, and abandoned carts use the open product's store/niche instead of falling back to general.
+
 ## v1.19.2 - 2026-06-20
 
 ### Fixed

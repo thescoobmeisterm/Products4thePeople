@@ -5285,6 +5285,8 @@ function Storefront({
   }, []);
 
   const detailProduct = detailProductId ? products.find((product) => product.id === detailProductId) : null;
+  const leadNiche = detailProduct?.subdomain || activeNiche;
+  const leadStoreLabel = (stores[leadNiche] || stores.general).label;
 
   React.useEffect(() => {
     const metadata = detailProduct ? getProductSeo(detailProduct) : getStorefrontSeo(config);
@@ -5502,7 +5504,7 @@ function Storefront({
     onCaptureAbandonedCart({
       email,
       name: customerName,
-      niche: activeNiche,
+      niche: leadNiche,
       subtotal,
       items: cartItems.map((item) => ({
         productId: item.product.id,
@@ -5512,7 +5514,7 @@ function Storefront({
         variations: item.variationsStr,
       })),
     });
-  }, [activeNiche, cartItems, customerName, email, onCaptureAbandonedCart, subtotal]);
+  }, [cartItems, customerName, email, leadNiche, onCaptureAbandonedCart, subtotal]);
 
   const addToCart = (productId: string, quantity = 1, variations?: Record<string, string>) => {
     let cartKey = productId;
@@ -5580,8 +5582,8 @@ function Storefront({
       email: leadContactEmail,
       name: leadName,
       source,
-      niche: activeNiche,
-      storeLabel: config.label,
+      niche: leadNiche,
+      storeLabel: leadStoreLabel,
       phone: cleanPhone || undefined,
       wantsSms: wantsSms || undefined,
     });
@@ -5853,8 +5855,8 @@ function Storefront({
       email,
       name: customerName,
       source: "checkout",
-      niche: activeNiche,
-      storeLabel: config.label,
+      niche: leadNiche,
+      storeLabel: leadStoreLabel,
     });
     trackMarketingEvent("begin_checkout", {
       currency: "USD",
@@ -6999,8 +7001,8 @@ function Storefront({
                         email: leadContactEmail,
                         name: leadName,
                         source: "wheel",
-                        niche: activeNiche,
-                        storeLabel: config.label,
+                        niche: leadNiche,
+                        storeLabel: leadStoreLabel,
                         phone: cleanPhone || undefined,
                         wantsSms: wantsSms || undefined,
                         couponCode: wheelResult.code !== "TRYAGAIN" ? wheelResult.code : undefined,
