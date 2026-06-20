@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.19.6 - 2026-06-20
+
+### Fixed
+- Kept storefront product listing thumbnails image-first when listing videos are attached, while still showing a video badge.
+- Prevented product detail videos from cropping and removed filename/title text from video cards.
+
 ## v1.19.5 - 2026-06-20
 
 ### Fixed

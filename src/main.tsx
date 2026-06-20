@@ -8011,16 +8011,14 @@ function ProductListingMediaPreview({
   onClick?: () => void;
 }) {
   const listingMedia = getProductListingMedia(product, mediaAssets);
-  const primaryVideo = listingMedia.find((asset) => asset.kind === "video");
   const primaryImage = listingMedia.find((asset) => asset.kind === "image");
+  const hasListingVideo = listingMedia.some((asset) => asset.kind === "video");
   const imageUrl = normalizeMediaUrl(primaryImage?.url) || getProductImages(product)[0];
-  const content = primaryVideo ? (
+  const content = (
     <>
-      <video src={normalizeMediaUrl(primaryVideo.url)} muted playsInline preload="metadata" />
-      <span className="listing-video-badge">Video</span>
+      <img src={imageUrl} alt="" />
+      {hasListingVideo && <span className="listing-video-badge">Video</span>}
     </>
-  ) : (
-    <img src={imageUrl} alt="" />
   );
 
   if (onClick) {
