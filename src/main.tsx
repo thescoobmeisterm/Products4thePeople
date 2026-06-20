@@ -8020,9 +8020,14 @@ function ProductDetailPage({
 
   const images = getProductImages(product);
   const subcategory = getProductSubcategory(product);
-  const relatedProducts = products
-    .filter((item) => item.id !== product.id && item.status === "Active" && getProductSubcategory(item) === subcategory)
-    .slice(0, 4);
+  const activeStoreProducts = products.filter(
+    (item) => item.id !== product.id && item.status === "Active" && item.subdomain === product.subdomain,
+  );
+  const sameSubcategoryProducts = activeStoreProducts.filter((item) => getProductSubcategory(item) === subcategory);
+  const relatedProducts = [
+    ...sameSubcategoryProducts,
+    ...activeStoreProducts.filter((item) => getProductSubcategory(item) !== subcategory),
+  ].slice(0, 4);
 
   const reviewsList = getReviewsList(product);
   const averageRating = getAverageRating(product);
@@ -8425,32 +8430,26 @@ function ProductDetailPage({
         </div>
       </div>
 
-      <section className="related-products" aria-labelledby="related-title">
-        <div className="store-section-head">
-          <div>
-            <p>{subcategory}</p>
-            <h2 id="related-title">Related products</h2>
-          </div>
-        </div>
-        <div className="related-grid">
-          {relatedProducts.length === 0 ? (
-            <div className="empty-store">
-              <Package size={30} />
-              <h3>No related products yet.</h3>
-              <p>Add more active products in {subcategory} to populate this section.</p>
+      {relatedProducts.length > 0 && (
+        <section className="related-products" aria-labelledby="related-title">
+          <div className="store-section-head">
+            <div>
+              <p>{sameSubcategoryProducts.length > 0 ? subcategory : (stores[product.subdomain] || stores.general).label}</p>
+              <h2 id="related-title">Related products</h2>
             </div>
-          ) : (
-            relatedProducts.map((relatedProduct) => (
+          </div>
+          <div className="related-grid">
+            {relatedProducts.map((relatedProduct) => (
               <button className="related-card" key={relatedProduct.id} type="button" onClick={() => onOpenProduct(relatedProduct)}>
                 <img src={getProductImages(relatedProduct)[0]} alt="" />
                 <span>{getProductSubcategory(relatedProduct)}</span>
                 <strong>{relatedProduct.name}</strong>
                 <small>{money(relatedProduct.retailMin)}</small>
               </button>
-            ))
-          )}
-        </div>
-      </section>
+            ))}
+          </div>
+        </section>
+      )}
     </section>
   );
 }

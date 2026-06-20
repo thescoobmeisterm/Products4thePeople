@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.19.2 - 2026-06-20
+
+### Fixed
+- Updated product detail related products to fall back to other active products from the same store when no matching subcategory products exist.
+- Hid the related products section when a store has no other active products to recommend.
+
 ## v1.19.1 - 2026-06-19
 
 ### Fixed
