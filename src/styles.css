@@ -1881,10 +1881,11 @@ tr:last-child td {
 }
 
 .listing-video-card video {
-  aspect-ratio: 16 / 9;
   background: #11191d;
   display: block;
-  object-fit: cover;
+  margin: 0 auto;
+  max-height: min(420px, 62vh);
+  object-fit: contain;
   width: 100%;
 }
 

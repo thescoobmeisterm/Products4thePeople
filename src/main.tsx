@@ -8192,10 +8192,11 @@ function ProductDetailPage({
               {listingVideos.map((asset) => (
                 <article className="listing-video-card" key={asset.id}>
                   <video src={normalizeMediaUrl(asset.url)} controls playsInline preload="metadata" />
-                  <div>
-                    <strong>{asset.title}</strong>
-                    {asset.caption && <span>{asset.caption}</span>}
-                  </div>
+                  {asset.caption && (
+                    <div>
+                      <span>{asset.caption}</span>
+                    </div>
+                  )}
                 </article>
               ))}
             </div>
