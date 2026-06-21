@@ -5063,6 +5063,11 @@ function Storefront({
 
   const abandonedCartSignatureRef = React.useRef("");
   const config = stores[activeNiche] || stores["general"];
+  const canPreviewUnpublished = Boolean(currentUser?.isAdmin);
+  const publicProducts = React.useMemo(
+    () => products.filter((product) => canPreviewUnpublished || (isProductPublished(product) && isStorePublished(stores[product.subdomain]))),
+    [canPreviewUnpublished, products, stores],
+  );
 
   // Load content page data
   React.useEffect(() => {
@@ -5197,13 +5202,13 @@ function Storefront({
     });
   }, [activeNiche, stores]);
 
-  // Enforce access rules/gates for Draft status
+  // Enforce access rules/gates for unpublished storefronts.
   React.useEffect(() => {
     const store = stores[activeNiche];
-    if (store && store.status === "draft" && !currentUser?.isAdmin) {
+    if (store && !isStorePublished(store) && !currentUser?.isAdmin) {
       setActiveNiche("general");
       window.location.hash = "#products4thepeople";
-      addToast(`Access Denied: "${store.label}" is currently in draft mode.`, "error");
+      addToast(`Access denied: "${store.label}" is not published yet.`, "error");
     }
   }, [activeNiche, stores, currentUser, addToast]);
 
@@ -5311,7 +5316,7 @@ function Storefront({
     };
   }, []);
 
-  const detailProduct = detailProductId ? products.find((product) => product.id === detailProductId) : null;
+  const detailProduct = detailProductId ? publicProducts.find((product) => product.id === detailProductId) : null;
   const leadNiche = detailProduct?.subdomain || activeNiche;
   const leadStoreLabel = (stores[leadNiche] || stores.general).label;
 
@@ -5330,10 +5335,10 @@ function Storefront({
 
   React.useEffect(() => {
     if (!detailProductId) return;
-    if (!products.some((product) => product.id === detailProductId)) {
+    if (!publicProducts.some((product) => product.id === detailProductId)) {
       window.location.hash = `#${getHashFromMode(activeNiche, stores)}`;
     }
-  }, [activeNiche, detailProductId, products]);
+  }, [activeNiche, detailProductId, publicProducts, stores]);
 
   React.useEffect(() => {
     if (detailProduct) {
@@ -5398,7 +5403,7 @@ function Storefront({
     void confirmPaidOrder();
   }, [onPlaceOrder, triggerTrack]);
 
-  const storefrontProducts = products.filter((product) => activeNiche === "general" || product.subdomain === activeNiche);
+  const storefrontProducts = publicProducts.filter((product) => activeNiche === "general" || product.subdomain === activeNiche);
   const subcategories = getSubcategories(storefrontProducts);
   const searchLower = searchQuery.trim().toLowerCase();
   const visibleProducts = storefrontProducts.filter(
@@ -5411,14 +5416,14 @@ function Storefront({
   const videoSectionAssets = mediaAssets.filter((asset) => {
     if (asset.placement !== "video_section") return false;
     if (asset.productId) {
-      const product = products.find((item) => item.id === asset.productId);
+      const product = publicProducts.find((item) => item.id === asset.productId);
       return activeNiche === "general" || product?.subdomain === activeNiche;
     }
     return activeNiche === "general" || !asset.productId;
   });
   const ugcItems = videoSectionAssets.length > 0
     ? videoSectionAssets.map((asset) => {
-        const product = asset.productId ? products.find((item) => item.id === asset.productId) : null;
+        const product = asset.productId ? publicProducts.find((item) => item.id === asset.productId) : null;
         return {
           id: asset.id,
           handle: asset.handle || "@products4thepeople",
@@ -5485,12 +5490,13 @@ function Storefront({
   const cartItemsMapped = Object.entries(cart)
     .map(([cartKey, quantity]) => {
       const [productId, variationsStr] = cartKey.split('|', 2);
-      const product = products.find((item) => item.id === productId);
+      const product = publicProducts.find((item) => item.id === productId);
       return product ? { product, quantity, cartKey, variationsStr } : null;
     });
   const cartItems = cartItemsMapped
     .filter((item): item is NonNullable<typeof cartItemsMapped[number]> => {
       if (!item) return false;
+      if (!canPreviewUnpublished && (!isProductPublished(item.product) || !isStorePublished(stores[item.product.subdomain]))) return false;
       if (activeNiche !== "general" && item.product.subdomain !== activeNiche) return false;
       return true;
     });
@@ -5552,8 +5558,20 @@ function Storefront({
         .join('|');
       cartKey = `${productId}|${varStr}`;
     }
+    const product = publicProducts.find((item) => item.id === productId);
+    if (!product) {
+      addToast("That product is not published yet.", "error");
+      return;
+    }
+    if (!canPreviewUnpublished && !isStorePublished(stores[product.subdomain])) {
+      addToast("That store is not published yet.", "error");
+      return;
+    }
+    if (!canPreviewUnpublished && !isProductPublished(product)) {
+      addToast("That product is not published yet.", "error");
+      return;
+    }
     setCart((current) => ({ ...current, [cartKey]: (current[cartKey] ?? 0) + Math.max(1, quantity) }));
-    const product = products.find((item) => item.id === productId);
     if (product) {
       trackMarketingEvent("add_to_cart", {
         content_ids: [product.id],
@@ -5573,6 +5591,11 @@ function Storefront({
   };
 
   const switchStorefront = (mode: StorefrontMode) => {
+    const store = stores[mode];
+    if (store && !canPreviewUnpublished && !isStorePublished(store)) {
+      addToast(`${store.label} is not published yet.`, "error");
+      return;
+    }
     setActiveNiche(mode);
     setActiveSubcategory("All");
     setConfirmation("");
@@ -5580,6 +5603,10 @@ function Storefront({
   };
 
   const openProduct = (product: Product) => {
+    if (!canPreviewUnpublished && (!isProductPublished(product) || !isStorePublished(stores[product.subdomain]))) {
+      addToast("That product is not published yet.", "error");
+      return;
+    }
     setSelectedProduct(null);
     setActiveNiche(product.subdomain);
     setActiveSubcategory("All");
@@ -6047,10 +6074,10 @@ function Storefront({
               </button>
               {Object.keys(stores)
                 .filter((key) => key !== "general")
-                .filter((key) => currentUser?.isAdmin || stores[key].status === "active")
+                .filter((key) => canPreviewUnpublished || isStorePublished(stores[key]))
                 .map((niche) => {
                   const s = stores[niche];
-                  const labelSuffix = currentUser?.isAdmin && s.status !== "active" ? ` (${titleCase(s.status || "draft")})` : "";
+                  const labelSuffix = canPreviewUnpublished && !isStorePublished(s) ? ` (${titleCase(s.status || "draft")})` : "";
                   return (
                     <button
                       key={niche}
@@ -6335,7 +6362,7 @@ function Storefront({
               </div>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '16px', color: 'var(--store-text, #111827)' }}>Products in "{currentSeoPage.category_name}"</h2>
               <div className="shop-grid">
-                {products
+                {publicProducts
                   .filter((p) => {
                     const catLower = currentSeoPage.category_name.toLowerCase();
                     return p.niche.toLowerCase().includes(catLower) || p.name.toLowerCase().includes(catLower) || p.contentAngle.toLowerCase().includes(catLower);
@@ -6381,41 +6408,27 @@ function Storefront({
               <h2>Shop By Category</h2>
               <p className="subtitle">Curated collections vetted for quality and value</p>
               <div className="category-grid">
-                <button className="category-card" onClick={() => switchStorefront("beauty")} type="button">
-                  <img src="https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=600&q=80" alt="GlowTheory Beauty" />
-                  <div className="category-card-overlay">
-                    <span>GlowTheory</span>
-                    <h3>Beauty & Self-Care</h3>
-                  </div>
-                </button>
-                <button className="category-card" onClick={() => switchStorefront("pets")} type="button">
-                  <img src="https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=600&q=80" alt="Wagwell Pets" />
-                  <div className="category-card-overlay">
-                    <span>Wagwell</span>
-                    <h3>Pet Supplies</h3>
-                  </div>
-                </button>
-                <button className="category-card" onClick={() => switchStorefront("home")} type="button">
-                  <img src="https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=600&q=80" alt="NestTheory Home" />
-                  <div className="category-card-overlay">
-                    <span>NestTheory</span>
-                    <h3>Home Organization</h3>
-                  </div>
-                </button>
-                <button className="category-card" onClick={() => switchStorefront("fitness")} type="button">
-                  <img src="https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80" alt="RecoverLab Fitness" />
-                  <div className="category-card-overlay">
-                    <span>RecoverLab</span>
-                    <h3>Fitness & Recovery</h3>
-                  </div>
-                </button>
-                <button className="category-card" onClick={() => switchStorefront("automotive")} type="button">
-                  <img src="https://images.unsplash.com/photo-1605558202076-1682209015d4?auto=format&fit=crop&w=600&q=80" alt="DriveCraft Automotive" />
-                  <div className="category-card-overlay">
-                    <span>DriveCraft</span>
-                    <h3>Automotive Detailing</h3>
-                  </div>
-                </button>
+                {[
+                  { key: "beauty", image: "https://images.unsplash.com/photo-1596462502278-27bfdc403348?auto=format&fit=crop&w=600&q=80", title: "Beauty & Self-Care" },
+                  { key: "pets", image: "https://images.unsplash.com/photo-1543466835-00a7907e9de1?auto=format&fit=crop&w=600&q=80", title: "Pet Supplies" },
+                  { key: "home", image: "https://images.unsplash.com/photo-1513694203232-719a280e022f?auto=format&fit=crop&w=600&q=80", title: "Home Organization" },
+                  { key: "fitness", image: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80", title: "Fitness & Recovery" },
+                  { key: "automotive", image: "https://images.unsplash.com/photo-1605558202076-1682209015d4?auto=format&fit=crop&w=600&q=80", title: "Automotive Detailing" },
+                ]
+                  .filter((card) => canPreviewUnpublished || isStorePublished(stores[card.key]))
+                  .map((card) => {
+                    const store = stores[card.key];
+                    if (!store) return null;
+                    return (
+                      <button className="category-card" key={card.key} onClick={() => switchStorefront(card.key)} type="button">
+                        <img src={card.image} alt={store.label} />
+                        <div className="category-card-overlay">
+                          <span>{store.label}</span>
+                          <h3>{card.title}</h3>
+                        </div>
+                      </button>
+                    );
+                  })}
               </div>
             </section>
           )}
@@ -6492,7 +6505,7 @@ function Storefront({
                 <p className="subtitle">Real customers, real results. Tap to shop featured gear.</p>
                 <div className="ugc-carousel">
                   {videoSectionAssets.length > 0 && ugcItems.map((ugc) => {
-                    const matchedProd = ugc.product || products.find(p => p.name.toLowerCase().includes(ugc.productName.toLowerCase()) || ugc.productName.toLowerCase().includes(p.name.toLowerCase()));
+                    const matchedProd = ugc.product || publicProducts.find(p => p.name.toLowerCase().includes(ugc.productName.toLowerCase()) || ugc.productName.toLowerCase().includes(p.name.toLowerCase()));
                     return (
                       <button
                         key={ugc.id}
@@ -6566,7 +6579,7 @@ function Storefront({
                       tag: "Garage"
                     }
                   ].map((ugc) => {
-                    const matchedProd = products.find(p => p.name.toLowerCase().includes(ugc.productName.toLowerCase()) || ugc.productName.toLowerCase().includes(p.name.toLowerCase()));
+                    const matchedProd = publicProducts.find(p => p.name.toLowerCase().includes(ugc.productName.toLowerCase()) || ugc.productName.toLowerCase().includes(p.name.toLowerCase()));
                     return (
                       <button
                         key={ugc.id}
@@ -7308,7 +7321,7 @@ function Storefront({
                 ) : (
                   <div className="wishlist-section">
                     {wishlist.map((productId) => {
-                      const product = products.find((p) => p.id === productId);
+                      const product = publicProducts.find((p) => p.id === productId);
                       if (!product) return null;
                       return (
                         <div key={productId} className="wishlist-item">
@@ -7485,10 +7498,10 @@ function Storefront({
           <div className="footer-column">
             <h4>Explore Brands</h4>
             {Object.keys(stores)
-              .filter((key) => currentUser?.isAdmin || stores[key].status === "active")
+              .filter((key) => canPreviewUnpublished || isStorePublished(stores[key]))
               .map((niche) => {
                 const s = stores[niche];
-                const labelSuffix = currentUser?.isAdmin && s.status !== "active" ? ` (${titleCase(s.status || "draft")})` : "";
+                const labelSuffix = canPreviewUnpublished && !isStorePublished(s) ? ` (${titleCase(s.status || "draft")})` : "";
                 return (
                   <button
                     key={niche}
@@ -8982,6 +8995,15 @@ function getStorefrontModeFromHash(): StorefrontMode {
   const normalized = window.location.hash.replace("#", "").toLowerCase();
   const stores = loadStoresConfig();
   return getModeFromHash(normalized, stores);
+}
+
+function isStorePublished(store?: StorefrontNicheConfig | null) {
+  if (!store) return false;
+  return !store.status || store.status === "active";
+}
+
+function isProductPublished(product?: Product | null) {
+  return product?.status === "Active";
 }
 
 function getProductIdFromHash() {

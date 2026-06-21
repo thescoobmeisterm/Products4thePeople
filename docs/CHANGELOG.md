@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.19.7 - 2026-06-20
+
+### Fixed
+- Hid unpublished storefronts from public category cards, menus, and footer brand links while preserving admin preview access.
+- Hid non-active products from public storefront lists, search/category pages, product detail routes, media sections, carts, and wishlists.
+
 ## v1.19.6 - 2026-06-20
 
 ### Fixed
