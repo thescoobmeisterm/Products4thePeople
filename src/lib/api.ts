@@ -58,11 +58,19 @@ export type ApiOrderInput = {
   paymentStatus?: "paid" | "unpaid" | "pending" | "failed";
   stripeSessionId?: string;
   source?: "local" | "medusa";
+  phone?: string;
+  wantsSms?: boolean;
+  carrier?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  estimatedDelivery?: string;
+  shippedAt?: string;
+  deliveredAt?: string;
 };
 
 export type ApiOrder = ApiOrderInput & {
   id: string;
-  status: "Ready to fulfill" | "Needs review";
+  status: "Needs review" | "Ready to fulfill" | "Processing" | "Shipped" | "In Transit" | "Delivered" | "Cancelled";
   createdAt: string;
 };
 
@@ -213,6 +221,13 @@ export async function updateOrderStatus(id: string, status: ApiOrder["status"]) 
   return apiFetch<{ order: ApiOrder }>(`/orders/${encodeURIComponent(id)}/status`, {
     method: "PATCH",
     body: JSON.stringify({ status }),
+  });
+}
+
+export async function updateOrderTracking(id: string, tracking: Pick<ApiOrderInput, "carrier" | "trackingNumber" | "trackingUrl" | "estimatedDelivery" | "shippedAt" | "deliveredAt">) {
+  return apiFetch<{ order: ApiOrder }>(`/orders/${encodeURIComponent(id)}/tracking`, {
+    method: "PATCH",
+    body: JSON.stringify(tracking),
   });
 }
 

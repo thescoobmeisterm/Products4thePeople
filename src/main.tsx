@@ -70,6 +70,7 @@ import {
   saveOrders,
   testApi,
   updateOrderStatus as updateApiOrderStatus,
+  updateOrderTracking as updateApiOrderTracking,
   updateProductStatus,
   importAliexpress,
   getContacts,
@@ -217,12 +218,32 @@ type Order = {
   total: number;
   paymentStatus: "paid" | "unpaid" | "pending" | "failed";
   stripeSessionId?: string;
-  status: "Ready to fulfill" | "Needs review";
+  status: "Needs review" | "Ready to fulfill" | "Processing" | "Shipped" | "In Transit" | "Delivered" | "Cancelled";
+  phone?: string;
+  wantsSms?: boolean;
+  carrier?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  estimatedDelivery?: string;
+  shippedAt?: string;
+  deliveredAt?: string;
   createdAt: string;
   source?: "local" | "medusa";
 };
 
 type OrderDraft = Omit<Order, "id" | "createdAt" | "status">;
+
+const orderStatusOptions: Order["status"][] = [
+  "Needs review",
+  "Ready to fulfill",
+  "Processing",
+  "Shipped",
+  "In Transit",
+  "Delivered",
+  "Cancelled",
+];
+
+type OrderTrackingDraft = Pick<Order, "carrier" | "trackingNumber" | "trackingUrl" | "estimatedDelivery">;
 
 type StorefrontMode = string;
 
@@ -651,6 +672,7 @@ function App() {
   });
 
   const [orders, setOrders] = React.useState<Order[]>([]);
+  const [orderTrackingDrafts, setOrderTrackingDrafts] = React.useState<Record<string, Partial<OrderTrackingDraft>>>({});
   const [marketingLeads, setMarketingLeads] = React.useState<MarketingLead[]>(() => loadMarketingLeads());
   const [abandonedCarts, setAbandonedCarts] = React.useState<AbandonedCart[]>(() => loadAbandonedCarts());
   const [view, setView] = React.useState(() => (isStorefrontHash(window.location.hash) ? "storefront" : "admin"));
@@ -792,6 +814,10 @@ function App() {
   const [settingsAdminPassword, setSettingsAdminPassword] = React.useState("");
   const [settingsPublicSiteUrl, setSettingsPublicSiteUrl] = React.useState("");
   const [settingsPublicAppBase, setSettingsPublicAppBase] = React.useState("");
+  const [settingsSmsNotifyEnabled, setSettingsSmsNotifyEnabled] = React.useState("true");
+  const [settingsTwilioAccountSid, setSettingsTwilioAccountSid] = React.useState("");
+  const [settingsTwilioAuthToken, setSettingsTwilioAuthToken] = React.useState("");
+  const [settingsTwilioFromPhone, setSettingsTwilioFromPhone] = React.useState("");
   const [settingsGa4Id, setSettingsGa4Id] = React.useState("");
   const [settingsMetaPixelId, setSettingsMetaPixelId] = React.useState("");
   const [settingsTiktokPixelId, setSettingsTiktokPixelId] = React.useState("");
@@ -936,6 +962,10 @@ function App() {
     setSettingsAdminPassword(config.adminPassword || "");
     setSettingsPublicSiteUrl(config.publicSiteUrl || "");
     setSettingsPublicAppBase(config.publicAppBase || "");
+    setSettingsSmsNotifyEnabled(config.smsNotifyEnabled || "true");
+    setSettingsTwilioAccountSid(config.twilioAccountSid || "");
+    setSettingsTwilioAuthToken(config.twilioAuthToken || "");
+    setSettingsTwilioFromPhone(config.twilioFromPhone || "");
     setSettingsGa4Id(config.ga4MeasurementId || "");
     setSettingsMetaPixelId(config.metaPixelId || "");
     setSettingsTiktokPixelId(config.tiktokPixelId || "");
@@ -974,6 +1004,10 @@ function App() {
           adminPassword: settingsAdminPassword,
           publicSiteUrl: settingsPublicSiteUrl,
           publicAppBase: settingsPublicAppBase,
+          smsNotifyEnabled: settingsSmsNotifyEnabled,
+          twilioAccountSid: settingsTwilioAccountSid,
+          twilioAuthToken: settingsTwilioAuthToken,
+          twilioFromPhone: settingsTwilioFromPhone,
           ga4MeasurementId: settingsGa4Id,
           metaPixelId: settingsMetaPixelId,
           tiktokPixelId: settingsTiktokPixelId,
@@ -1516,9 +1550,42 @@ function App() {
     try {
       const response = await updateApiOrderStatus(id, status);
       setOrders((current) => current.map((order) => (order.id === id ? normalizeStoredOrder({ ...order, ...response.order }) : order)));
-      setNotice("Order status updated in PostgreSQL.");
+      setNotice("Order status updated and notifications queued.");
     } catch (error) {
       setNotice(error instanceof Error ? `Order status update failed: ${error.message}` : "Order status update failed.");
+    }
+  };
+
+  const getOrderTrackingDraft = (order: Order): OrderTrackingDraft => ({
+    carrier: orderTrackingDrafts[order.id]?.carrier ?? order.carrier ?? "",
+    trackingNumber: orderTrackingDrafts[order.id]?.trackingNumber ?? order.trackingNumber ?? "",
+    trackingUrl: orderTrackingDrafts[order.id]?.trackingUrl ?? order.trackingUrl ?? "",
+    estimatedDelivery: orderTrackingDrafts[order.id]?.estimatedDelivery ?? order.estimatedDelivery ?? "",
+  });
+
+  const setOrderTrackingField = (orderId: string, field: keyof OrderTrackingDraft, fieldValue: string) => {
+    setOrderTrackingDrafts((current) => ({
+      ...current,
+      [orderId]: {
+        ...(current[orderId] || {}),
+        [field]: fieldValue,
+      },
+    }));
+  };
+
+  const saveOrderTracking = async (order: Order) => {
+    try {
+      const tracking = getOrderTrackingDraft(order);
+      const response = await updateApiOrderTracking(order.id, tracking);
+      setOrders((current) => current.map((item) => (item.id === order.id ? normalizeStoredOrder({ ...item, ...response.order }) : item)));
+      setOrderTrackingDrafts((current) => {
+        const next = { ...current };
+        delete next[order.id];
+        return next;
+      });
+      setNotice("Tracking details saved and notifications queued.");
+    } catch (error) {
+      setNotice(error instanceof Error ? `Tracking update failed: ${error.message}` : "Tracking update failed.");
     }
   };
 
@@ -1553,6 +1620,16 @@ function App() {
       detail: settingsConfigStatus.hasMedusaAdminApiKey || isSetupValuePresent(settingsMedusaKey) ? "Backend and admin key configured" : "Mock Medusa available",
       ready: Boolean(isSetupValuePresent(settingsMedusaUrl) && (settingsConfigStatus.hasMedusaAdminApiKey || isSetupValuePresent(settingsMedusaKey))),
       icon: Database,
+    },
+    {
+      label: "Twilio SMS",
+      detail: settingsConfigStatus.hasTwilioAccountSid && settingsConfigStatus.hasTwilioAuthToken && settingsConfigStatus.hasTwilioFromPhone ? "SMS shipping alerts enabled" : "Optional SMS alerts not connected",
+      ready: Boolean(
+        (settingsConfigStatus.hasTwilioAccountSid || isSetupValuePresent(settingsTwilioAccountSid)) &&
+        (settingsConfigStatus.hasTwilioAuthToken || isSetupValuePresent(settingsTwilioAuthToken)) &&
+        (settingsConfigStatus.hasTwilioFromPhone || isSetupValuePresent(settingsTwilioFromPhone))
+      ),
+      icon: MessageSquare,
     },
     {
       label: "Analytics",
@@ -1778,12 +1855,13 @@ function App() {
                         <td>{titleCase(order.paymentStatus)}</td>
                         <td>
                           <select
-                            className={`status-select ${order.status === "Ready to fulfill" ? "active" : "review"}`}
+                            className={`status-select ${order.status === "Ready to fulfill" || order.status === "Delivered" ? "active" : "review"}`}
                             value={order.status}
                             onChange={(event) => updateOrderStatus(order.id, event.target.value as Order["status"])}
                           >
-                            <option>Ready to fulfill</option>
-                            <option>Needs review</option>
+                            {orderStatusOptions.map((status) => (
+                              <option key={status} value={status}>{status}</option>
+                            ))}
                           </select>
                         </td>
                         <td>{order.source === "medusa" ? "Medusa" : "Storefront"}</td>
@@ -2023,43 +2101,61 @@ function App() {
                       <th>Total</th>
                       <th>Payment</th>
                       <th>Status</th>
+                      <th>Tracking</th>
                       <th>Source</th>
                     </tr>
                   </thead>
                   <tbody>
                     {orders.length === 0 ? (
                       <tr>
-                        <td colSpan={7}>No orders yet. Storefront checkout and Medusa sync both feed this queue.</td>
+                        <td colSpan={8}>No orders yet. Storefront checkout and Medusa sync both feed this queue.</td>
                       </tr>
-                    ) : orders.map((order) => (
-                      <tr key={order.id}>
-                        <td>
-                          <strong>{order.id}</strong>
-                          <span>{formatDate(order.createdAt)}</span>
-                        </td>
-                        <td>
-                          <strong>{order.customerName}</strong>
-                          <span>{order.email}</span>
-                        </td>
-                        <td className="hook">{order.items.map((item) => `${item.quantity}x ${item.name}`).join(", ")}</td>
-                        <td>
-                          <strong>{money(order.total)}</strong>
-                          <span>{money(order.subtotal)} subtotal</span>
-                        </td>
-                        <td>{titleCase(order.paymentStatus)}</td>
-                        <td>
-                          <select
-                            className={`status-select ${order.status === "Ready to fulfill" ? "active" : "review"}`}
-                            value={order.status}
-                            onChange={(event) => updateOrderStatus(order.id, event.target.value as Order["status"])}
-                          >
-                            <option>Ready to fulfill</option>
-                            <option>Needs review</option>
-                          </select>
-                        </td>
-                        <td>{order.source === "medusa" ? "Medusa" : "Storefront"}</td>
-                      </tr>
-                    ))}
+                    ) : orders.map((order) => {
+                      const trackingDraft = getOrderTrackingDraft(order);
+                      return (
+                        <tr key={order.id}>
+                          <td>
+                            <strong>{order.id}</strong>
+                            <span>{formatDate(order.createdAt)}</span>
+                          </td>
+                          <td>
+                            <strong>{order.customerName}</strong>
+                            <span>{order.email}</span>
+                          </td>
+                          <td className="hook">{order.items.map((item) => `${item.quantity}x ${item.name}`).join(", ")}</td>
+                          <td>
+                            <strong>{money(order.total)}</strong>
+                            <span>{money(order.subtotal)} subtotal</span>
+                          </td>
+                          <td>{titleCase(order.paymentStatus)}</td>
+                          <td>
+                            <select
+                              className={`status-select ${order.status === "Ready to fulfill" || order.status === "Delivered" ? "active" : "review"}`}
+                              value={order.status}
+                              onChange={(event) => updateOrderStatus(order.id, event.target.value as Order["status"])}
+                            >
+                              {orderStatusOptions.map((status) => (
+                                <option key={status} value={status}>{status}</option>
+                              ))}
+                            </select>
+                          </td>
+                          <td style={{ minWidth: '260px' }}>
+                            <div style={{ display: 'grid', gap: '6px' }}>
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px' }}>
+                                <input value={trackingDraft.carrier || ""} onChange={(event) => setOrderTrackingField(order.id, "carrier", event.target.value)} placeholder="Carrier" style={{ minWidth: 0, border: '1px solid #dce3e7', borderRadius: '8px', padding: '7px 8px', fontSize: '12px' }} />
+                                <input value={trackingDraft.trackingNumber || ""} onChange={(event) => setOrderTrackingField(order.id, "trackingNumber", event.target.value)} placeholder="Tracking #" style={{ minWidth: 0, border: '1px solid #dce3e7', borderRadius: '8px', padding: '7px 8px', fontSize: '12px' }} />
+                              </div>
+                              <input value={trackingDraft.trackingUrl || ""} onChange={(event) => setOrderTrackingField(order.id, "trackingUrl", event.target.value)} placeholder="Carrier tracking URL" style={{ minWidth: 0, border: '1px solid #dce3e7', borderRadius: '8px', padding: '7px 8px', fontSize: '12px' }} />
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '6px' }}>
+                                <input type="date" value={trackingDraft.estimatedDelivery || ""} onChange={(event) => setOrderTrackingField(order.id, "estimatedDelivery", event.target.value)} style={{ minWidth: 0, border: '1px solid #dce3e7', borderRadius: '8px', padding: '7px 8px', fontSize: '12px' }} />
+                                <button type="button" onClick={() => saveOrderTracking(order)} style={{ border: 'none', borderRadius: '8px', background: '#176c61', color: '#fff', padding: '7px 10px', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}>Save</button>
+                              </div>
+                            </div>
+                          </td>
+                          <td>{order.source === "medusa" ? "Medusa" : "Storefront"}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -2627,6 +2723,34 @@ function App() {
                     <label style={{ display: 'grid', gap: '6px' }}><span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Free Shipping</span><input type="number" step="0.01" value={settingsFreeShipping} onChange={(e) => setSettingsFreeShipping(e.target.value)} style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} /></label>
                     <label style={{ display: 'grid', gap: '6px' }}><span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Flat Shipping</span><input type="number" step="0.01" value={settingsFlatShipping} onChange={(e) => setSettingsFlatShipping(e.target.value)} style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} /></label>
                   </div>
+                </div>
+
+                <div style={{ background: '#f7f9fa', border: '1px solid #e1e7eb', borderRadius: '10px', padding: '16px', display: 'grid', gap: '12px' }}>
+                  <h3 style={{ margin: '0', fontSize: '15px', fontWeight: 600, color: '#176c61', display: 'flex', alignItems: 'center', gap: '6px' }}><MessageSquare size={16} /> Customer notifications</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '0.7fr 1.3fr', gap: '10px' }}>
+                    <label style={{ display: 'grid', gap: '6px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>SMS Notifications</span>
+                      <select value={settingsSmsNotifyEnabled} onChange={(e) => setSettingsSmsNotifyEnabled(e.target.value)} style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }}>
+                        <option value="true">Enabled</option>
+                        <option value="false">Disabled</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'grid', gap: '6px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Twilio From Phone</span>
+                      <input type="tel" value={settingsTwilioFromPhone} onChange={(e) => setSettingsTwilioFromPhone(e.target.value)} placeholder="+15551234567" style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} />
+                    </label>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    <label style={{ display: 'grid', gap: '6px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Twilio Account SID</span>
+                      <input type="password" value={settingsTwilioAccountSid} onChange={(e) => setSettingsTwilioAccountSid(e.target.value)} placeholder="AC..." style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} />
+                    </label>
+                    <label style={{ display: 'grid', gap: '6px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 500, color: '#4b5563' }}>Twilio Auth Token</span>
+                      <input type="password" value={settingsTwilioAuthToken} onChange={(e) => setSettingsTwilioAuthToken(e.target.value)} placeholder="Auth token" style={{ background: '#ffffff', border: '1px solid #dce3e7', borderRadius: '8px', padding: '10px', fontSize: '14px', width: '100%', outline: 'none' }} />
+                    </label>
+                  </div>
+                  <span style={{ fontSize: '11px', color: '#68777d' }}>Resend remains the email provider. Twilio is only used for opted-in customer SMS status and tracking alerts.</span>
                 </div>
 
                 <button 
@@ -6094,6 +6218,38 @@ function Storefront({
     }
   };
 
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const linkedOrderId = params.get("track_order")?.trim();
+    if (!linkedOrderId) return;
+
+    let isMounted = true;
+    setTrackOrderId(linkedOrderId);
+    setIsTrackOrderOpen(true);
+    setTrackingLoading(true);
+    setTrackingOrderResult(null);
+    fetch(apiUrl(`/orders/${encodeURIComponent(linkedOrderId)}`), { headers: adminRequestHeaders() })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error("Order not found. Please double-check your code.");
+        }
+        return response.json();
+      })
+      .then((data) => {
+        if (isMounted) setTrackingOrderResult(data.order);
+      })
+      .catch((error) => {
+        if (isMounted) setConfirmation(error instanceof Error ? error.message : "Tracking failed.");
+      })
+      .finally(() => {
+        if (isMounted) setTrackingLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const submitOrder = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (cartItems.length === 0) return;
@@ -6107,6 +6263,8 @@ function Storefront({
       tax,
       total,
       paymentStatus: "pending",
+      phone: preferences.phone,
+      wantsSms: Boolean(preferences.notifyShipping),
       items: cartItems.map((item) => ({
         productId: item.product.id,
         name: item.product.name,
@@ -6122,6 +6280,8 @@ function Storefront({
       source: "checkout",
       niche: leadNiche,
       storeLabel: leadStoreLabel,
+      phone: preferences.phone,
+      wantsSms: Boolean(preferences.notifyShipping),
     });
     trackMarketingEvent("begin_checkout", {
       currency: "USD",
@@ -7627,7 +7787,30 @@ function Storefront({
                         {trackingOrderResult.status}
                       </span>
                     </div>
+                    {trackingOrderResult.carrier && (
+                      <div>
+                        <strong>Carrier:</strong>
+                        <span>{trackingOrderResult.carrier}</span>
+                      </div>
+                    )}
+                    {trackingOrderResult.trackingNumber && (
+                      <div>
+                        <strong>Tracking Number:</strong>
+                        <span className="reference-code">{trackingOrderResult.trackingNumber}</span>
+                      </div>
+                    )}
+                    {trackingOrderResult.estimatedDelivery && (
+                      <div>
+                        <strong>Estimated Delivery:</strong>
+                        <span>{trackingOrderResult.estimatedDelivery}</span>
+                      </div>
+                    )}
                   </div>
+                  {trackingOrderResult.trackingUrl && (
+                    <a className="primary" href={trackingOrderResult.trackingUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', margin: '0 0 16px', textDecoration: 'none', background: config.accent, color: '#fff', borderRadius: '10px', padding: '10px 14px', fontWeight: 800 }}>
+                      Open carrier tracking
+                    </a>
+                  )}
 
                   {/* Shipment milestones timeline */}
                   <div className="timeline-container">
@@ -7644,7 +7827,7 @@ function Storefront({
                         if (status === "Shipped" || status === "In Transit") {
                           return idx <= 3;
                         }
-                        if (status === "Ready to Fulfill" || status === "Paid") {
+                        if (status === "Ready to fulfill" || status === "Processing" || status === "Paid") {
                           return idx <= 1;
                         }
                         if (status === "Placed" || status === "Pending") {
@@ -8931,7 +9114,15 @@ function normalizeStoredOrder(order: Order | Partial<Order> | ApiOrder): Order {
     total: total || subtotal + shipping + tax,
     paymentStatus: normalizePaymentStatus(order.paymentStatus),
     stripeSessionId: value(order.stripeSessionId) || undefined,
-    status: order.status === "Ready to fulfill" || order.status === "Needs review" ? order.status : "Needs review",
+    status: normalizeOrderStatus(order.status),
+    phone: value(order.phone) || undefined,
+    wantsSms: Boolean(order.wantsSms),
+    carrier: value(order.carrier) || undefined,
+    trackingNumber: value(order.trackingNumber) || undefined,
+    trackingUrl: value(order.trackingUrl) || undefined,
+    estimatedDelivery: value(order.estimatedDelivery) || undefined,
+    shippedAt: value(order.shippedAt) || undefined,
+    deliveredAt: value(order.deliveredAt) || undefined,
     createdAt: value(order.createdAt) || new Date().toISOString(),
     source: order.source === "medusa" ? "medusa" : "local",
   };
@@ -9025,6 +9216,11 @@ function normalizePaymentStatus(status: unknown): Order["paymentStatus"] {
   if (normalized === "unpaid") return "unpaid";
   if (normalized === "failed") return "failed";
   return "pending";
+}
+
+function normalizeOrderStatus(status: unknown): Order["status"] {
+  const match = orderStatusOptions.find((option) => option.toLowerCase() === value(status).toLowerCase());
+  return match || "Needs review";
 }
 
 function initializeMarketingTracking() {

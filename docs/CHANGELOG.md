@@ -7,6 +7,14 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.22.0 - 2026-06-20
+
+### Added
+- Added optional Twilio SMS settings in the admin integration manager and documented Twilio SMS environment variables.
+- Extended orders with shipping/tracking fields, richer fulfillment statuses, and admin controls for carrier, tracking number, tracking URL, and estimated delivery.
+- Added Resend customer/admin notifications for order status and tracking updates, with customer-facing tracking links in order emails.
+- Added customer tracking links that open the storefront tracking modal and display carrier tracking details.
+
 ## v1.21.0 - 2026-06-20
 
 ### Added

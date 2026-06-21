@@ -22,6 +22,10 @@ const saleNotifyExtraEmails = (process.env.SALE_NOTIFY_EMAILS || "")
   .filter(Boolean);
 const resendApiKey = process.env.RESEND_API_KEY || "";
 const saleNotifyFrom = process.env.SALE_NOTIFY_FROM || process.env.RESEND_FROM || "";
+const smsNotifyEnabled = process.env.SMS_NOTIFY_ENABLED !== "false";
+const twilioAccountSid = process.env.TWILIO_ACCOUNT_SID || "";
+const twilioAuthToken = process.env.TWILIO_AUTH_TOKEN || "";
+const twilioFromPhone = process.env.TWILIO_FROM_PHONE || "";
 
 // Stripe Configuration
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -204,6 +208,27 @@ const orderItemSchema = z.object({
   variations: z.string().optional(),
 });
 
+const orderStatusSchema = z.enum([
+  "Needs review",
+  "Ready to fulfill",
+  "Processing",
+  "Shipped",
+  "In Transit",
+  "Delivered",
+  "Cancelled",
+]);
+
+const trackingFieldsSchema = z.object({
+  phone: z.string().optional(),
+  wantsSms: z.boolean().optional(),
+  carrier: z.string().optional(),
+  trackingNumber: z.string().optional(),
+  trackingUrl: z.string().optional(),
+  estimatedDelivery: z.string().optional(),
+  shippedAt: z.string().optional(),
+  deliveredAt: z.string().optional(),
+});
+
 const createOrderSchema = z.object({
   customerName: z.string().min(1),
   email: z.string().email(),
@@ -215,11 +240,11 @@ const createOrderSchema = z.object({
   total: z.number().nonnegative().optional(),
   paymentStatus: z.enum(["paid", "unpaid", "pending", "failed"]).optional(),
   stripeSessionId: z.string().optional(),
-});
+}).merge(trackingFieldsSchema);
 
 const orderSchema = createOrderSchema.extend({
   id: z.string().min(1),
-  status: z.enum(["Ready to fulfill", "Needs review"]),
+  status: orderStatusSchema,
   createdAt: z.string().min(1),
 });
 
@@ -309,10 +334,42 @@ function escapeHtml(value: unknown) {
     .replace(/'/g, "&#39;");
 }
 
+function buildTrackingLink(order: any) {
+  const siteUrl = (process.env.PUBLIC_SITE_URL || "https://products4thepeople.com").trim().replace(/\/$/, "");
+  const appBaseInput = (process.env.PUBLIC_APP_BASE || "/").trim() || "/";
+  const appBase = appBaseInput.startsWith("/") ? appBaseInput : `/${appBaseInput}`;
+  const normalizedBase = appBase.endsWith("/") ? appBase : `${appBase}/`;
+  return `${siteUrl}${normalizedBase}?track_order=${encodeURIComponent(String(order.id || ""))}`;
+}
+
+function buildTrackingDetails(order: any) {
+  return [
+    order.carrier ? `Carrier: ${order.carrier}` : "",
+    order.trackingNumber ? `Tracking number: ${order.trackingNumber}` : "",
+    order.estimatedDelivery ? `Estimated delivery: ${order.estimatedDelivery}` : "",
+    order.trackingUrl ? `Carrier tracking: ${order.trackingUrl}` : "",
+  ].filter(Boolean);
+}
+
+function applyStatusTimestamps(order: any) {
+  const now = new Date().toISOString();
+  if ((order.status === "Shipped" || order.status === "In Transit" || order.status === "Delivered") && !order.shippedAt) {
+    order.shippedAt = now;
+  }
+  if (order.status === "Delivered" && !order.deliveredAt) {
+    order.deliveredAt = now;
+  }
+  return order;
+}
+
 async function getAdminNotificationEmails() {
   const recipients = new Set<string>();
   if (isEmailAddress(adminEmail)) recipients.add(adminEmail.toLowerCase());
-  saleNotifyExtraEmails.forEach((email) => {
+  const extraEmails = (process.env.SALE_NOTIFY_EMAILS || saleNotifyExtraEmails.join(","))
+    .split(",")
+    .map((email) => email.trim())
+    .filter(Boolean);
+  extraEmails.forEach((email) => {
     if (isEmailAddress(email)) recipients.add(email.toLowerCase());
   });
 
@@ -330,6 +387,7 @@ async function getAdminNotificationEmails() {
 
 function buildOrderNotification(order: any) {
   const items = Array.isArray(order.items) ? order.items : [];
+  const trackingLink = buildTrackingLink(order);
   const itemLines = items.map((item: any) => {
     const variations = item.variations ? ` (${item.variations})` : "";
     return `${item.quantity} x ${item.name}${variations} - ${formatCurrency(Number(item.price || 0) * Number(item.quantity || 0))}`;
@@ -354,6 +412,7 @@ function buildOrderNotification(order: any) {
     `Customer: ${order.customerName} <${order.email}>`,
     `Payment: ${order.paymentStatus}`,
     `Fulfillment: ${order.status}`,
+    `Customer tracking: ${trackingLink}`,
     `Subtotal: ${formatCurrency(order.subtotal)}`,
     `Shipping: ${formatCurrency(order.shipping)}`,
     `Tax: ${formatCurrency(order.tax)}`,
@@ -373,6 +432,9 @@ function buildOrderNotification(order: any) {
         <tr><td style="padding:4px 0;color:#6b7280;">Fulfillment</td><td style="padding:4px 0;text-align:right;">${escapeHtml(order.status)}</td></tr>
         <tr><td style="padding:4px 0;color:#6b7280;">Total</td><td style="padding:4px 0;text-align:right;font-weight:700;">${formatCurrency(order.total)}</td></tr>
       </table>
+      <p style="margin:0 0 16px;">
+        <a href="${escapeHtml(trackingLink)}" style="color:#176c61;font-weight:700;">Open customer tracking link</a>
+      </p>
       <h3 style="margin:16px 0 8px;">Items</h3>
       <table style="border-collapse:collapse;width:100%;max-width:640px;">
         <thead>
@@ -389,9 +451,134 @@ function buildOrderNotification(order: any) {
   return { subject, text, html };
 }
 
+function buildOrderUpdateNotification(order: any, updateLabel: string, audience: "admin" | "customer") {
+  const trackingLink = buildTrackingLink(order);
+  const details = buildTrackingDetails(order);
+  const subject =
+    audience === "admin"
+      ? `Order update: ${order.id} is ${order.status}`
+      : `Your Products4ThePeople order is ${order.status}`;
+  const intro =
+    audience === "admin"
+      ? `${updateLabel} was updated for ${order.customerName} <${order.email}>.`
+      : `We have an update for order ${order.id}.`;
+  const text = [
+    intro,
+    "",
+    `Order: ${order.id}`,
+    `Status: ${order.status}`,
+    ...details,
+    "",
+    `Track your order: ${trackingLink}`,
+  ].join("\n");
+  const detailRows = details
+    .map((detail) => {
+      const [label, ...rest] = detail.split(": ");
+      return `<tr><td style="padding:4px 0;color:#6b7280;">${escapeHtml(label)}</td><td style="padding:4px 0;text-align:right;">${escapeHtml(rest.join(": "))}</td></tr>`;
+    })
+    .join("");
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#111827;line-height:1.5;">
+      <h2 style="margin:0 0 8px;">${escapeHtml(subject)}</h2>
+      <p style="margin:0 0 16px;color:#4b5563;">${escapeHtml(intro)}</p>
+      <table style="border-collapse:collapse;width:100%;max-width:640px;margin-bottom:16px;">
+        <tr><td style="padding:4px 0;color:#6b7280;">Order</td><td style="padding:4px 0;text-align:right;">${escapeHtml(order.id)}</td></tr>
+        <tr><td style="padding:4px 0;color:#6b7280;">Status</td><td style="padding:4px 0;text-align:right;font-weight:700;">${escapeHtml(order.status)}</td></tr>
+        ${detailRows}
+      </table>
+      <p style="margin:0 0 16px;">
+        <a href="${escapeHtml(trackingLink)}" style="display:inline-block;background:#176c61;color:#ffffff;text-decoration:none;border-radius:8px;padding:10px 14px;font-weight:700;">Track order</a>
+      </p>
+      <p style="margin:0;color:#6b7280;font-size:13px;">Tracking link: ${escapeHtml(trackingLink)}</p>
+    </div>`;
+
+  return { subject, text, html };
+}
+
+async function sendResendEmail(to: string | string[], message: { subject: string; text: string; html: string }) {
+  const activeResendApiKey = process.env.RESEND_API_KEY || resendApiKey;
+  const activeEmailFrom = process.env.SALE_NOTIFY_FROM || process.env.RESEND_FROM || saleNotifyFrom;
+  if (!activeResendApiKey || !activeEmailFrom) {
+    console.warn("Email notification skipped: RESEND_API_KEY and SALE_NOTIFY_FROM are required.");
+    return;
+  }
+
+  const result = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${activeResendApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: activeEmailFrom,
+      to,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+    }),
+  });
+
+  if (!result.ok) {
+    const details = await result.text().catch(() => "");
+    throw new Error(`Resend returned ${result.status}${details ? `: ${details}` : ""}`);
+  }
+}
+
+async function getCustomerSmsProfile(order: any) {
+  const directPhone = String(order.phone || "").trim();
+  if (directPhone) {
+    return { phone: directPhone, wantsSms: order.wantsSms !== false };
+  }
+
+  try {
+    const contacts = await getContactsDb();
+    const contact = contacts.find((item: any) => String(item.email || "").toLowerCase() === String(order.email || "").toLowerCase());
+    return {
+      phone: String(contact?.phone || "").trim(),
+      wantsSms: Boolean(contact?.wantsSms),
+    };
+  } catch (error) {
+    console.error("Failed to load customer SMS profile:", error instanceof Error ? error.message : error);
+    return { phone: "", wantsSms: false };
+  }
+}
+
+async function sendTwilioSms(to: string, body: string) {
+  const activeSmsEnabled = (process.env.SMS_NOTIFY_ENABLED || (smsNotifyEnabled ? "true" : "false")) !== "false";
+  const activeTwilioAccountSid = process.env.TWILIO_ACCOUNT_SID || twilioAccountSid;
+  const activeTwilioAuthToken = process.env.TWILIO_AUTH_TOKEN || twilioAuthToken;
+  const activeTwilioFromPhone = process.env.TWILIO_FROM_PHONE || twilioFromPhone;
+  if (!activeSmsEnabled) return;
+  if (!activeTwilioAccountSid || !activeTwilioAuthToken || !activeTwilioFromPhone) {
+    console.warn("SMS notification skipped: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_PHONE are required.");
+    return;
+  }
+
+  const result = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(activeTwilioAccountSid)}/Messages.json`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${Buffer.from(`${activeTwilioAccountSid}:${activeTwilioAuthToken}`).toString("base64")}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      From: activeTwilioFromPhone,
+      To: to,
+      Body: body,
+    }),
+  });
+
+  if (!result.ok) {
+    const details = await result.text().catch(() => "");
+    throw new Error(`Twilio returned ${result.status}${details ? `: ${details}` : ""}`);
+  }
+}
+
 async function notifyAdminsOfOrder(order: any) {
-  if (!saleNotifyEnabled) return;
-  if (!resendApiKey || !saleNotifyFrom) {
+  const activeSaleNotifyEnabled = (process.env.SALE_NOTIFY_ENABLED || (saleNotifyEnabled ? "true" : "false")) !== "false";
+  const activeResendApiKey = process.env.RESEND_API_KEY || resendApiKey;
+  const activeEmailFrom = process.env.SALE_NOTIFY_FROM || process.env.RESEND_FROM || saleNotifyFrom;
+  if (!activeSaleNotifyEnabled) return;
+  if (!activeResendApiKey || !activeEmailFrom) {
     console.warn("Sale notification skipped: RESEND_API_KEY and SALE_NOTIFY_FROM are required.");
     return;
   }
@@ -402,25 +589,35 @@ async function notifyAdminsOfOrder(order: any) {
     return;
   }
 
-  const message = buildOrderNotification(order);
-  const result = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${resendApiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: saleNotifyFrom,
-      to: recipients,
-      subject: message.subject,
-      text: message.text,
-      html: message.html,
-    }),
-  });
+  await sendResendEmail(recipients, buildOrderNotification(order));
+}
 
-  if (!result.ok) {
-    const details = await result.text().catch(() => "");
-    throw new Error(`Resend returned ${result.status}${details ? `: ${details}` : ""}`);
+async function notifyOrderUpdate(order: any, updateLabel: string) {
+  const adminRecipients = await getAdminNotificationEmails();
+  if (adminRecipients.length) {
+    await sendResendEmail(adminRecipients, buildOrderUpdateNotification(order, updateLabel, "admin"));
+  }
+
+  if (isEmailAddress(order.email)) {
+    await sendResendEmail(String(order.email), buildOrderUpdateNotification(order, updateLabel, "customer"));
+  }
+
+  const smsProfile = await getCustomerSmsProfile(order);
+  if (smsProfile.phone && smsProfile.wantsSms) {
+    const trackingLink = buildTrackingLink(order);
+    await sendTwilioSms(smsProfile.phone, `Products4ThePeople order ${order.id} update: ${order.status}. Track it here: ${trackingLink}`);
+  }
+}
+
+async function notifyCustomerOrderUpdate(order: any, updateLabel: string) {
+  if (isEmailAddress(order.email)) {
+    await sendResendEmail(String(order.email), buildOrderUpdateNotification(order, updateLabel, "customer"));
+  }
+
+  const smsProfile = await getCustomerSmsProfile(order);
+  if (smsProfile.phone && smsProfile.wantsSms) {
+    const trackingLink = buildTrackingLink(order);
+    await sendTwilioSms(smsProfile.phone, `Products4ThePeople order ${order.id} update: ${order.status}. Track it here: ${trackingLink}`);
   }
 }
 
@@ -529,6 +726,9 @@ app.post("/api/orders", async (request, response) => {
   void notifyAdminsOfOrder(order).catch((error) => {
     console.error("Sale notification failed:", error instanceof Error ? error.message : error);
   });
+  void notifyCustomerOrderUpdate(order, "Order confirmation").catch((error) => {
+    console.error("Customer order notification failed:", error instanceof Error ? error.message : error);
+  });
   response.status(201).json({ order });
 });
 
@@ -541,7 +741,7 @@ app.post("/api/orders/bulk", requireAdmin, async (request, response) => {
 });
 
 app.patch("/api/orders/:id/status", requireAdmin, async (request, response) => {
-  const status = z.enum(["Ready to fulfill", "Needs review"]).parse(request.body.status);
+  const status = orderStatusSchema.parse(request.body.status);
   const orders = await getOrdersDb();
   const existing = orders.find((o: any) => o.id === request.params.id);
   if (!existing) {
@@ -549,11 +749,39 @@ app.patch("/api/orders/:id/status", requireAdmin, async (request, response) => {
     return;
   }
 
-  const order = orderSchema.extend({ source: z.enum(["local", "medusa"]).optional() }).parse({
+  const order = orderSchema.extend({ source: z.enum(["local", "medusa"]).optional() }).parse(applyStatusTimestamps({
     ...existing,
     status,
-  });
+  }));
   await upsertOrderDb(order);
+  void notifyOrderUpdate(order, "Fulfillment status").catch((error) => {
+    console.error("Order status notification failed:", error instanceof Error ? error.message : error);
+  });
+  response.json({ order });
+});
+
+app.patch("/api/orders/:id/tracking", requireAdmin, async (request, response) => {
+  const tracking = trackingFieldsSchema.partial().parse(request.body);
+  const orders = await getOrdersDb();
+  const existing = orders.find((o: any) => o.id === request.params.id);
+  if (!existing) {
+    response.status(404).json({ error: "Order not found" });
+    return;
+  }
+
+  const nextStatus =
+    existing.status === "Needs review" || existing.status === "Ready to fulfill" || existing.status === "Processing"
+      ? "Shipped"
+      : existing.status;
+  const order = orderSchema.extend({ source: z.enum(["local", "medusa"]).optional() }).parse(applyStatusTimestamps({
+    ...existing,
+    ...tracking,
+    status: nextStatus,
+  }));
+  await upsertOrderDb(order);
+  void notifyOrderUpdate(order, "Tracking details").catch((error) => {
+    console.error("Order tracking notification failed:", error instanceof Error ? error.message : error);
+  });
   response.json({ order });
 });
 
@@ -3929,6 +4157,13 @@ app.get("/api/settings/config", requireAdmin, (_request, response) => {
     hasCustomAdminPassword: Boolean(adminPasswordValue && adminPasswordValue !== "change-this-password"),
     publicSiteUrl: process.env.PUBLIC_SITE_URL || "",
     publicAppBase: process.env.PUBLIC_APP_BASE || "",
+    smsNotifyEnabled: process.env.SMS_NOTIFY_ENABLED || "true",
+    twilioAccountSid: maskSecret(process.env.TWILIO_ACCOUNT_SID || "", "AC"),
+    hasTwilioAccountSid: Boolean(process.env.TWILIO_ACCOUNT_SID),
+    twilioAuthToken: maskSecret(process.env.TWILIO_AUTH_TOKEN || ""),
+    hasTwilioAuthToken: Boolean(process.env.TWILIO_AUTH_TOKEN),
+    twilioFromPhone: process.env.TWILIO_FROM_PHONE || "",
+    hasTwilioFromPhone: Boolean(process.env.TWILIO_FROM_PHONE),
     ga4MeasurementId: process.env.VITE_GA4_MEASUREMENT_ID || "",
     metaPixelId: process.env.VITE_META_PIXEL_ID || "",
     tiktokPixelId: process.env.VITE_TIKTOK_PIXEL_ID || "",
@@ -3952,6 +4187,10 @@ app.post("/api/settings/config", requireAdmin, async (request, response) => {
       adminPassword: nextAdminPassword,
       publicSiteUrl,
       publicAppBase,
+      smsNotifyEnabled: nextSmsNotifyEnabled,
+      twilioAccountSid: nextTwilioAccountSid,
+      twilioAuthToken: nextTwilioAuthToken,
+      twilioFromPhone: nextTwilioFromPhone,
       ga4MeasurementId,
       metaPixelId,
       tiktokPixelId,
@@ -3969,6 +4208,10 @@ app.post("/api/settings/config", requireAdmin, async (request, response) => {
       adminPassword: z.string().optional(),
       publicSiteUrl: z.string().optional(),
       publicAppBase: z.string().optional(),
+      smsNotifyEnabled: z.string().optional(),
+      twilioAccountSid: z.string().optional(),
+      twilioAuthToken: z.string().optional(),
+      twilioFromPhone: z.string().optional(),
       ga4MeasurementId: z.string().optional(),
       metaPixelId: z.string().optional(),
       tiktokPixelId: z.string().optional(),
@@ -4024,6 +4267,10 @@ app.post("/api/settings/config", requireAdmin, async (request, response) => {
     updatePlainValue("ADMIN_PASSWORD", nextAdminPassword);
     updatePlainValue("PUBLIC_SITE_URL", publicSiteUrl);
     updatePlainValue("PUBLIC_APP_BASE", publicAppBase);
+    updatePlainValue("SMS_NOTIFY_ENABLED", nextSmsNotifyEnabled);
+    updatePlainValue("TWILIO_ACCOUNT_SID", nextTwilioAccountSid);
+    updatePlainValue("TWILIO_AUTH_TOKEN", nextTwilioAuthToken);
+    updatePlainValue("TWILIO_FROM_PHONE", nextTwilioFromPhone);
     updatePlainValue("VITE_GA4_MEASUREMENT_ID", ga4MeasurementId);
     updatePlainValue("VITE_META_PIXEL_ID", metaPixelId);
     updatePlainValue("VITE_TIKTOK_PIXEL_ID", tiktokPixelId);
