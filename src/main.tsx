@@ -50,6 +50,7 @@ import {
   Layers,
   ZoomIn,
 } from "lucide-react";
+import changelogMarkdown from "../docs/CHANGELOG.md?raw";
 import {
   listMedusaOrders,
   listMedusaProducts,
@@ -58,7 +59,7 @@ import {
   type MedusaOrder,
   type MedusaProduct,
 } from "./lib/medusa";
-import { APP_VERSION } from "./lib/version";
+import { APP_UPDATED_AT, APP_VERSION } from "./lib/version";
 import {
   createOrder,
   getOrders,
@@ -246,6 +247,17 @@ const orderStatusOptions: Order["status"][] = [
 type OrderTrackingDraft = Pick<Order, "carrier" | "trackingNumber" | "trackingUrl" | "estimatedDelivery">;
 
 type StorefrontMode = string;
+
+type ChangelogSection = {
+  heading: string;
+  items: string[];
+};
+
+type ChangelogEntry = {
+  version: string;
+  date: string;
+  sections: ChangelogSection[];
+};
 
 type MarketingLead = {
   id: string;
@@ -683,6 +695,7 @@ function App() {
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [notice, setNotice] = React.useState("Connecting to backend storage.");
   const [adminTab, setAdminTab] = React.useState("dashboard");
+  const [isChangelogOpen, setIsChangelogOpen] = React.useState(false);
   const [seoArticles, setSeoArticles] = React.useState<Article[]>([]);
   const [seoKbArticles, setSeoKbArticles] = React.useState<KnowledgeArticle[]>([]);
   const [seoPages, setSeoPages] = React.useState<SeoPage[]>([]);
@@ -1639,6 +1652,21 @@ function App() {
     },
   ];
   const setupReadyCount = setupItems.filter((item) => item.ready).length;
+  const changelogEntries = React.useMemo(() => parseChangelog(changelogMarkdown), []);
+  const currentRelease = changelogEntries.find((entry) => entry.version === `v${APP_VERSION}`) || changelogEntries[0];
+  const formattedAppUpdatedAt = React.useMemo(() => {
+    try {
+      return new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      }).format(new Date(APP_UPDATED_AT));
+    } catch {
+      return APP_UPDATED_AT;
+    }
+  }, []);
 
   if (view === "storefront" && isBackendLoading) {
     return (
@@ -1724,7 +1752,21 @@ function App() {
         <header className="topbar">
           <div>
             <p>Products4ThePeople.com</p>
-            <h1>Commerce Command Center <span style={{ fontSize: '0.45em', opacity: 0.6, fontWeight: 'normal', backgroundColor: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: '4px', marginLeft: '10px', verticalAlign: 'middle', display: 'inline-block' }}>v{APP_VERSION}</span></h1>
+            <h1 style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+              Commerce Command Center
+              <span style={{ fontSize: '0.45em', opacity: 0.75, fontWeight: 'normal', backgroundColor: '#e2e8f0', color: '#475569', padding: '2px 8px', borderRadius: '4px', verticalAlign: 'middle', display: 'inline-block' }}>v{APP_VERSION}</span>
+              <button
+                type="button"
+                onClick={() => setIsChangelogOpen(true)}
+                style={{ border: '1px solid #cbd5e1', background: '#ffffff', color: '#176c61', borderRadius: '8px', padding: '6px 9px', fontSize: '12px', fontWeight: 800, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+              >
+                <BookOpen size={14} />
+                Changelog
+              </button>
+            </h1>
+            <span style={{ display: 'block', color: '#68777d', fontSize: '12px', marginTop: '4px' }}>
+              Last updated {formattedAppUpdatedAt}{currentRelease ? ` - ${currentRelease.version}` : ""}
+            </span>
           </div>
           <div className="topbar-actions">
             <button type="button" onClick={() => {
@@ -1763,6 +1805,60 @@ function App() {
         <div className="notice" role="status">
           {notice}
         </div>
+
+        {isChangelogOpen && (
+          <div
+            className="modal-backdrop"
+            role="presentation"
+            onClick={() => setIsChangelogOpen(false)}
+            style={{ alignItems: 'flex-start', overflowY: 'auto', padding: '32px 18px' }}
+          >
+            <section
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="admin-changelog-title"
+              onClick={(event) => event.stopPropagation()}
+              style={{ width: 'min(920px, 100%)', maxHeight: 'calc(100vh - 64px)', overflow: 'hidden', background: '#ffffff', borderRadius: '12px', boxShadow: '0 24px 80px rgba(15, 23, 42, 0.32)', border: '1px solid #dce3e7', display: 'grid', gridTemplateRows: 'auto 1fr' }}
+            >
+              <header style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', padding: '18px 20px', borderBottom: '1px solid #e5edf0', background: '#f8fafc' }}>
+                <div>
+                  <p style={{ margin: '0 0 4px', color: '#68777d', fontSize: '12px', fontWeight: 800, textTransform: 'uppercase' }}>Release history</p>
+                  <h2 id="admin-changelog-title" style={{ margin: 0, color: '#11191d', fontSize: '1.35rem' }}>Products4ThePeople changelog</h2>
+                  <span style={{ display: 'block', marginTop: '6px', color: '#68777d', fontSize: '12.5px' }}>
+                    Current version v{APP_VERSION} - updated {formattedAppUpdatedAt}
+                  </span>
+                </div>
+                <button type="button" onClick={() => setIsChangelogOpen(false)} aria-label="Close changelog" style={{ border: '1px solid #cbd5e1', background: '#ffffff', color: '#475569', borderRadius: '8px', width: '34px', height: '34px', display: 'grid', placeItems: 'center', cursor: 'pointer' }}>
+                  <X size={17} />
+                </button>
+              </header>
+              <div style={{ overflowY: 'auto', padding: '18px 20px 22px', display: 'grid', gap: '16px' }}>
+                {changelogEntries.length === 0 ? (
+                  <p style={{ margin: 0, color: '#68777d' }}>No changelog entries were found.</p>
+                ) : changelogEntries.map((entry) => (
+                  <article key={`${entry.version}-${entry.date}`} style={{ border: entry.version === `v${APP_VERSION}` ? '1px solid #176c61' : '1px solid #e1e7eb', borderRadius: '10px', padding: '14px 16px', background: entry.version === `v${APP_VERSION}` ? '#f0fdfa' : '#ffffff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline', flexWrap: 'wrap', marginBottom: '10px' }}>
+                      <h3 style={{ margin: 0, fontSize: '1rem', color: '#11191d' }}>{entry.version}</h3>
+                      <span style={{ color: '#68777d', fontSize: '12px', fontWeight: 700 }}>{entry.date}</span>
+                    </div>
+                    <div style={{ display: 'grid', gap: '10px' }}>
+                      {entry.sections.map((section) => (
+                        <div key={`${entry.version}-${section.heading}`}>
+                          <h4 style={{ margin: '0 0 6px', color: '#176c61', fontSize: '13px', textTransform: 'uppercase' }}>{section.heading}</h4>
+                          <ul style={{ margin: 0, paddingLeft: '18px', color: '#374151', lineHeight: 1.5, fontSize: '13.5px' }}>
+                            {section.items.map((item, index) => (
+                              <li key={`${entry.version}-${section.heading}-${index}`}>{item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </div>
+        )}
 
         {adminTab === "dashboard" && (
           <>
@@ -9333,6 +9429,55 @@ function isStorefrontHash(hash: string) {
   const adminHashes = ["admin", "dashboard", "import", "orders", "customers", "media", "funnels", "analytics", "ai", "settings", "seo-hub"];
   const isAdmin = adminHashes.includes(normalized) || normalized.startsWith("admin-");
   return !isAdmin;
+}
+
+function parseChangelog(markdown: string): ChangelogEntry[] {
+  const entries: ChangelogEntry[] = [];
+  let currentEntry: ChangelogEntry | null = null;
+  let currentSection: ChangelogSection | null = null;
+
+  markdown.split(/\r?\n/).forEach((line) => {
+    const releaseMatch = line.match(/^##\s+(v[0-9]+\.[0-9]+\.[0-9]+)\s+-\s+(.+)$/);
+    if (releaseMatch) {
+      currentEntry = { version: releaseMatch[1], date: releaseMatch[2].trim(), sections: [] };
+      currentSection = null;
+      entries.push(currentEntry);
+      return;
+    }
+
+    if (!currentEntry) return;
+
+    const sectionMatch = line.match(/^###\s+(.+)$/);
+    if (sectionMatch) {
+      currentSection = { heading: sectionMatch[1].trim(), items: [] };
+      currentEntry.sections.push(currentSection);
+      return;
+    }
+
+    const itemMatch = line.match(/^\s*-\s+(.+)$/);
+    if (itemMatch) {
+      if (!currentSection) {
+        currentSection = { heading: "Changed", items: [] };
+        currentEntry.sections.push(currentSection);
+      }
+      currentSection.items.push(cleanChangelogText(itemMatch[1]));
+    }
+  });
+
+  return entries
+    .map((entry) => ({
+      ...entry,
+      sections: entry.sections.filter((section) => section.items.length > 0),
+    }))
+    .filter((entry) => entry.sections.length > 0);
+}
+
+function cleanChangelogText(text: string) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .trim();
 }
 
 function loadStoresConfig(): Record<string, StorefrontNicheConfig> {

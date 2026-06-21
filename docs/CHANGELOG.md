@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.23.0 - 2026-06-20
+
+### Added
+- Added a full admin changelog modal beside the version badge, sourced from the canonical `docs/CHANGELOG.md` release history.
+- Added last-updated release metadata beside the admin portal version display.
+
 ## v1.22.0 - 2026-06-20
 
 ### Added
