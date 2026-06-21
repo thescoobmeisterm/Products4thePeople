@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.20.0 - 2026-06-20
+
+### Added
+- Added Resend-powered order notification emails to all admin contacts whenever a storefront order is created.
+- Added sale notification environment settings for enabling notifications, sender address, extra recipients, and the Resend API key.
+
 ## v1.19.7 - 2026-06-20
 
 ### Fixed

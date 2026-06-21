@@ -15,6 +15,13 @@ const port = Number(process.env.API_PORT || 4000);
 const databaseUrl = process.env.DATABASE_URL;
 const adminEmail = process.env.VITE_ADMIN_EMAIL || process.env.ADMIN_EMAIL || "admin@products4thepeople.com";
 const adminPassword = process.env.VITE_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || "change-this-password";
+const saleNotifyEnabled = process.env.SALE_NOTIFY_ENABLED !== "false";
+const saleNotifyExtraEmails = (process.env.SALE_NOTIFY_EMAILS || "")
+  .split(",")
+  .map((email) => email.trim())
+  .filter(Boolean);
+const resendApiKey = process.env.RESEND_API_KEY || "";
+const saleNotifyFrom = process.env.SALE_NOTIFY_FROM || process.env.RESEND_FROM || "";
 
 // Stripe Configuration
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -284,6 +291,139 @@ function isAdminRequest(request: express.Request) {
   return email.toLowerCase() === adminEmail.toLowerCase() && password === adminPassword;
 }
 
+function isEmailAddress(value: unknown) {
+  return z.string().email().safeParse(value).success;
+}
+
+function formatCurrency(value: unknown) {
+  const numeric = Number(value || 0);
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(numeric);
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+async function getAdminNotificationEmails() {
+  const recipients = new Set<string>();
+  if (isEmailAddress(adminEmail)) recipients.add(adminEmail.toLowerCase());
+  saleNotifyExtraEmails.forEach((email) => {
+    if (isEmailAddress(email)) recipients.add(email.toLowerCase());
+  });
+
+  try {
+    const contacts = await getContactsDb();
+    contacts
+      .filter((contact: any) => contact.role === "admin" && isEmailAddress(contact.email))
+      .forEach((contact: any) => recipients.add(String(contact.email).toLowerCase()));
+  } catch (error) {
+    console.error("Failed to load admin notification recipients:", error instanceof Error ? error.message : error);
+  }
+
+  return Array.from(recipients);
+}
+
+function buildOrderNotification(order: any) {
+  const items = Array.isArray(order.items) ? order.items : [];
+  const itemLines = items.map((item: any) => {
+    const variations = item.variations ? ` (${item.variations})` : "";
+    return `${item.quantity} x ${item.name}${variations} - ${formatCurrency(Number(item.price || 0) * Number(item.quantity || 0))}`;
+  });
+  const itemRows = items.map((item: any) => {
+    const variations = item.variations ? `<br><small>${escapeHtml(item.variations)}</small>` : "";
+    const lineTotal = Number(item.price || 0) * Number(item.quantity || 0);
+    return `
+      <tr>
+        <td style="padding:8px 0;border-bottom:1px solid #e5e7eb;">${escapeHtml(item.name)}${variations}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #e5e7eb;text-align:center;">${escapeHtml(item.quantity)}</td>
+        <td style="padding:8px 0;border-bottom:1px solid #e5e7eb;text-align:right;">${formatCurrency(lineTotal)}</td>
+      </tr>`;
+  }).join("");
+
+  const subjectPrefix = order.paymentStatus === "paid" ? "New paid sale" : "New order";
+  const subject = `${subjectPrefix}: ${formatCurrency(order.total)} (${order.id})`;
+  const text = [
+    `${subjectPrefix} on Products4ThePeople`,
+    "",
+    `Order: ${order.id}`,
+    `Customer: ${order.customerName} <${order.email}>`,
+    `Payment: ${order.paymentStatus}`,
+    `Fulfillment: ${order.status}`,
+    `Subtotal: ${formatCurrency(order.subtotal)}`,
+    `Shipping: ${formatCurrency(order.shipping)}`,
+    `Tax: ${formatCurrency(order.tax)}`,
+    `Total: ${formatCurrency(order.total)}`,
+    "",
+    "Items:",
+    ...(itemLines.length ? itemLines : ["No item details supplied."]),
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:Arial,sans-serif;color:#111827;line-height:1.5;">
+      <h2 style="margin:0 0 8px;">${escapeHtml(subjectPrefix)} on Products4ThePeople</h2>
+      <p style="margin:0 0 16px;color:#4b5563;">Order <strong>${escapeHtml(order.id)}</strong> is ready for admin review.</p>
+      <table style="border-collapse:collapse;width:100%;max-width:640px;margin-bottom:16px;">
+        <tr><td style="padding:4px 0;color:#6b7280;">Customer</td><td style="padding:4px 0;text-align:right;">${escapeHtml(order.customerName)} &lt;${escapeHtml(order.email)}&gt;</td></tr>
+        <tr><td style="padding:4px 0;color:#6b7280;">Payment</td><td style="padding:4px 0;text-align:right;">${escapeHtml(order.paymentStatus)}</td></tr>
+        <tr><td style="padding:4px 0;color:#6b7280;">Fulfillment</td><td style="padding:4px 0;text-align:right;">${escapeHtml(order.status)}</td></tr>
+        <tr><td style="padding:4px 0;color:#6b7280;">Total</td><td style="padding:4px 0;text-align:right;font-weight:700;">${formatCurrency(order.total)}</td></tr>
+      </table>
+      <h3 style="margin:16px 0 8px;">Items</h3>
+      <table style="border-collapse:collapse;width:100%;max-width:640px;">
+        <thead>
+          <tr>
+            <th style="padding:8px 0;text-align:left;border-bottom:2px solid #111827;">Product</th>
+            <th style="padding:8px 0;text-align:center;border-bottom:2px solid #111827;">Qty</th>
+            <th style="padding:8px 0;text-align:right;border-bottom:2px solid #111827;">Line total</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows || `<tr><td colspan="3" style="padding:8px 0;">No item details supplied.</td></tr>`}</tbody>
+      </table>
+    </div>`;
+
+  return { subject, text, html };
+}
+
+async function notifyAdminsOfOrder(order: any) {
+  if (!saleNotifyEnabled) return;
+  if (!resendApiKey || !saleNotifyFrom) {
+    console.warn("Sale notification skipped: RESEND_API_KEY and SALE_NOTIFY_FROM are required.");
+    return;
+  }
+
+  const recipients = await getAdminNotificationEmails();
+  if (recipients.length === 0) {
+    console.warn("Sale notification skipped: no admin recipients found.");
+    return;
+  }
+
+  const message = buildOrderNotification(order);
+  const result = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${resendApiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: saleNotifyFrom,
+      to: recipients,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+    }),
+  });
+
+  if (!result.ok) {
+    const details = await result.text().catch(() => "");
+    throw new Error(`Resend returned ${result.status}${details ? `: ${details}` : ""}`);
+  }
+}
+
 // REST API Endpoints
 app.get("/health", async (_request, response) => {
   if (usePostgres) {
@@ -386,6 +526,9 @@ app.post("/api/orders", async (request, response) => {
   });
 
   await upsertOrderDb(order);
+  void notifyAdminsOfOrder(order).catch((error) => {
+    console.error("Sale notification failed:", error instanceof Error ? error.message : error);
+  });
   response.status(201).json({ order });
 });
 
