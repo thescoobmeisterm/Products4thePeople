@@ -7,6 +7,12 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.21.0 - 2026-06-20
+
+### Added
+- Added product-editor video controls for uploading, attaching hosted URLs, previewing, and deleting listing/testimonial videos.
+- Updated the See It In Action storefront carousel to dynamically pull product listing videos and testimonial video-section clips.
+
 ## v1.20.0 - 2026-06-20
 
 ### Added

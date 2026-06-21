@@ -3857,9 +3857,20 @@ function ProductDialog({
   const [imageUploadFiles, setImageUploadFiles] = React.useState<File[]>([]);
   const [imageUploadInputKey, setImageUploadInputKey] = React.useState(0);
   const [isUploadingImage, setIsUploadingImage] = React.useState(false);
+  const [videoUploadFiles, setVideoUploadFiles] = React.useState<File[]>([]);
+  const [videoUploadInputKey, setVideoUploadInputKey] = React.useState(0);
+  const [isUploadingVideo, setIsUploadingVideo] = React.useState(false);
+  const [videoPlacement, setVideoPlacement] = React.useState<"listing" | "video_section">("listing");
+  const [videoUrl, setVideoUrl] = React.useState("");
+  const [videoTitle, setVideoTitle] = React.useState("");
+  const [videoCaption, setVideoCaption] = React.useState("");
+  const [videoHandle, setVideoHandle] = React.useState("");
+  const [isAddingVideoUrl, setIsAddingVideoUrl] = React.useState(false);
   const [deletingMediaAssetId, setDeletingMediaAssetId] = React.useState("");
   const [imageManagerNotice, setImageManagerNotice] = React.useState("");
+  const [videoManagerNotice, setVideoManagerNotice] = React.useState("");
   const imageAssets = mediaAssets.filter((asset) => asset.kind === "image");
+  const productVideoAssets = mediaAssets.filter((asset) => asset.kind === "video" && asset.productId === product?.id);
   const findImageAssetByUrl = (url: string) => imageAssets.find((asset) => normalizeMediaUrl(asset.url) === normalizeMediaUrl(url));
 
   const addImageToProduct = (url: string) => {
@@ -3888,6 +3899,21 @@ function ProductDialog({
       setImageManagerNotice("Image deleted from the server and removed from this product.");
     } catch (error) {
       setImageManagerNotice(error instanceof Error ? error.message : "Image delete failed.");
+    } finally {
+      setDeletingMediaAssetId("");
+    }
+  };
+
+  const deleteVideoFromServer = async (asset: MediaAsset) => {
+    if (!window.confirm(`Delete "${asset.title}" from the media library and server uploads?`)) return;
+    setDeletingMediaAssetId(asset.id);
+    setVideoManagerNotice("");
+    try {
+      await deleteMediaAsset(asset.id);
+      onMediaDeleted(asset.id);
+      setVideoManagerNotice("Video deleted from the server and removed from this product.");
+    } catch (error) {
+      setVideoManagerNotice(error instanceof Error ? error.message : "Video delete failed.");
     } finally {
       setDeletingMediaAssetId("");
     }
@@ -4078,6 +4104,72 @@ function ProductDialog({
       setImageManagerNotice(error instanceof Error ? error.message : "Image upload failed.");
     } finally {
       setIsUploadingImage(false);
+    }
+  };
+
+  const uploadProductVideo = async () => {
+    if (videoUploadFiles.length === 0) return;
+    const oversizedFile = videoUploadFiles.find((file) => file.size > maxMediaUploadBytes);
+    if (oversizedFile) {
+      setVideoManagerNotice(`${oversizedFile.name} is ${formatFileSize(oversizedFile.size)}. Upload files must be ${formatFileSize(maxMediaUploadBytes)} or smaller.`);
+      return;
+    }
+    setIsUploadingVideo(true);
+    setVideoManagerNotice("");
+    try {
+      const uploaded: MediaAsset[] = [];
+      for (const file of videoUploadFiles) {
+        const response = await uploadMediaAsset({
+          title: `${form.name || product?.name || "Product"} video`,
+          kind: "video",
+          placement: videoPlacement,
+          fileName: file.name,
+          mimeType: file.type || "video/mp4",
+          dataUrl: await readFileAsDataUrl(file),
+          productId: product?.id,
+          caption: videoCaption.trim() || form.name || product?.name || undefined,
+          handle: videoHandle.trim() || undefined,
+          tag: form.niche || product?.niche || "Product",
+        });
+        onMediaCreated(response.asset);
+        uploaded.push(response.asset);
+      }
+      setVideoUploadFiles([]);
+      setVideoUploadInputKey((current) => current + 1);
+      setVideoManagerNotice(`${uploaded.length} video${uploaded.length === 1 ? "" : "s"} uploaded and attached to this product.`);
+    } catch (error) {
+      setVideoManagerNotice(error instanceof Error ? error.message : "Video upload failed.");
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const addProductVideoUrl = async () => {
+    const cleanUrl = videoUrl.trim();
+    if (!cleanUrl) return;
+    setIsAddingVideoUrl(true);
+    setVideoManagerNotice("");
+    try {
+      const response = await addMediaUrl({
+        title: videoTitle.trim() || `${form.name || product?.name || "Product"} video`,
+        url: cleanUrl,
+        kind: "video",
+        placement: videoPlacement,
+        productId: product?.id,
+        caption: videoCaption.trim() || form.name || product?.name || undefined,
+        handle: videoHandle.trim() || undefined,
+        tag: form.niche || product?.niche || "Product",
+      });
+      onMediaCreated(response.asset);
+      setVideoUrl("");
+      setVideoTitle("");
+      setVideoCaption("");
+      setVideoHandle("");
+      setVideoManagerNotice("Video URL added and attached to this product.");
+    } catch (error) {
+      setVideoManagerNotice(error instanceof Error ? error.message : "Video URL add failed.");
+    } finally {
+      setIsAddingVideoUrl(false);
     }
   };
 
@@ -4277,6 +4369,124 @@ function ProductDialog({
                             style={{ width: '100%', border: 'none', borderTop: '1px solid #e2e8f0', background: '#fef2f2', color: '#dc2626', minHeight: '28px', fontSize: '11.5px', fontWeight: 700, cursor: isDeleting ? 'not-allowed' : 'pointer', opacity: isDeleting ? 0.65 : 1 }}
                           >
                             {isDeleting ? "Deleting..." : "Delete file"}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </Field>
+          <Field label="Product videos" wide>
+            <div style={{ display: 'grid', gap: '14px' }}>
+              {!product?.id && (
+                <div style={{ border: '1px solid #fde68a', background: '#fffbeb', color: '#92400e', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', fontWeight: 700 }}>
+                  Save the product once before attaching videos so uploads can link to this listing.
+                </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) minmax(160px, 0.55fr) auto', gap: '10px', alignItems: 'center' }}>
+                <input
+                  accept="video/*"
+                  disabled={!product?.id}
+                  key={videoUploadInputKey}
+                  multiple
+                  type="file"
+                  onChange={(event) => setVideoUploadFiles(Array.from(event.target.files || []))}
+                  style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '9px 10px', fontSize: '13px', background: '#ffffff' }}
+                />
+                <select
+                  value={videoPlacement}
+                  onChange={(event) => setVideoPlacement(event.target.value as "listing" | "video_section")}
+                  style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '9px 10px', fontSize: '13px', background: '#ffffff' }}
+                >
+                  <option value="listing">Listing video</option>
+                  <option value="video_section">Testimonial / See It In Action</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={uploadProductVideo}
+                  disabled={!product?.id || videoUploadFiles.length === 0 || isUploadingVideo}
+                  style={{ border: 'none', background: '#176c61', color: '#ffffff', borderRadius: '8px', minHeight: '38px', padding: '0 14px', fontWeight: 700, cursor: !product?.id || videoUploadFiles.length === 0 || isUploadingVideo ? 'not-allowed' : 'pointer', opacity: !product?.id || videoUploadFiles.length === 0 || isUploadingVideo ? 0.6 : 1 }}
+                >
+                  {isUploadingVideo ? `Uploading ${videoUploadFiles.length}...` : videoUploadFiles.length > 1 ? `Upload ${videoUploadFiles.length}` : "Upload"}
+                </button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(180px, 1fr) minmax(140px, 0.65fr)', gap: '10px' }}>
+                <input
+                  disabled={!product?.id}
+                  value={videoUrl}
+                  onChange={(event) => setVideoUrl(event.target.value)}
+                  placeholder="Hosted video URL"
+                  style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '9px 10px', fontSize: '13px' }}
+                />
+                <input
+                  disabled={!product?.id}
+                  value={videoTitle}
+                  onChange={(event) => setVideoTitle(event.target.value)}
+                  placeholder="Optional title"
+                  style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '9px 10px', fontSize: '13px' }}
+                />
+                <input
+                  disabled={!product?.id}
+                  value={videoCaption}
+                  onChange={(event) => setVideoCaption(event.target.value)}
+                  placeholder="Optional caption"
+                  style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '9px 10px', fontSize: '13px' }}
+                />
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '10px' }}>
+                  <input
+                    disabled={!product?.id}
+                    value={videoHandle}
+                    onChange={(event) => setVideoHandle(event.target.value)}
+                    placeholder="@creator handle"
+                    style={{ border: '1px solid #dce3e7', borderRadius: '8px', padding: '9px 10px', fontSize: '13px' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={addProductVideoUrl}
+                    disabled={!product?.id || !videoUrl.trim() || isAddingVideoUrl}
+                    style={{ border: '1px solid #176c61', background: '#ffffff', color: '#176c61', borderRadius: '8px', minHeight: '38px', padding: '0 14px', fontWeight: 700, cursor: !product?.id || !videoUrl.trim() || isAddingVideoUrl ? 'not-allowed' : 'pointer', opacity: !product?.id || !videoUrl.trim() || isAddingVideoUrl ? 0.6 : 1 }}
+                  >
+                    {isAddingVideoUrl ? "Adding..." : "Add URL"}
+                  </button>
+                </div>
+              </div>
+              {videoUploadFiles.length > 1 && (
+                <span style={{ color: '#64748b', fontSize: '12px', fontWeight: 700 }}>
+                  {videoUploadFiles.length} videos selected for batch upload.
+                </span>
+              )}
+              {videoManagerNotice && (
+                <div style={{ border: '1px solid #dbeafe', background: '#eff6ff', color: '#1e40af', borderRadius: '8px', padding: '8px 10px', fontSize: '12px', fontWeight: 600 }}>
+                  {videoManagerNotice}
+                </div>
+              )}
+              <div style={{ display: 'grid', gap: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: '#64748b' }}>Current product videos</span>
+                {productVideoAssets.length === 0 ? (
+                  <div style={{ border: '1px dashed #cbd5e1', borderRadius: '8px', padding: '14px', color: '#64748b', fontSize: '12px' }}>
+                    No videos attached yet. Listing videos appear on product pages and can feed See It In Action; testimonial videos are featured in the See It In Action section.
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '10px', maxHeight: '320px', overflow: 'auto', paddingRight: '2px' }}>
+                    {productVideoAssets.map((asset) => {
+                      const isDeleting = asset.id === deletingMediaAssetId;
+                      return (
+                        <div key={asset.id} style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', background: '#ffffff' }}>
+                          <video src={normalizeMediaUrl(asset.url)} controls muted playsInline preload="metadata" style={{ width: '100%', aspectRatio: '16 / 9', objectFit: 'contain', display: 'block', background: '#0f172a' }} />
+                          <div style={{ display: 'grid', gap: '4px', padding: '8px' }}>
+                            <strong style={{ color: '#111827', fontSize: '12px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{asset.title}</strong>
+                            <span style={{ color: '#64748b', fontSize: '11px' }}>{asset.placement === "video_section" ? "See It In Action" : "Listing video"}</span>
+                            {asset.caption && <span style={{ color: '#475569', fontSize: '11px', lineHeight: 1.35 }}>{asset.caption}</span>}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => deleteVideoFromServer(asset)}
+                            disabled={isDeleting}
+                            style={{ width: '100%', border: 'none', borderTop: '1px solid #e2e8f0', background: '#fef2f2', color: '#dc2626', minHeight: '30px', fontSize: '12px', fontWeight: 700, cursor: isDeleting ? 'not-allowed' : 'pointer', opacity: isDeleting ? 0.65 : 1 }}
+                          >
+                            {isDeleting ? "Deleting..." : "Delete video"}
                           </button>
                         </div>
                       );
@@ -5413,26 +5623,27 @@ function Storefront({
       return matchesSubcategory && matchesSearch;
     },
   );
-  const videoSectionAssets = mediaAssets.filter((asset) => {
-    if (asset.placement !== "video_section") return false;
+  const actionVideoAssets = mediaAssets.filter((asset) => {
+    if (asset.kind !== "video") return false;
+    if (asset.placement !== "video_section" && asset.placement !== "listing") return false;
     if (asset.productId) {
       const product = publicProducts.find((item) => item.id === asset.productId);
       return activeNiche === "general" || product?.subdomain === activeNiche;
     }
-    return activeNiche === "general" || !asset.productId;
+    return asset.placement === "video_section" && activeNiche === "general";
   });
-  const ugcItems = videoSectionAssets.length > 0
-    ? videoSectionAssets.map((asset) => {
+  const ugcItems = actionVideoAssets.length > 0
+    ? actionVideoAssets.map((asset) => {
         const product = asset.productId ? publicProducts.find((item) => item.id === asset.productId) : null;
         return {
           id: asset.id,
           handle: asset.handle || "@products4thepeople",
-          caption: asset.caption || asset.title,
+          caption: asset.caption || (asset.placement === "listing" && product ? `${product.name} in action.` : asset.title),
           mediaUrl: normalizeMediaUrl(asset.url),
           kind: asset.kind,
           productName: product?.name || asset.title,
           product,
-          tag: asset.tag || product?.niche || (asset.kind === "video" ? "Video" : "Demo"),
+          tag: asset.tag || product?.niche || (asset.placement === "listing" ? "Product Demo" : "Testimonial"),
         };
       })
     : [
@@ -6504,7 +6715,7 @@ function Storefront({
                 <h2>See It In Action</h2>
                 <p className="subtitle">Real customers, real results. Tap to shop featured gear.</p>
                 <div className="ugc-carousel">
-                  {videoSectionAssets.length > 0 && ugcItems.map((ugc) => {
+                  {actionVideoAssets.length > 0 && ugcItems.map((ugc) => {
                     const matchedProd = ugc.product || publicProducts.find(p => p.name.toLowerCase().includes(ugc.productName.toLowerCase()) || ugc.productName.toLowerCase().includes(p.name.toLowerCase()));
                     return (
                       <button
@@ -6537,7 +6748,7 @@ function Storefront({
                       </button>
                     );
                   })}
-                  {videoSectionAssets.length === 0 && [
+                  {actionVideoAssets.length === 0 && [
                     {
                       id: "ugc_1",
                       handle: "@glow_beauty_routine",
