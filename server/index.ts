@@ -362,6 +362,109 @@ function applyStatusTimestamps(order: any) {
   return order;
 }
 
+function parseJsonValue(value: any, fallback: any) {
+  if (value === null || value === undefined || value === "") return fallback;
+  if (typeof value !== "string") return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeOpportunityExtras(opportunity: any) {
+  return {
+    ...opportunity,
+    linked_product_ids: parseJsonValue(opportunity.linked_product_ids, []),
+    performance_snapshot: parseJsonValue(opportunity.performance_snapshot, null),
+    feedback_history: parseJsonValue(opportunity.feedback_history, []),
+  };
+}
+
+function appendOpportunityFeedback(opportunity: any, event: any) {
+  const history = Array.isArray(parseJsonValue(opportunity.feedback_history, []))
+    ? parseJsonValue(opportunity.feedback_history, [])
+    : [];
+  return [
+    {
+      id: crypto.randomUUID(),
+      at: new Date().toISOString(),
+      ...event,
+    },
+    ...history,
+  ].slice(0, 25);
+}
+
+function productMatchesOpportunity(product: any, opportunity: any, linkedIds: Set<string>) {
+  if (linkedIds.has(String(product.id))) return true;
+  if (String(product.researchOpportunityId || product.opportunityId || "") === String(opportunity.id)) return true;
+  const productName = String(product.name || "").trim().toLowerCase();
+  const opportunityName = String(opportunity.name || "").trim().toLowerCase();
+  return Boolean(productName && opportunityName && (productName === opportunityName || productName.includes(opportunityName) || opportunityName.includes(productName)));
+}
+
+function buildOpportunityPerformanceSnapshot(opportunity: any, products: any[], orders: any[]) {
+  const linkedProductIds = products.map((product) => String(product.id));
+  const linkedProductNames = products.map((product) => String(product.name || product.id));
+  const productIdSet = new Set(linkedProductIds.map((id) => id.toLowerCase()));
+  const productNameSet = new Set(linkedProductNames.map((name) => name.toLowerCase()));
+  const matchingOrders = new Map<string, any>();
+  let unitsSold = 0;
+  let revenue = 0;
+  let paidRevenue = 0;
+  let lastOrderAt = "";
+
+  orders.forEach((order: any) => {
+    const items = Array.isArray(order.items) ? order.items : [];
+    let orderRevenue = 0;
+    let matched = false;
+    items.forEach((item: any) => {
+      const itemProductId = String(item.productId || "").toLowerCase();
+      const itemName = String(item.name || "").toLowerCase();
+      if (productIdSet.has(itemProductId) || productNameSet.has(itemName)) {
+        const quantity = Number(item.quantity || 0);
+        const price = Number(item.price || 0);
+        unitsSold += quantity;
+        orderRevenue += quantity * price;
+        matched = true;
+      }
+    });
+    if (matched) {
+      matchingOrders.set(String(order.id), order);
+      revenue += orderRevenue;
+      if (order.paymentStatus === "paid") paidRevenue += orderRevenue;
+      const createdAt = String(order.createdAt || "");
+      if (createdAt && (!lastOrderAt || createdAt > lastOrderAt)) lastOrderAt = createdAt;
+    }
+  });
+
+  const firstLinkedAt = products
+    .map((product) => String(product.createdAt || product.updatedAt || product.created_at || ""))
+    .filter(Boolean)
+    .sort()[0];
+  const daysSinceLinked = firstLinkedAt ? (Date.now() - new Date(firstLinkedAt).getTime()) / (24 * 60 * 60 * 1000) : 0;
+  const conversionSignal =
+    unitsSold >= 5 || paidRevenue >= 250
+      ? "winner"
+      : linkedProductIds.length > 0 && unitsSold === 0 && daysSinceLinked >= 14
+        ? "loser"
+        : linkedProductIds.length > 0
+          ? "testing"
+          : "no_data";
+
+  return {
+    linkedProductIds,
+    linkedProductNames,
+    orderCount: matchingOrders.size,
+    unitsSold,
+    revenue: Math.round(revenue * 100) / 100,
+    paidRevenue: Math.round(paidRevenue * 100) / 100,
+    conversionSignal,
+    lastOrderAt: lastOrderAt || undefined,
+    lastSyncedAt: new Date().toISOString(),
+  };
+}
+
 async function getAdminNotificationEmails() {
   const recipients = new Set<string>();
   if (isEmailAddress(adminEmail)) recipients.add(adminEmail.toLowerCase());
@@ -1279,7 +1382,9 @@ app.get("/api/admin/product-research/opportunities/:id", requireAdmin, async (re
     }
     const competitors = await getCompetitorsForOpportunityDb(id);
     const suppliers = await getSuppliersForOpportunityDb(id);
-    response.json({ opportunity, competitors, suppliers });
+    const importJobs = await getImportJobsForOpportunityDb(id);
+    const linkedProducts = await getProductsForOpportunityDb(opportunity);
+    response.json({ opportunity, competitors, suppliers, importJobs, linkedProducts });
   } catch (error: any) {
     response.status(500).json({ error: error.message });
   }
@@ -1344,8 +1449,38 @@ app.patch("/api/admin/product-research/opportunities/:id", requireAdmin, async (
       return;
     }
     const updated = { ...opp, ...request.body, id, updated_at: new Date().toISOString() };
+    if (request.body.status && request.body.status !== opp.status) {
+      updated.feedback_history = appendOpportunityFeedback(opp, {
+        type: "status_change",
+        status: request.body.status,
+        message: `Status changed from ${opp.status || "unknown"} to ${request.body.status}.`,
+      });
+    }
     await upsertOpportunityDb(updated);
     response.json({ opportunity: updated });
+  } catch (error: any) {
+    response.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/admin/product-research/sync-performance", requireAdmin, async (request, response) => {
+  try {
+    const { id } = z.object({ id: z.string().optional() }).parse(request.body || {});
+    const opportunities = id ? [await getOpportunityByIdDb(id)].filter(Boolean) : await getOpportunitiesDb();
+    const updated = [];
+
+    for (const opportunity of opportunities) {
+      const refreshed = await syncOpportunityPerformanceSnapshot(opportunity);
+      updated.push(refreshed);
+    }
+
+    response.json({
+      message: id
+        ? "Opportunity performance feedback synced."
+        : `Performance feedback synced for ${updated.length} research opportunities.`,
+      opportunity: id ? updated[0] : undefined,
+      opportunities: updated,
+    });
   } catch (error: any) {
     response.status(500).json({ error: error.message });
   }
@@ -1777,6 +1912,10 @@ app.post("/api/admin/product-research/import-aliexpress", requireAdmin, async (r
         images,
         seoTitle: `${name} | Premium ${niche} Product`,
         seoDescription: `Order the high-quality ${name} online today. Enjoy fast shipping and direct tracking on our storefront.`,
+        researchOpportunityId: opportunityId || undefined,
+        researchImportJobId: jobId,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
         source: "local" as const
       };
 
@@ -1815,6 +1954,12 @@ app.post("/api/admin/product-research/import-aliexpress", requireAdmin, async (r
 
       if (opportunity) {
         opportunity.status = "imported_draft";
+        opportunity.linked_product_ids = Array.from(new Set([...(opportunity.linked_product_ids || []), uniqueSlug]));
+        opportunity.feedback_history = appendOpportunityFeedback(opportunity, {
+          type: "imported",
+          status: "imported_draft",
+          message: `Imported ${name} as draft product ${uniqueSlug} from supplier ${supplier.supplier_name || supplierProductId}.`,
+        });
         opportunity.updated_at = new Date().toISOString();
         await upsertOpportunityDb(opportunity);
       }
@@ -4447,21 +4592,100 @@ app.get("*all", (request, response, next) => {
 async function getOpportunitiesDb() {
   if (usePostgres) {
     const result = await pool.query("select * from product_research_opportunities order by created_at desc");
-    return result.rows;
+    return result.rows.map(normalizeOpportunityExtras);
   } else {
     const db = readDb();
-    return Object.values(db.opportunities || {}).sort((a: any, b: any) => b.created_at.localeCompare(a.created_at));
+    return Object.values(db.opportunities || {}).map(normalizeOpportunityExtras).sort((a: any, b: any) => b.created_at.localeCompare(a.created_at));
   }
 }
 
 async function getOpportunityByIdDb(id: string) {
   if (usePostgres) {
     const result = await pool.query("select * from product_research_opportunities where id = $1", [id]);
-    return result.rowCount > 0 ? result.rows[0] : null;
+    return result.rowCount > 0 ? normalizeOpportunityExtras(result.rows[0]) : null;
   } else {
     const db = readDb();
-    return db.opportunities?.[id] || null;
+    return db.opportunities?.[id] ? normalizeOpportunityExtras(db.opportunities[id]) : null;
   }
+}
+
+async function getImportJobsForOpportunityDb(opportunityId: string) {
+  if (usePostgres) {
+    const result = await pool.query(
+      `select id, supplier_product_id, created_product_id, status, started_at, completed_at, error_message, import_payload
+       from product_import_jobs
+       where import_payload->>'opportunityId' = $1
+       order by started_at desc`,
+      [opportunityId],
+    );
+    return result.rows.map((row) => ({
+      ...row,
+      import_payload: parseJsonValue(row.import_payload, row.import_payload || {}),
+    }));
+  }
+
+  const db = readDb();
+  return Object.values(db.importJobs || {})
+    .filter((job: any) => parseJsonValue(job.import_payload, {}).opportunityId === opportunityId)
+    .sort((a: any, b: any) => String(b.started_at || "").localeCompare(String(a.started_at || "")));
+}
+
+async function getProductsForOpportunityDb(opportunity: any) {
+  const importJobs = await getImportJobsForOpportunityDb(opportunity.id);
+  const linkedIds = new Set<string>([
+    ...(Array.isArray(opportunity.linked_product_ids) ? opportunity.linked_product_ids : []),
+    ...importJobs.map((job: any) => job.created_product_id).filter(Boolean),
+  ].map(String));
+  const products = await getProductsDb();
+  return products.filter((product: any) => productMatchesOpportunity(product, opportunity, linkedIds));
+}
+
+async function syncOpportunityPerformanceSnapshot(opportunity: any) {
+  const linkedProducts = await getProductsForOpportunityDb(opportunity);
+  const orders = await getOrdersDb();
+  const snapshot = buildOpportunityPerformanceSnapshot(opportunity, linkedProducts, orders);
+  const previousSnapshot = opportunity.performance_snapshot || {};
+  const previousStatus = opportunity.status || "discovered";
+  const nextStatus =
+    snapshot.conversionSignal === "winner"
+      ? "winner"
+      : snapshot.conversionSignal === "loser"
+        ? "loser"
+        : snapshot.conversionSignal === "testing" && ["imported_draft", "approved", "published", "recommended"].includes(previousStatus)
+          ? "testing"
+          : previousStatus;
+  const statusNote = nextStatus !== previousStatus ? ` Status moved from ${previousStatus} to ${nextStatus}.` : "";
+  const updated = {
+    ...opportunity,
+    status: nextStatus,
+    linked_product_ids: snapshot.linkedProductIds,
+    performance_snapshot: snapshot,
+    feedback_history: appendOpportunityFeedback(opportunity, {
+      type: "performance_sync",
+      status: nextStatus,
+      message: `Synced ${snapshot.linkedProductIds.length} linked product(s): ${snapshot.unitsSold} unit(s), $${snapshot.paidRevenue.toFixed(2)} paid revenue.${statusNote}`,
+      snapshot,
+    }),
+    updated_at: new Date().toISOString(),
+  };
+
+  const revenueScore = Math.min(100, Math.round(snapshot.paidRevenue / 5));
+  const unitScore = Math.min(100, snapshot.unitsSold * 12);
+  if (snapshot.conversionSignal !== "no_data") {
+    updated.demand_score = Math.max(Number(updated.demand_score || 0), revenueScore, unitScore, 45);
+    updated.opportunity_score = Math.round(
+      Number(updated.demand_score || 50) * 0.25 +
+      Number(updated.margin_score || 50) * 0.20 +
+      Number(updated.supplier_score || 50) * 0.15 +
+      Number(updated.competition_score || 50) * 0.15 +
+      Number(updated.brand_fit_score || 50) * 0.10 +
+      Number(updated.content_score || 50) * 0.10 -
+      Number(updated.risk_score || 0) * 0.05
+    );
+  }
+
+  await upsertOpportunityDb(updated);
+  return updated;
 }
 
 async function upsertOpportunityDb(opp: any) {
@@ -4471,8 +4695,8 @@ async function upsertOpportunityDb(opp: any) {
         id, name, niche, subdomain, category, source, source_url, status, 
         opportunity_score, recommendation_summary, demand_score, margin_score, 
         supplier_score, competition_score, brand_fit_score, content_score, 
-        risk_score, risk_notes, created_at, updated_at
-      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+        risk_score, risk_notes, linked_product_ids, performance_snapshot, feedback_history, created_at, updated_at
+      ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
        on conflict (id) do update set
          name = excluded.name,
          niche = excluded.niche,
@@ -4489,12 +4713,19 @@ async function upsertOpportunityDb(opp: any) {
          content_score = excluded.content_score,
          risk_score = excluded.risk_score,
          risk_notes = excluded.risk_notes,
+         linked_product_ids = excluded.linked_product_ids,
+         performance_snapshot = excluded.performance_snapshot,
+         feedback_history = excluded.feedback_history,
          updated_at = now()`,
       [
         opp.id, opp.name, opp.niche, opp.subdomain || null, opp.category || null, opp.source || null, opp.source_url || null, opp.status || 'discovered',
         opp.opportunity_score || null, opp.recommendation_summary || null, opp.demand_score || null, opp.margin_score || null,
         opp.supplier_score || null, opp.competition_score || null, opp.brand_fit_score || null, opp.content_score || null,
-        opp.risk_score || null, opp.risk_notes || null, opp.created_at || new Date().toISOString(), opp.updated_at || new Date().toISOString()
+        opp.risk_score || null, opp.risk_notes || null,
+        JSON.stringify(opp.linked_product_ids || []),
+        opp.performance_snapshot ? JSON.stringify(opp.performance_snapshot) : null,
+        JSON.stringify(opp.feedback_history || []),
+        opp.created_at || new Date().toISOString(), opp.updated_at || new Date().toISOString()
       ]
     );
   } else {
@@ -5332,9 +5563,16 @@ async function migrate() {
       content_score numeric,
       risk_score numeric,
       risk_notes text,
+      linked_product_ids jsonb,
+      performance_snapshot jsonb,
+      feedback_history jsonb,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()
     );
+
+    alter table product_research_opportunities add column if not exists linked_product_ids jsonb;
+    alter table product_research_opportunities add column if not exists performance_snapshot jsonb;
+    alter table product_research_opportunities add column if not exists feedback_history jsonb;
 
     create table if not exists competitor_products (
       id uuid primary key,

@@ -223,10 +223,10 @@ more operational.
   - Test: `[ ]` Build `[ ]` Typecheck `[ ]` API `[ ]` Manual
 
 - `[~]` Winner/Loser Feedback Loop
-  - `[ ]` Feed product performance back into opportunity records
-  - `[ ]` Mark imported products as testing/winner/loser from analytics
-  - `[ ]` Show feedback loop history in opportunity detail
-  - Test: `[ ]` Build `[ ]` Typecheck `[ ]` API `[ ]` Manual
+  - `[x]` Feed product performance back into opportunity records
+  - `[x]` Mark imported products as testing/winner/loser from analytics
+  - `[x]` Show feedback loop history in opportunity detail
+  - Test: `[x]` Build `[x]` Typecheck `[x]` API `[ ]` Manual
 
 ---
 

@@ -38,6 +38,8 @@ export type ApiProduct = {
   }>;
   seoTitle?: string;
   seoDescription?: string;
+  researchOpportunityId?: string;
+  researchImportJobId?: string;
   source?: "seed" | "local" | "medusa";
 };
 
@@ -91,6 +93,27 @@ export type MediaAsset = {
   updatedAt: string;
 };
 
+export type OpportunityPerformanceSnapshot = {
+  linkedProductIds: string[];
+  linkedProductNames: string[];
+  orderCount: number;
+  unitsSold: number;
+  revenue: number;
+  paidRevenue: number;
+  conversionSignal: "no_data" | "testing" | "winner" | "loser";
+  lastOrderAt?: string;
+  lastSyncedAt: string;
+};
+
+export type OpportunityFeedbackEvent = {
+  id: string;
+  at: string;
+  type: "imported" | "performance_sync" | "status_change";
+  message: string;
+  status?: ResearchOpportunity["status"];
+  snapshot?: OpportunityPerformanceSnapshot;
+};
+
 export type ResearchOpportunity = {
   id: string;
   name: string;
@@ -110,6 +133,9 @@ export type ResearchOpportunity = {
   content_score: number;
   risk_score: number;
   risk_notes?: string;
+  linked_product_ids?: string[];
+  performance_snapshot?: OpportunityPerformanceSnapshot;
+  feedback_history?: OpportunityFeedbackEvent[];
   created_at: string;
   updated_at: string;
 };
@@ -329,7 +355,7 @@ export async function createOpportunity(opp: Omit<ResearchOpportunity, "id" | "s
 }
 
 export async function getOpportunityDetails(id: string) {
-  return apiFetch<{ opportunity: ResearchOpportunity; competitors: CompetitorProduct[]; suppliers: SupplierProduct[] }>(`/admin/product-research/opportunities/${encodeURIComponent(id)}`);
+  return apiFetch<{ opportunity: ResearchOpportunity; competitors: CompetitorProduct[]; suppliers: SupplierProduct[]; linkedProducts: ApiProduct[]; importJobs: any[] }>(`/admin/product-research/opportunities/${encodeURIComponent(id)}`);
 }
 
 export async function updateOpportunity(id: string, updates: Partial<ResearchOpportunity>) {
@@ -402,6 +428,13 @@ export async function generateContentForOpportunity(id: string) {
   return apiFetch<{ content: any }>("/admin/product-research/generate-content", {
     method: "POST",
     body: JSON.stringify({ id }),
+  });
+}
+
+export async function syncOpportunityPerformance(id?: string) {
+  return apiFetch<{ message: string; opportunities: ResearchOpportunity[]; opportunity?: ResearchOpportunity }>("/admin/product-research/sync-performance", {
+    method: "POST",
+    body: JSON.stringify(id ? { id } : {}),
   });
 }
 

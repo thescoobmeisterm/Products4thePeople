@@ -97,6 +97,7 @@ import {
   setWatchlistStatus,
   scoreResearchProduct,
   generateContentForOpportunity,
+  syncOpportunityPerformance,
   getExperiments,
   getExperimentDetails,
   createExperiment,
@@ -134,6 +135,7 @@ import {
   type MediaAsset,
   type SeoPage,
   type SeoDashboardStats,
+  type ApiProduct,
   type ApiOrder,
   type ResearchOpportunity,
   type CompetitorProduct,
@@ -10202,6 +10204,7 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
   const [competitorPrice, setCompetitorPrice] = React.useState("");
   const [competitorNiche, setCompetitorNiche] = React.useState("Beauty");
   const [competitorsList, setCompetitorsList] = React.useState<CompetitorProduct[]>([]);
+  const [syncingPerformance, setSyncingPerformance] = React.useState(false);
 
   const loadOpps = async () => {
     setLoadingOpps(true);
@@ -10285,6 +10288,19 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
       setNotice(res.message);
     } catch (e) {
       setNotice(e instanceof Error ? `Competitor research failed: ${e.message}` : "Competitor research failed");
+    }
+  };
+
+  const handleSyncPerformance = async () => {
+    setSyncingPerformance(true);
+    try {
+      const res = await syncOpportunityPerformance();
+      setOpportunities(res.opportunities || []);
+      setNotice(res.message);
+    } catch (e) {
+      setNotice(e instanceof Error ? `Performance sync failed: ${e.message}` : "Performance sync failed");
+    } finally {
+      setSyncingPerformance(false);
     }
   };
 
@@ -10527,6 +10543,10 @@ function ResearchWorkspace({ products, setProducts, setNotice }: ResearchWorkspa
                 <button type="button" onClick={handleGapAnalysis} disabled={loadingOpps} style={{ backgroundColor: '#f3f4f6' }}>
                   <RotateCcw size={17} />
                   Run Gap Analysis
+                </button>
+                <button type="button" onClick={handleSyncPerformance} disabled={syncingPerformance} style={{ backgroundColor: '#f3f4f6' }}>
+                  <LineChart size={17} />
+                  {syncingPerformance ? "Syncing" : "Sync Performance"}
                 </button>
               </div>
             </div>
@@ -11224,8 +11244,10 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
   const [opportunity, setOpportunity] = React.useState<ResearchOpportunity | null>(null);
   const [competitors, setCompetitors] = React.useState<CompetitorProduct[]>([]);
   const [suppliers, setSuppliers] = React.useState<SupplierProduct[]>([]);
+  const [linkedProducts, setLinkedProducts] = React.useState<ApiProduct[]>([]);
+  const [importJobs, setImportJobs] = React.useState<any[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [activeModalTab, setActiveModalTab] = React.useState<"scores" | "copy" | "pricing" | "suppliers">("scores");
+  const [activeModalTab, setActiveModalTab] = React.useState<"scores" | "performance" | "copy" | "pricing" | "suppliers">("scores");
   const [aiContent, setAiContent] = React.useState<any | null>(null);
   const [generatingAi, setGeneratingAi] = React.useState(false);
   const [updatingResearch, setUpdatingResearch] = React.useState(false);
@@ -11243,6 +11265,8 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
       setOpportunity(res.opportunity);
       setCompetitors(res.competitors || []);
       setSuppliers(res.suppliers || []);
+      setLinkedProducts(res.linkedProducts || []);
+      setImportJobs(res.importJobs || []);
 
       if (res.suppliers?.length > 0) {
         const s = res.suppliers[0];
@@ -11321,6 +11345,17 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
     }
   };
 
+  const handleSyncModalPerformance = async () => {
+    setUpdatingResearch(true);
+    try {
+      const res = await syncOpportunityPerformance(id);
+      if (res.opportunity) setOpportunity(res.opportunity);
+      await loadDetails();
+    } finally {
+      setUpdatingResearch(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="modal-backdrop">
@@ -11372,13 +11407,21 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
 
         {/* Tab Selector */}
         <div style={{ borderBottom: '1px solid #e5e7eb', display: 'flex', gap: '16px', padding: '0 20px', background: '#fff' }}>
-          <button 
-            type="button" 
+          <button
+            type="button"
             className={activeModalTab === "scores" ? "primary" : ""}
             onClick={() => setActiveModalTab("scores")}
             style={{ border: '0', borderBottom: activeModalTab === "scores" ? '2px solid #176c61' : 'none', minHeight: '44px', borderRadius: '0', background: 'transparent', color: activeModalTab === "scores" ? '#176c61' : '#4b5563', padding: '0 4px' }}
           >
             Opportunity Score Breakdown
+          </button>
+          <button
+            type="button"
+            className={activeModalTab === "performance" ? "primary" : ""}
+            onClick={() => setActiveModalTab("performance")}
+            style={{ border: '0', borderBottom: activeModalTab === "performance" ? '2px solid #176c61' : 'none', minHeight: '44px', borderRadius: '0', background: 'transparent', color: activeModalTab === "performance" ? '#176c61' : '#4b5563', padding: '0 4px' }}
+          >
+            Performance Feedback
           </button>
           <button 
             type="button" 
@@ -11459,6 +11502,96 @@ function OpportunityDetailModal({ id, onClose, onImport }: DetailModalProps) {
                       </span>
                     </div>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 2: PERFORMANCE FEEDBACK */}
+          {activeModalTab === "performance" && (
+            <div style={{ display: 'grid', gap: '16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div>
+                  <h3 style={{ fontSize: '1.1rem', margin: 0 }}>Product Performance Feedback Loop</h3>
+                  <p style={{ margin: '4px 0 0', color: '#68777d', fontSize: '0.86rem' }}>
+                    Pulls linked product sales from the order queue and updates research status.
+                  </p>
+                </div>
+                <button type="button" onClick={handleSyncModalPerformance} disabled={updatingResearch} style={{ minHeight: '36px' }}>
+                  <LineChart size={15} style={{ marginRight: '6px' }} />
+                  {updatingResearch ? "Syncing" : "Sync this opportunity"}
+                </button>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+                {[
+                  { label: "Signal", value: titleCase((opportunity.performance_snapshot?.conversionSignal || "no_data").replace("_", " ")) },
+                  { label: "Units Sold", value: String(opportunity.performance_snapshot?.unitsSold || 0) },
+                  { label: "Paid Revenue", value: `$${Number(opportunity.performance_snapshot?.paidRevenue || 0).toFixed(2)}` },
+                  { label: "Linked Products", value: String(opportunity.performance_snapshot?.linkedProductIds?.length || linkedProducts.length) },
+                ].map((metric) => (
+                  <div key={metric.label} style={{ border: '1px solid #e5e7eb', background: '#f9fafb', borderRadius: '10px', padding: '12px' }}>
+                    <span style={{ display: 'block', color: '#68777d', fontSize: '0.78rem', fontWeight: 700 }}>{metric.label}</span>
+                    <strong style={{ display: 'block', color: '#111827', fontSize: '1.15rem', marginTop: '4px' }}>{metric.value}</strong>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', alignItems: 'start' }}>
+                <div>
+                  <h4 style={{ margin: '0 0 8px', fontSize: '0.95rem' }}>Linked product drafts</h4>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {linkedProducts.length === 0 ? (
+                      <div style={{ border: '1px dashed #c3cbd0', borderRadius: '8px', padding: '12px', color: '#68777d', fontSize: '0.84rem' }}>
+                        No linked products yet. Import a supplier option to create a draft product tied to this opportunity.
+                      </div>
+                    ) : linkedProducts.map((product) => (
+                      <div key={product.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px 12px', display: 'flex', justifyContent: 'space-between', gap: '10px' }}>
+                        <div>
+                          <strong style={{ display: 'block', fontSize: '0.9rem' }}>{product.name}</strong>
+                          <span style={{ color: '#68777d', fontSize: '0.78rem' }}>{product.id} - {product.status}</span>
+                        </div>
+                        <strong style={{ color: '#176c61' }}>${product.retailMin}</strong>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h4 style={{ margin: '0 0 8px', fontSize: '0.95rem' }}>Import jobs</h4>
+                  <div style={{ display: 'grid', gap: '8px' }}>
+                    {importJobs.length === 0 ? (
+                      <div style={{ border: '1px dashed #c3cbd0', borderRadius: '8px', padding: '12px', color: '#68777d', fontSize: '0.84rem' }}>
+                        No import jobs have been recorded for this opportunity.
+                      </div>
+                    ) : importJobs.map((job) => (
+                      <div key={job.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px 12px' }}>
+                        <strong style={{ display: 'block', fontSize: '0.86rem' }}>{job.status}</strong>
+                        <span style={{ color: '#68777d', fontSize: '0.76rem' }}>
+                          Product: {job.created_product_id || "pending"} - {job.completed_at ? new Date(job.completed_at).toLocaleString() : "running"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 style={{ margin: '0 0 8px', fontSize: '0.95rem' }}>Feedback history</h4>
+                <div style={{ display: 'grid', gap: '8px' }}>
+                  {(opportunity.feedback_history || []).length === 0 ? (
+                    <div style={{ border: '1px dashed #c3cbd0', borderRadius: '8px', padding: '12px', color: '#68777d', fontSize: '0.84rem' }}>
+                      No feedback events yet. Sync performance or import a supplier to start the trail.
+                    </div>
+                  ) : (opportunity.feedback_history || []).map((event) => (
+                    <div key={event.id} style={{ border: '1px solid #e5e7eb', borderRadius: '8px', padding: '10px 12px', background: '#fff' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '10px', flexWrap: 'wrap' }}>
+                        <strong style={{ fontSize: '0.86rem' }}>{titleCase(event.type.replace("_", " "))}</strong>
+                        <span style={{ color: '#68777d', fontSize: '0.76rem' }}>{new Date(event.at).toLocaleString()}</span>
+                      </div>
+                      <p style={{ margin: '4px 0 0', color: '#4b5563', fontSize: '0.82rem' }}>{event.message}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>

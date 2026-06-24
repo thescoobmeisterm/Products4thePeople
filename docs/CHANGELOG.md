@@ -7,6 +7,13 @@ Versioning follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## v1.24.0 - 2026-06-24
+
+### Added
+- Added Phase 0 product research performance feedback sync that links imported products back to opportunities and calculates order count, units sold, revenue, and paid revenue.
+- Added automatic research opportunity status movement into testing, winner, or loser based on linked product performance.
+- Added a Performance Feedback tab to opportunity details with linked products, import jobs, sales signals, and feedback history.
+
 ## v1.23.0 - 2026-06-20
 
 ### Added
